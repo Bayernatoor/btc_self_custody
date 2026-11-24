@@ -22,6 +22,16 @@ use leptos_meta::*;
 #[cfg(feature = "hydrate")]
 use wasm_bindgen::prelude::*;
 
+use crate::stats::heartbeat_client::{
+    fee_band_for_rate, format_fee_rate, hb_v2_focus_block_height,
+    hb_v2_focus_tx, hb_v2_set_pinned_tx, primary_notable_label, PinnedTxStatus,
+    PinnedTxView,
+};
+#[cfg(feature = "hydrate")]
+use crate::stats::heartbeat_client::{
+    parse_tx_param_from_search, HeartbeatClient, HeartbeatClientSignals,
+};
+
 // ---------------------------------------------------------------------------
 // JS interop: heartbeat.js functions
 // ---------------------------------------------------------------------------
@@ -49,19 +59,12 @@ extern "C" {
     #[wasm_bindgen(js_name = renderRhythmStrip)]
     fn render_rhythm_strip(canvas_id: &str, blocks_json: &str);
 
-    #[wasm_bindgen(js_name = getHeartbeatRecentBlocks)]
-    fn get_heartbeat_recent_blocks() -> String;
-
     #[wasm_bindgen(js_name = getOrganismStatus)]
     fn get_organism_status() -> String;
 
     // Capture
     #[wasm_bindgen(js_name = heartbeatDownloadCapture)]
     fn heartbeat_download_capture(vitals_json: &str);
-
-    // TX search
-    #[wasm_bindgen(js_name = heartbeatSearchTx)]
-    fn heartbeat_search_tx(txid: &str) -> bool;
 
     // Freshest block on the SSE/ZMQ-driven timeline (JSON {height, timestamp})
     #[wasm_bindgen(js_name = getHeartbeatLatestBlock)]
@@ -70,6 +73,39 @@ extern "C" {
     // SSE connection state: "live" | "stale" | "disconnected"
     #[wasm_bindgen(js_name = getHeartbeatConnectionState)]
     fn get_heartbeat_connection_state() -> String;
+
+    // Block detail modal defined in stats.js (pass JS Number via f64).
+    #[wasm_bindgen(js_name = showBlockDetail, catch)]
+    fn js_show_block_detail(height: f64) -> Result<(), JsValue>;
+
+    // The Lookout feed renderer defined in heartbeat-sse.js.
+    #[wasm_bindgen(js_name = _notableFeed, catch)]
+    fn js_notable_feed(tx: JsValue, opts: JsValue) -> Result<(), JsValue>;
+}
+
+#[cfg(feature = "hydrate")]
+fn show_block_detail_js(height: u64) {
+    let _ = js_show_block_detail(height as f64);
+}
+
+#[cfg(not(feature = "hydrate"))]
+fn show_block_detail_js(_height: u64) {}
+
+#[cfg(feature = "hydrate")]
+fn push_notable_history_item(item: &crate::stats::types::NotableTxInfo) {
+    let Ok(json) = serde_json::to_string(item) else {
+        return;
+    };
+    let Ok(val) = leptos::web_sys::js_sys::JSON::parse(&json) else {
+        return;
+    };
+    let opts = leptos::web_sys::js_sys::Object::new();
+    let _ = leptos::web_sys::js_sys::Reflect::set(
+        &opts,
+        &JsValue::from_str("append"),
+        &JsValue::TRUE,
+    );
+    let _ = js_notable_feed(val, opts.into());
 }
 
 #[cfg(not(feature = "hydrate"))]
@@ -87,22 +123,12 @@ fn get_heartbeat_vitals() -> String {
 #[cfg(not(feature = "hydrate"))]
 fn render_rhythm_strip(_: &str, _: &str) {}
 #[cfg(not(feature = "hydrate"))]
-#[allow(dead_code)]
-fn get_heartbeat_recent_blocks() -> String {
-    "[]".to_string()
-}
-#[cfg(not(feature = "hydrate"))]
 fn get_organism_status() -> String {
     "{}".to_string()
 }
 #[cfg(not(feature = "hydrate"))]
 #[allow(dead_code)] // used only by the commented-out Capture Moment button (kept for later)
 fn heartbeat_download_capture(_: &str) {}
-#[cfg(not(feature = "hydrate"))]
-#[allow(dead_code)]
-fn heartbeat_search_tx(_: &str) -> bool {
-    false
-}
 #[cfg(not(feature = "hydrate"))]
 #[allow(dead_code)]
 fn get_heartbeat_latest_block() -> String {
@@ -150,10 +176,26 @@ pub fn HeartbeatPage() -> impl IntoView {
         });
     }
 
-    // Mobile: the txid search collapses behind an icon to keep the bottom bar to a
-    // single row on small screens; tapping the icon expands the input. On sm+ the
-    // input is always inline, so this only gates the mobile-collapsed state.
-    let (search_open, set_search_open) = signal(false);
+    // Heartbeat v2 sync + transaction inspection signals
+    #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
+    let (sse_height, set_sse_height) = signal(0u64);
+    #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
+    let (sse_ts, set_sse_ts) = signal(0u64);
+    // SSE connection state for the status badge:
+    // "live" | "syncing" | "partial" | "stale" | "disconnected".
+    #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
+    let (conn_state, set_conn_state) = signal("live".to_string());
+    #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
+    let (coverage_note, set_coverage_note) = signal(Option::<String>::None);
+    let (pinned_tx, set_pinned_tx) = signal(Option::<PinnedTxView>::None);
+    let (search_query, set_search_query) = signal(String::new());
+    let (search_feedback, set_search_feedback) =
+        signal(Option::<(bool, String)>::None);
+    #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
+    let (copied_txid, set_copied_txid) = signal(false);
+
+    #[cfg(feature = "hydrate")]
+    let hb_client = StoredValue::new_local(Option::<HeartbeatClient>::None);
 
     // Signals for vital signs display
     let (hr_display, set_hr_display) = signal("--:--".to_string());
@@ -212,7 +254,36 @@ pub fn HeartbeatPage() -> impl IntoView {
             .unwrap_or_default()
     });
 
-    // Initialize canvas and push initial blocks once data is ready
+    // Load initial Lookout history so #whale-feed-panel populates on v2 without
+    // relying on the legacy v1 SSE history payload.
+    #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
+    let initial_notables = LocalResource::new(move || async move {
+        crate::stats::server_fns::fetch_notable_txs(
+            crate::stats::types::NotableTxFilter::default(),
+            100,
+            0,
+        )
+        .await
+        .ok()
+    });
+
+    #[cfg(feature = "hydrate")]
+    {
+        let notables_loaded = std::rc::Rc::new(std::cell::Cell::new(false));
+        Effect::new(move || {
+            if notables_loaded.get() {
+                return;
+            }
+            if let Some(Some(page)) = initial_notables.get() {
+                notables_loaded.set(true);
+                for item in &page.items {
+                    push_notable_history_item(item);
+                }
+            }
+        });
+    }
+
+    // Initialize canvas, push initial blocks, and start the v2 mirror client
     let init_initialized = initialized.clone();
     let init_last_height = last_height.clone();
     Effect::new(move || {
@@ -224,17 +295,25 @@ pub fn HeartbeatPage() -> impl IntoView {
         if let Some(blocks) = initial_blocks.get() {
             let blocks = blocks.clone();
 
-            // Always init the canvas and connect the SSE stream once the resource
+            // Always init the canvas and connect the v2 stream once the resource
             // resolves, EVEN IF the DB returned no blocks (empty DB, or a
             // transient DB pool/query error that unwrap_or_default() collapsed to
-            // []). connectOwnFeed() lives inside init_heartbeat and needs no DB;
-            // the live feed, vitals and STALE indicator must work regardless of DB
-            // state, and the historical EKG simply starts empty and fills from the
-            // SSE stream + tab-return catch-up. Gating init on non-empty blocks
-            // would strand the whole page behind the loading overlay on a DB blip.
+            // []). The live feed, vitals and STALE indicator must work regardless
+            // of DB state, and the historical EKG simply starts empty and fills
+            // from the snapshot + delta stream.
             init_heartbeat("heartbeat-canvas");
             initialized.set(true);
+            // Under hydrate, keep the loading overlay up briefly until the
+            // first v2 snapshot frames the mempool (with a 2.5s fallback if the
+            // node is offline) so refresh never flashes zoomed-in spikes and
+            // then snaps out for the brick laydown.
+            #[cfg(not(feature = "hydrate"))]
             set_loading.set(false);
+            #[cfg(feature = "hydrate")]
+            leptos::prelude::set_timeout(
+                move || set_loading.set(false),
+                std::time::Duration::from_millis(2500),
+            );
 
             // Seed last height from LiveStats regardless; the replay path below
             // maxes it with the freshest replayed block when history is present.
@@ -245,43 +324,68 @@ pub fn HeartbeatPage() -> impl IntoView {
 
             if blocks.is_empty() {
                 last_height.set(live_height);
-                return;
-            }
-
-            // Store period start timestamp for heart rate calculation
-            // Use the block at the retarget boundary, not the first fetched block
-            {
-                let current_height =
-                    blocks.last().map(|b| b.height).unwrap_or(0);
-                let period_start_height =
-                    (current_height / RETARGET_PERIOD) * RETARGET_PERIOD;
-                let period_block =
-                    blocks.iter().find(|b| b.height == period_start_height);
-                if let Some(pb) = period_block {
-                    set_period_start_ts.set(pb.timestamp);
-                } else if let Some(first) = blocks.first() {
-                    // Fallback: first block (shouldn't happen with 2016 blocks)
-                    set_period_start_ts.set(first.timestamp);
-                }
-            }
-
-            // Build block events with inter-block time (replay=true for compressed history)
-            let json = blocks_to_json(&blocks);
-            push_heartbeat_blocks(&json, true);
-
-            // Store last height: use the latest from LiveStats (not the last replayed block)
-            // to avoid missing blocks that arrived between fetch and now
-            let replay_height = blocks.last().map(|b| b.height).unwrap_or(0);
-            last_height.set(std::cmp::max(live_height, replay_height));
-
-            // Render rhythm strip with last 144 blocks (24hr)
-            let strip_blocks = if blocks.len() > 144 {
-                &blocks[blocks.len() - 144..]
             } else {
-                &blocks
-            };
-            let strip_json = blocks_to_json(strip_blocks);
-            render_rhythm_strip("rhythm-strip-canvas", &strip_json);
+                // Store period start timestamp for heart rate calculation
+                // Use the block at the retarget boundary, not the first fetched block
+                {
+                    let current_height =
+                        blocks.last().map(|b| b.height).unwrap_or(0);
+                    let period_start_height =
+                        (current_height / RETARGET_PERIOD) * RETARGET_PERIOD;
+                    let period_block =
+                        blocks.iter().find(|b| b.height == period_start_height);
+                    if let Some(pb) = period_block {
+                        set_period_start_ts.set(pb.timestamp);
+                    } else if let Some(first) = blocks.first() {
+                        // Fallback: first block (shouldn't happen with 2016 blocks)
+                        set_period_start_ts.set(first.timestamp);
+                    }
+                }
+
+                // Build block events with inter-block time (replay=true for compressed history)
+                let json = blocks_to_json(&blocks);
+                push_heartbeat_blocks(&json, true);
+
+                // Store last height: use the latest from LiveStats (not the last replayed block)
+                // to avoid missing blocks that arrived between fetch and now
+                let replay_height =
+                    blocks.last().map(|b| b.height).unwrap_or(0);
+                last_height.set(std::cmp::max(live_height, replay_height));
+
+                // Render rhythm strip with last 144 blocks (24hr)
+                let strip_blocks = if blocks.len() > 144 {
+                    &blocks[blocks.len() - 144..]
+                } else {
+                    &blocks
+                };
+                let strip_json = blocks_to_json(strip_blocks);
+                render_rhythm_strip("rhythm-strip-canvas", &strip_json);
+            }
+
+            #[cfg(feature = "hydrate")]
+            {
+                let initial_tx_param = leptos::prelude::window()
+                    .location()
+                    .search()
+                    .ok()
+                    .and_then(|s| parse_tx_param_from_search(&s));
+                if let Some(ref q) = initial_tx_param {
+                    set_search_query.set(q.clone());
+                }
+                let client = HeartbeatClient::new(HeartbeatClientSignals {
+                    set_loading,
+                    set_conn_state,
+                    set_coverage_note,
+                    set_pinned_tx,
+                    pinned_tx,
+                    set_search_feedback,
+                    set_sse_height,
+                    sse_height,
+                    set_sse_ts,
+                });
+                hb_client.set_value(Some(client.clone()));
+                client.start(initial_tx_param);
+            }
         }
     });
 
@@ -433,24 +537,17 @@ pub fn HeartbeatPage() -> impl IntoView {
         refresh_vitals();
     });
 
-    // Cleanup animation on navigate away
-    on_cleanup(|| {
+    // Cleanup v2 mirror client and canvas animation on navigate away
+    on_cleanup(move || {
+        #[cfg(feature = "hydrate")]
+        {
+            let client = hb_client.try_update_value(|c| c.take()).flatten();
+            if let Some(c) = client {
+                c.destroy();
+            }
+        }
         destroy_heartbeat();
     });
-
-    // Freshest block seen on the SSE/ZMQ-driven timeline (JS), polled each tick
-    // below. ZMQ is faster and more reliable than the LiveStats RPC poll, so the
-    // header reflects whichever source is ahead: otherwise it lags the timeline
-    // during a node RPC hiccup.
-    #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
-    let (sse_height, set_sse_height) = signal(0u64);
-    #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
-    let (sse_ts, set_sse_ts) = signal(0u64);
-    // SSE connection state for the LIVE indicator: "live" | "stale" | "disconnected".
-    // Polled from the JS feed on the tick below; the timeline's SSE stream is the
-    // most direct freshness signal (a node RPC stall makes it go silent).
-    #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
-    let (conn_state, set_conn_state) = signal("live".to_string());
 
     // Reactive display values
     let block_height = Signal::derive(move || {
@@ -502,9 +599,13 @@ pub fn HeartbeatPage() -> impl IntoView {
             .to_string()
     });
     let status_tip = Signal::derive(move || {
-        status_for(&conn_state.get(), node_stale.get())
-            .2
-            .to_string()
+        let base = status_for(&conn_state.get(), node_stale.get()).2;
+        if conn_state.get() == "partial" && !node_stale.get() {
+            if let Some(reason) = coverage_note.get() {
+                return format!("{base} ({reason})");
+            }
+        }
+        base.to_string()
     });
 
     // Tick counter that increments every second for the live countdown, and
@@ -539,10 +640,11 @@ pub fn HeartbeatPage() -> impl IntoView {
                         set_sse_ts.set(t.min(now));
                     }
                 }
-                // Reflect the SSE feed's connection state in the LIVE indicator.
-                let cs = get_heartbeat_connection_state();
-                if cs != conn_state.get_untracked() {
-                    set_conn_state.set(cs);
+                // Only promote "live" to "stale" from the JS stall detector so
+                // v2 states ("syncing", "partial", "disconnected") stay authoritative.
+                let js_cs = get_heartbeat_connection_state();
+                if js_cs == "stale" && conn_state.get_untracked() == "live" {
+                    set_conn_state.set("stale".to_string());
                 }
             },
             std::time::Duration::from_secs(1),
@@ -675,9 +777,92 @@ pub fn HeartbeatPage() -> impl IntoView {
                     </div>
                 </div>
 
+                // Prominent TXID search row (always visible on mobile & desktop, including fullscreen)
+                <div class="flex flex-wrap items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 border-b border-white/5 bg-[#0a1929]/45">
+                    <div class="relative flex-1 min-w-[190px] flex items-center">
+                        <input
+                            id="heartbeat-tx-search"
+                            type="text"
+                            placeholder="Search txid (full or 8+ char prefix)..."
+                            aria-label="Search transaction ID"
+                            class="w-full pl-3 pr-8 py-1.5 rounded-lg bg-white/5 border border-white/10 text-xs sm:text-sm font-mono text-white/90 placeholder-white/35 focus:border-[#00e676]/60 focus:bg-white/[0.07] focus:outline-none transition-colors"
+                            prop:value=move || search_query.get()
+                            on:input=move |ev| {
+                                set_search_query.set(event_target_value(&ev));
+                                if search_feedback.get_untracked().is_some() {
+                                    set_search_feedback.set(None);
+                                }
+                            }
+                            on:keydown=move |ev: leptos::ev::KeyboardEvent| {
+                                if ev.key() == "Enter" {
+                                    ev.prevent_default();
+                                    #[cfg(feature = "hydrate")]
+                                    {
+                                        let q = search_query.get_untracked();
+                                        let client = hb_client.try_with_value(|c| c.clone()).flatten();
+                                        if let Some(c) = client {
+                                            c.search_tx(&q);
+                                        }
+                                    }
+                                } else if ev.key() == "Escape" {
+                                    set_search_query.set(String::new());
+                                    set_search_feedback.set(None);
+                                }
+                            }
+                        />
+                        <Show when=move || !search_query.get().is_empty()>
+                            <button
+                                type="button"
+                                aria-label="Clear search"
+                                title="Clear search"
+                                class="absolute right-2 text-white/40 hover:text-white/80 text-sm font-mono px-1 cursor-pointer transition-colors"
+                                on:click=move |_| {
+                                    set_search_query.set(String::new());
+                                    set_search_feedback.set(None);
+                                }
+                            >
+                                "\u{00D7}"
+                            </button>
+                        </Show>
+                    </div>
+                    <button
+                        type="button"
+                        class="px-3 py-1.5 rounded-lg bg-[#00e676]/15 hover:bg-[#00e676]/25 border border-[#00e676]/40 text-xs sm:text-sm font-mono font-semibold text-[#00e676] transition-colors cursor-pointer shrink-0"
+                        on:click=move |_| {
+                            #[cfg(feature = "hydrate")]
+                            {
+                                let q = search_query.get_untracked();
+                                let client = hb_client.try_with_value(|c| c.clone()).flatten();
+                                if let Some(c) = client {
+                                    c.search_tx(&q);
+                                }
+                            }
+                        }
+                    >
+                        "Search"
+                    </button>
+                    <Show when=move || search_feedback.get().is_some()>
+                        {move || {
+                            search_feedback.get().map(|(is_err, msg)| {
+                                let pill_class = if is_err {
+                                    "inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-mono bg-[#f44336]/15 border border-[#f44336]/40 text-[#ff8a80] max-w-full truncate"
+                                } else {
+                                    "inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-mono bg-[#00e676]/15 border border-[#00e676]/40 text-[#00e676] max-w-full truncate"
+                                };
+                                let title_msg = msg.clone();
+                                view! {
+                                    <span class=pill_class title=title_msg>
+                                        {msg}
+                                    </span>
+                                }
+                            })
+                        }}
+                    </Show>
+                </div>
+
                 // Canvas with overlays
                 // The canvas flexes to fill all card space left over after the
-                // status/control/info bars: on both mobile and desktop the card
+                // status/search/control/info bars: on both mobile and desktop the card
                 // is now viewport-height, so flex-1 absorbs the remainder. (Also
                 // how it fills during fullscreen when JS sets the card to 100vh.)
                 <div id="heartbeat-canvas-wrap" class="relative flex-1 min-h-0 sm:min-h-[250px]">
@@ -685,6 +870,298 @@ pub fn HeartbeatPage() -> impl IntoView {
                         id="heartbeat-canvas"
                         class="w-full h-full"
                     ></canvas>
+
+                    // In-place live Pinned Transaction Detail Panel (visible in fullscreen too)
+                    <Show when=move || pinned_tx.get().is_some()>
+                        {
+                            move || {
+                                let Some(tx) = pinned_tx.get() else {
+                                    return view! { <div></div> }.into_any();
+                                };
+                                let txid_full = tx.txid.clone();
+                                let txid_short = short_txid(&txid_full);
+                                #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
+                                let txid_copy = txid_full.clone();
+                                let txid_locate = txid_full.clone();
+                                let mempool_url = format!("https://mempool.space/tx/{txid_full}");
+
+                                let fee_rate = tx.fee_rate_sat_per_vb();
+                                let (band_label, band_color) = fee_band_for_rate(fee_rate);
+                                let fee_rate_text = if fee_rate.is_some() {
+                                    format!("{} \u{00b7} {}", format_fee_rate(fee_rate), band_label)
+                                } else {
+                                    band_label.to_string()
+                                };
+                                let fee_paid_text = tx
+                                    .fee
+                                    .map(|f| format!("{} sats", super::helpers::format_number(f)))
+                                    .unwrap_or_else(|| "Pending...".to_string());
+                                let size_text = tx
+                                    .vsize
+                                    .map(|v| format!("{} vB", super::helpers::format_number(u64::from(v))))
+                                    .unwrap_or_else(|| "Pending...".to_string());
+                                let value_text = tx
+                                    .value
+                                    .map(|sats| format!("{:.8} BTC", sats as f64 / 1e8))
+                                    .unwrap_or_else(|| "Pending...".to_string());
+                                let first_seen_text = format_first_seen(tx.first_seen);
+                                let notable = primary_notable_label(tx.flags);
+                                let op_return = tx
+                                    .op_return_text
+                                    .as_deref()
+                                    .filter(|s| !s.is_empty())
+                                    .map(str::to_string);
+                                let status_for_header = tx.status.clone();
+                                let status_for_footer = tx.status.clone();
+                                let deep = tx.deep.clone();
+                                let deep_loading = tx.deep_loading;
+
+                                view! {
+                                    <div
+                                        id="heartbeat-pinned-tx-panel"
+                                        class="absolute top-3 right-3 z-20 w-[calc(100%-1.5rem)] max-w-sm bg-[#0a1929]/95 border border-white/15 rounded-xl shadow-2xl backdrop-blur-md text-xs font-mono text-white/85 overflow-hidden max-h-[calc(100%-1.5rem)] overflow-y-auto"
+                                    >
+                                        // Header: status badge + close button
+                                        <div class="flex items-start justify-between gap-2 px-3.5 py-2.5 border-b border-white/10">
+                                            <div class="flex flex-wrap items-center gap-1.5 min-w-0">
+                                                {match status_for_header {
+                                                    PinnedTxStatus::Unconfirmed => view! {
+                                                        <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider bg-[#00e676]/15 border border-[#00e676]/40 text-[#00e676]">
+                                                            <span class="w-1.5 h-1.5 rounded-full bg-[#00e676]"></span>
+                                                            "IN MEMPOOL"
+                                                        </span>
+                                                    }.into_any(),
+                                                    PinnedTxStatus::Confirmed { block_height, .. } => {
+                                                        let badge_text = if block_height > 0 {
+                                                            format!(
+                                                                "CONFIRMED IN BLOCK #{}",
+                                                                super::helpers::format_number(block_height)
+                                                            )
+                                                        } else {
+                                                            "CONFIRMED".to_string()
+                                                        };
+                                                        view! {
+                                                            <div class="flex flex-wrap items-center gap-1.5">
+                                                                <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider bg-[#f7931a]/15 border border-[#f7931a]/40 text-[#f7931a]">
+                                                                    <span class="w-1.5 h-1.5 rounded-full bg-[#00e676]"></span>
+                                                                    {badge_text}
+                                                                </span>
+                                                                {(block_height > 0).then(|| view! {
+                                                                    <button
+                                                                        type="button"
+                                                                        class="px-2 py-0.5 rounded bg-[#f7931a]/15 hover:bg-[#f7931a]/25 border border-[#f7931a]/40 text-[10px] font-semibold text-[#f7931a] cursor-pointer transition-colors"
+                                                                        on:click=move |_| {
+                                                                            let _ = hb_v2_focus_block_height(block_height);
+                                                                            show_block_detail_js(block_height);
+                                                                        }
+                                                                    >
+                                                                        "View block"
+                                                                    </button>
+                                                                })}
+                                                            </div>
+                                                        }.into_any()
+                                                    }
+                                                    PinnedTxStatus::Removed => view! {
+                                                        <div class="flex flex-col gap-0.5">
+                                                            <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider bg-[#f44336]/15 border border-[#f44336]/35 text-[#ff8a80] w-fit">
+                                                                "REMOVED FROM MEMPOOL"
+                                                            </span>
+                                                            <span class="text-[10px] text-white/45">"Replaced or evicted"</span>
+                                                        </div>
+                                                    }.into_any(),
+                                                }}
+                                            </div>
+                                            <button
+                                                type="button"
+                                                aria-label="Close transaction panel"
+                                                title="Close"
+                                                class="w-6 h-6 shrink-0 rounded-md bg-white/5 hover:bg-white/15 text-white/60 hover:text-white flex items-center justify-center text-sm cursor-pointer transition-colors"
+                                                on:click=move |_| {
+                                                    set_copied_txid.set(false);
+                                                    #[cfg(feature = "hydrate")]
+                                                    {
+                                                        let client = hb_client.try_with_value(|c| c.clone()).flatten();
+                                                        if let Some(c) = client {
+                                                            c.clear_pinned_tx();
+                                                            return;
+                                                        }
+                                                    }
+                                                    set_pinned_tx.set(None);
+                                                    hb_v2_set_pinned_tx(None);
+                                                }
+                                            >
+                                                "\u{00D7}"
+                                            </button>
+                                        </div>
+
+                                        // Body
+                                        <div class="px-3.5 py-2.5 space-y-2.5">
+                                            // TXID + Copy
+                                            <div class="flex items-center justify-between gap-2 bg-white/[0.04] border border-white/10 rounded-lg px-2.5 py-1.5">
+                                                <span class="text-[11px] text-white/80 truncate" title=txid_full.clone()>
+                                                    {txid_short}
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    class="px-2 py-0.5 rounded bg-white/10 hover:bg-white/20 text-[10px] text-white/80 cursor-pointer transition-colors shrink-0"
+                                                    on:click=move |_| {
+                                                        #[cfg(feature = "hydrate")]
+                                                        {
+                                                            if let Some(win) = leptos::web_sys::window() {
+                                                                let clipboard = win.navigator().clipboard();
+                                                                let _ = clipboard.write_text(&txid_copy);
+                                                                set_copied_txid.set(true);
+                                                                leptos::prelude::set_timeout(
+                                                                    move || set_copied_txid.set(false),
+                                                                    std::time::Duration::from_millis(1500),
+                                                                );
+                                                            }
+                                                        }
+                                                    }
+                                                >
+                                                    {move || if copied_txid.get() { "Copied" } else { "Copy" }}
+                                                </button>
+                                            </div>
+
+                                            // Key metrics
+                                            <div class="grid grid-cols-2 gap-x-3 gap-y-2 text-[11px]">
+                                                <div>
+                                                    <div class="text-[10px] text-white/40 uppercase">"Fee Paid"</div>
+                                                    <div class="text-white/90 font-semibold tabular-nums">{fee_paid_text}</div>
+                                                </div>
+                                                <div>
+                                                    <div class="text-[10px] text-white/40 uppercase">"Size"</div>
+                                                    <div class="text-white/90 font-semibold tabular-nums">{size_text}</div>
+                                                </div>
+                                                <div class="col-span-2">
+                                                    <div class="text-[10px] text-white/40 uppercase">"Fee Rate"</div>
+                                                    <div class="flex items-center gap-1.5 text-white/90 font-semibold tabular-nums">
+                                                        <span
+                                                            class="w-2 h-2 rounded-full shrink-0"
+                                                            style=format!("background-color: {band_color}")
+                                                        ></span>
+                                                        <span>{fee_rate_text}</span>
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <div class="text-[10px] text-white/40 uppercase">"Output Value"</div>
+                                                    <div class="text-white/90 font-semibold tabular-nums">{value_text}</div>
+                                                </div>
+                                                <div>
+                                                    <div class="text-[10px] text-white/40 uppercase">"First Observed"</div>
+                                                    <div class="text-white/75">{first_seen_text}</div>
+                                                </div>
+                                            </div>
+
+                                            // Notable tag + OP_RETURN text (strictly text nodes, never inner_html)
+                                            {notable.map(|(label, color)| view! {
+                                                <div class="flex items-center gap-2 pt-0.5">
+                                                    <span
+                                                        class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide border"
+                                                        style=format!("color: {color}; border-color: {color}66; background-color: {color}1a")
+                                                    >
+                                                        {label}
+                                                    </span>
+                                                </div>
+                                            })}
+                                            {op_return.map(|msg| view! {
+                                                <div class="rounded-lg bg-white/[0.04] border border-[#ffa500]/30 px-2.5 py-2 space-y-0.5">
+                                                    <div class="text-[10px] text-[#ffa500] uppercase font-semibold">"OP_RETURN Message"</div>
+                                                    <p class="text-[11px] text-white/80 break-words whitespace-pre-wrap">{msg}</p>
+                                                </div>
+                                            })}
+
+                                            // Deep details from /api/stats/tx/{txid}
+                                            {if let Some(d) = deep {
+                                                let inputs_str = d
+                                                    .inputs
+                                                    .map(super::helpers::format_number)
+                                                    .unwrap_or_else(|| "--".to_string());
+                                                let outputs_str = d
+                                                    .outputs
+                                                    .map(super::helpers::format_number)
+                                                    .unwrap_or_else(|| "--".to_string());
+                                                let weight_str = d
+                                                    .weight
+                                                    .map(|w| format!("{} WU", super::helpers::format_number(w)))
+                                                    .unwrap_or_else(|| "--".to_string());
+                                                view! {
+                                                    <div class="grid grid-cols-3 gap-2 pt-2 border-t border-white/10 text-[11px]">
+                                                        <div>
+                                                            <div class="text-[10px] text-white/40 uppercase">"Inputs"</div>
+                                                            <div class="text-white/85 tabular-nums">{inputs_str}</div>
+                                                        </div>
+                                                        <div>
+                                                            <div class="text-[10px] text-white/40 uppercase">"Outputs"</div>
+                                                            <div class="text-white/85 tabular-nums">{outputs_str}</div>
+                                                        </div>
+                                                        <div>
+                                                            <div class="text-[10px] text-white/40 uppercase">"Weight"</div>
+                                                            <div class="text-white/85 tabular-nums">{weight_str}</div>
+                                                        </div>
+                                                    </div>
+                                                }.into_any()
+                                            } else if deep_loading {
+                                                view! {
+                                                    <div class="pt-1.5 border-t border-white/10 text-[10px] text-white/40">
+                                                        "Loading inputs, outputs, weight..."
+                                                    </div>
+                                                }.into_any()
+                                            } else {
+                                                view! { <div></div> }.into_any()
+                                            }}
+                                        </div>
+
+                                        // Footer actions
+                                        <div class="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2 border-t border-white/10 bg-white/[0.02]">
+                                            <div class="flex items-center gap-2">
+                                                {match status_for_footer {
+                                                    PinnedTxStatus::Unconfirmed => view! {
+                                                        <button
+                                                            type="button"
+                                                            class="px-2.5 py-1 rounded-md bg-[#00e676]/15 hover:bg-[#00e676]/25 border border-[#00e676]/40 text-[11px] font-semibold text-[#00e676] cursor-pointer transition-colors"
+                                                            on:click=move |_| {
+                                                                let focused = hb_v2_focus_tx(&txid_locate);
+                                                                if !focused {
+                                                                    set_search_feedback.set(Some((
+                                                                        false,
+                                                                        "In node mempool (outside rendered window)".to_string(),
+                                                                    )));
+                                                                }
+                                                            }
+                                                        >
+                                                            "Locate brick"
+                                                        </button>
+                                                    }.into_any(),
+                                                    PinnedTxStatus::Confirmed { block_height, .. } if block_height > 0 => view! {
+                                                        <button
+                                                            type="button"
+                                                            class="px-2.5 py-1 rounded-md bg-[#f7931a]/15 hover:bg-[#f7931a]/25 border border-[#f7931a]/40 text-[11px] font-semibold text-[#f7931a] cursor-pointer transition-colors"
+                                                            on:click=move |_| {
+                                                                let _ = hb_v2_focus_block_height(block_height);
+                                                                show_block_detail_js(block_height);
+                                                            }
+                                                        >
+                                                            "View block"
+                                                        </button>
+                                                    }.into_any(),
+                                                    _ => view! { <span></span> }.into_any(),
+                                                }}
+                                            </div>
+                                            <a
+                                                href=mempool_url
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                class="text-[11px] text-white/50 hover:text-[#f7931a] transition-colors"
+                                            >
+                                                "mempool.space ->"
+                                            </a>
+                                        </div>
+                                    </div>
+                                }.into_any()
+                            }
+                        }
+                    </Show>
 
                     // Loading overlay (initial page load)
                     <Show when=move || loading.get()>
@@ -814,63 +1291,11 @@ pub fn HeartbeatPage() -> impl IntoView {
                     </div>
                 </div>
 
-                // Bottom info bar. On mobile the two stats stack left-aligned (so they
-                // line up) with the search icon to the right; tapping it expands the txid
-                // search onto its own full-width row below. On sm+ the stats sit inline
-                // on the left and the search input is inline on the right.
-                <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 px-3 sm:px-4 py-1.5 sm:py-2 border-t border-white/5 text-xs sm:text-base text-[#00e676] font-mono">
-                    // Mobile: this wrapper is a flex-col so the two stats stack left-
-                    // aligned. Desktop: `sm:contents` dissolves the wrapper so mempool and
-                    // next-block become direct children of the bar again, mempool at the
-                    // left, next-block pushed to the right (sm:order-last), search between
-                    // them via justify-between (unchanged desktop layout).
-                    <div class="flex flex-col sm:contents gap-y-0.5 min-w-0">
-                        <span class="whitespace-nowrap">{mempool_display}</span>
-                        <span class="whitespace-nowrap sm:order-last">"Next block: " {fee_display}</span>
-                    </div>
-                    <div
-                        class=move || format!(
-                            "{} sm:flex items-center gap-1.5 order-last w-full sm:w-auto sm:order-none",
-                            if search_open.get() { "flex" } else { "hidden" }
-                        )
-                        title="Searches visible txs on the timeline. Only recent mempool transactions that arrived since the last block are shown."
-                    >
-                        <input
-                            id="heartbeat-tx-search"
-                            type="text"
-                            placeholder="Search txid..."
-                            class="w-full sm:w-48 px-2 py-1 sm:py-0.5 rounded bg-white/5 border border-white/10 text-xs font-mono text-white/70 placeholder-white/30 focus:border-[#00e676]/50 focus:outline-none"
-                            on:keydown=move |e: leptos::ev::KeyboardEvent| {
-                                if e.key() == "Enter" {
-                                    #[cfg(feature = "hydrate")]
-                                    {
-                                        use wasm_bindgen::JsCast;
-                                        let input = e.target().unwrap().unchecked_into::<leptos::web_sys::HtmlInputElement>();
-                                        let val = input.value();
-                                        if !val.is_empty() {
-                                            let found = heartbeat_search_tx(&val);
-                                            if !found {
-                                                input.set_placeholder("Not found");
-                                                let input2 = input.clone();
-                                                leptos::prelude::set_timeout(move || {
-                                                    input2.set_placeholder("Search txid...");
-                                                }, std::time::Duration::from_secs(2));
-                                            }
-                                            input.set_value("");
-                                        }
-                                    }
-                                }
-                            }
-                        />
-                    </div>
-                    // Search toggle: mobile only (the input is inline on sm+).
-                    <button
-                        aria-label="Search transactions"
-                        on:click=move |_| set_search_open.update(|v| *v = !*v)
-                        class="sm:hidden w-7 h-7 shrink-0 rounded-md bg-white/5 text-white/60 hover:bg-white/15 hover:text-white transition-colors flex items-center justify-center"
-                    >
-                        "\u{1F50D}"
-                    </button>
+                // Bottom info bar: node-aggregate mempool total on the left,
+                // next-block fee estimate on the right.
+                <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-3 sm:px-4 py-1.5 sm:py-2 border-t border-white/5 text-xs sm:text-base text-[#00e676] font-mono">
+                    <span class="whitespace-nowrap">{mempool_display}</span>
+                    <span class="whitespace-nowrap">"Next block: " {fee_display}</span>
                 </div>
             </div>
 
@@ -1006,36 +1431,79 @@ pub fn HeartbeatPage() -> impl IntoView {
                 </button>
             </div> */
 
-            // Legend
-            <div class="space-y-2">
-                <div class="text-center">
-                    <span class="text-xs text-white/50 font-mono uppercase tracking-wider">"Network Stress"</span>
+            // Legends: Transaction Fee Bands + Network Stress
+            <div class="space-y-5">
+                // Fixed Fee Rate Legend
+                <div class="space-y-2">
+                    <div class="text-center">
+                        <span class="text-xs text-white/50 font-mono uppercase tracking-wider">"Transaction Fee Bands (sat/vB)"</span>
+                    </div>
+                    <div class="flex flex-wrap justify-center gap-x-5 gap-y-2 text-xs text-white/50 font-mono">
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-2.5 h-2.5 rounded-sm bg-[#64748b]"></span>
+                            "Pending"
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-2.5 h-2.5 rounded-sm bg-[#2563eb]"></span>
+                            "< 1"
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-2.5 h-2.5 rounded-sm bg-[#38bdf8]"></span>
+                            "1-2"
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-2.5 h-2.5 rounded-sm bg-[#00e676]"></span>
+                            "2-5"
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-2.5 h-2.5 rounded-sm bg-[#f7931a]"></span>
+                            "5-15"
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-2.5 h-2.5 rounded-sm bg-[#ff5722]"></span>
+                            "15-50"
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-2.5 h-2.5 rounded-sm bg-[#f44336]"></span>
+                            "50+"
+                        </div>
+                    </div>
+                    <p class="text-center text-[11px] text-white/40 max-w-lg mx-auto">
+                        "Larger outlined bricks highlight notable transactions (whales, inscriptions, messages, fee outliers)."
+                    </p>
                 </div>
-                <div class="flex flex-wrap justify-center gap-x-5 gap-y-2 text-xs text-white/50">
-                    <div class="flex items-center gap-1.5">
-                        <span class="w-2.5 h-2.5 rounded-full bg-[#00e676]"></span>
-                        "Healthy"
+
+                // Network Stress Legend
+                <div class="space-y-2">
+                    <div class="text-center">
+                        <span class="text-xs text-white/50 font-mono uppercase tracking-wider">"Network Stress"</span>
                     </div>
-                    <div class="flex items-center gap-1.5">
-                        <span class="w-2.5 h-2.5 rounded-full bg-[#42a5f5]"></span>
-                        "Steady"
+                    <div class="flex flex-wrap justify-center gap-x-5 gap-y-2 text-xs text-white/50">
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-2.5 h-2.5 rounded-full bg-[#00e676]"></span>
+                            "Healthy"
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-2.5 h-2.5 rounded-full bg-[#42a5f5]"></span>
+                            "Steady"
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-2.5 h-2.5 rounded-full bg-[#f7931a]"></span>
+                            "Elevated"
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-2.5 h-2.5 rounded-full bg-[#ff5722]"></span>
+                            "Stressed"
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-2.5 h-2.5 rounded-full bg-[#f44336]"></span>
+                            "Critical"
+                        </div>
                     </div>
-                    <div class="flex items-center gap-1.5">
-                        <span class="w-2.5 h-2.5 rounded-full bg-[#f7931a]"></span>
-                        "Elevated"
-                    </div>
-                    <div class="flex items-center gap-1.5">
-                        <span class="w-2.5 h-2.5 rounded-full bg-[#ff5722]"></span>
-                        "Stressed"
-                    </div>
-                    <div class="flex items-center gap-1.5">
-                        <span class="w-2.5 h-2.5 rounded-full bg-[#f44336]"></span>
-                        "Critical"
-                    </div>
+                    <p class="text-center text-[11px] text-white/40 max-w-md mx-auto">
+                        "Color is derived from time since last block, fee pressure, and mempool congestion. It affects the flatline, waveform, and live indicator."
+                    </p>
                 </div>
-                <p class="text-center text-[11px] text-white/40 max-w-md mx-auto">
-                    "Color is derived from time since last block, fee pressure, and mempool congestion. It affects the flatline, waveform, and live indicator."
-                </p>
             </div>
         </div>
     }
@@ -1241,6 +1709,79 @@ struct OrganismStatus {
     color: String,
 }
 
+fn short_txid(txid: &str) -> String {
+    if txid.len() > 24 {
+        format!("{}...{}", &txid[..12], &txid[txid.len() - 8..])
+    } else {
+        txid.to_string()
+    }
+}
+
+fn format_first_seen(ts: u64) -> String {
+    if ts == 0 {
+        return "Already waiting (time unknown)".to_string();
+    }
+    #[cfg(feature = "hydrate")]
+    {
+        const MONTHS: [&str; 12] = [
+            "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep",
+            "Oct", "Nov", "Dec",
+        ];
+        let now = leptos::web_sys::js_sys::Date::new_0();
+        let now_secs = (now.get_time() / 1000.0).max(0.0) as u64;
+        let date = leptos::web_sys::js_sys::Date::new(&JsValue::from_f64(
+            (ts as f64) * 1000.0,
+        ));
+        let same_local_day = date.get_full_year() == now.get_full_year()
+            && date.get_month() == now.get_month()
+            && date.get_date() == now.get_date();
+        let older_than_18h = now_secs.saturating_sub(ts) > 18 * 3600;
+        if !same_local_day || older_than_18h {
+            let month = MONTHS
+                .get(date.get_month() as usize)
+                .copied()
+                .unwrap_or("???");
+            format!(
+                "{month} {}, {:02}:{:02}:{:02}",
+                date.get_date(),
+                date.get_hours(),
+                date.get_minutes(),
+                date.get_seconds()
+            )
+        } else {
+            format!(
+                "{:02}:{:02}:{:02}",
+                date.get_hours(),
+                date.get_minutes(),
+                date.get_seconds()
+            )
+        }
+    }
+    #[cfg(not(feature = "hydrate"))]
+    {
+        let now_ts = chrono::Utc::now().timestamp().max(0) as u64;
+        format_first_seen_utc(ts, now_ts)
+    }
+}
+
+#[cfg(not(feature = "hydrate"))]
+fn format_first_seen_utc(ts: u64, now_ts: u64) -> String {
+    if ts == 0 {
+        return "Already waiting (time unknown)".to_string();
+    }
+    let Some(dt) = chrono::DateTime::from_timestamp(ts as i64, 0) else {
+        return "Already waiting (time unknown)".to_string();
+    };
+    let same_day = chrono::DateTime::from_timestamp(now_ts as i64, 0)
+        .is_some_and(|now_dt| dt.date_naive() == now_dt.date_naive());
+    let older_than_18h = now_ts.saturating_sub(ts) > 18 * 3600;
+    if !same_day || older_than_18h {
+        dt.format("%b %-d, %H:%M:%S UTC").to_string()
+    } else {
+        dt.format("%H:%M:%S UTC").to_string()
+    }
+}
+
 /// Colour, label and explanation for the liveness badge.
 ///
 /// **Worst-known state wins**, because a reader needs the most severe reason
@@ -1275,6 +1816,16 @@ fn status_for(
             "#f7931a",
             "NODE STALE",
             "The connection is fine, but the Bitcoin node behind it did not answer, so these figures are the last values it gave and may be out of date.",
+        ),
+        "syncing" => (
+            "#42a5f5",
+            "SYNCING",
+            "Syncing mempool snapshot from this site's Bitcoin node.",
+        ),
+        "partial" => (
+            "#f7931a",
+            "PARTIAL",
+            "Live stream connected, but mempool coverage is currently partial while syncing with the node.",
         ),
         _ => ("#00e676", "LIVE", "Live from this site's own Bitcoin node."),
     }
@@ -1450,6 +2001,8 @@ mod tests {
         let tips: Vec<&str> = [
             ("live", false),
             ("live", true),
+            ("syncing", false),
+            ("partial", false),
             ("stale", false),
             ("disconnected", false),
         ]
@@ -1463,6 +2016,59 @@ mod tests {
         uniq.sort_unstable();
         uniq.dedup();
         assert_eq!(uniq.len(), tips.len(), "two states share an explanation");
+    }
+
+    #[test]
+    fn syncing_and_partial_status_precedence() {
+        let (sync_col, sync_lbl, sync_tip) = status_for("syncing", false);
+        assert_eq!(sync_col, "#42a5f5");
+        assert_eq!(sync_lbl, "SYNCING");
+        assert!(sync_tip.contains("snapshot"));
+        // Stale node outranks syncing and partial coverage.
+        assert_eq!(status_for("syncing", true).1, "NODE STALE");
+
+        let (part_col, part_lbl, part_tip) = status_for("partial", false);
+        assert_eq!(part_col, "#f7931a");
+        assert_eq!(part_lbl, "PARTIAL");
+        assert!(part_tip.contains("partial"));
+        assert_eq!(status_for("partial", true).1, "NODE STALE");
+    }
+
+    #[cfg(not(feature = "hydrate"))]
+    #[test]
+    fn format_first_seen_includes_short_date_when_older_than_today_or_18h() {
+        use super::format_first_seen_utc;
+        // 2026-11-20 20:00:00 UTC
+        let now = chrono::NaiveDate::from_ymd_opt(2026, 11, 20)
+            .unwrap()
+            .and_hms_opt(20, 0, 0)
+            .unwrap()
+            .and_utc()
+            .timestamp() as u64;
+        assert_eq!(
+            format_first_seen_utc(0, now),
+            "Already waiting (time unknown)"
+        );
+        // Same day, 2 hours earlier -> bare time.
+        let recent = now - 2 * 3600;
+        assert_eq!(format_first_seen_utc(recent, now), "18:00:00 UTC");
+        // Same day, 19 hours earlier (> 18h) -> includes short date.
+        let older_same_day = now - 19 * 3600;
+        assert_eq!(
+            format_first_seen_utc(older_same_day, now),
+            "Nov 20, 01:00:00 UTC"
+        );
+        // Previous day, 16:04:12 UTC -> includes short date.
+        let prev_day = chrono::NaiveDate::from_ymd_opt(2026, 11, 19)
+            .unwrap()
+            .and_hms_opt(16, 4, 12)
+            .unwrap()
+            .and_utc()
+            .timestamp() as u64;
+        assert_eq!(
+            format_first_seen_utc(prev_day, now),
+            "Nov 19, 16:04:12 UTC"
+        );
     }
 
     #[test]

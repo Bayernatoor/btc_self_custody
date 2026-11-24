@@ -3,10 +3,16 @@
 // that the Leptos component calls via wasm_bindgen.
 
 import { getState, setState, COLORS, BG_COLOR, FLATLINE_PX_PER_SEC, HEAD_POSITION_FRAC, RETARGET_PERIOD } from './heartbeat-state.js';
-import { drawGrid, createBlockSegment, createFlatlineSegment, computeColor, historyFlatlineWidth, feeRateColor } from './heartbeat-timeline.js';
+import { drawGrid, createBlockSegment, createFlatlineSegment, computeColor, historyFlatlineWidth } from './heartbeat-timeline.js';
 import { setupInputHandlers, handleControlClick, initSoundButton } from './heartbeat-interaction.js';
 import { stopMomentum } from './heartbeat-interaction.js';
-import { connectOwnFeed, placeHistoryTxs, fastForwardLiveFlatline } from './heartbeat-sse.js';
+import {
+    hbV2InstallSnapshot, hbV2ApplyEffect, hbV2FocusTx, hbV2SetPinnedTx,
+    hbV2FocusBlockHeight, hbV2SetConnectionState,
+    fastForwardLiveFlatline, drainHiddenTxsAcrossGap, ensureSegMaps,
+    registerBlipInSeg, txidSkylineOffset, buildBlip, updateBlipMetadata,
+    rebuildRevealIndex, maybeClearRemovedTxids
+} from './heartbeat-sse.js';
 import { playBlockCue, tuneSound, soundSettings } from './heartbeat-audio.js';
 import { drawFrame } from './heartbeat-render.js';
 import {
@@ -17,15 +23,14 @@ import {
     heartbeatDownloadCapture
 } from './heartbeat-vitals.js';
 
-// Seconds of SSE silence (no tx/block) before the feed is considered stale.
-// Txs normally arrive within seconds even in a quiet mempool, so this only
-// trips when the node/stream has genuinely gone quiet (e.g. an RPC stall).
+// Seconds of SSE silence before a 'live' connection is reported as 'stale'.
 var HEARTBEAT_STALL_SECS = 60;
 
 // ── Public API ─────────────────────────────────────────────
 
 window.initHeartbeat = function(canvasId) {
     if (getState()) window.destroyHeartbeat();
+    if (window._seenNotableTxids) window._seenNotableTxids.clear();
 
     var canvas = document.getElementById(canvasId);
     if (!canvas) return;
@@ -63,11 +68,9 @@ window.initHeartbeat = function(canvasId) {
         autoFollow: true,
         paused: false,
         renderMode: 'bricks',
-        // Level-of-detail: when zoomed way out (<0.3x) with a very full mempool
-        // (>60k bricks), draw per-column density bars instead of every brick, to
-        // avoid redrawing ~45k+ rects/frame. Toggle at runtime with
-        // window._hbToggleLod() (persisted in localStorage), off = individual
-        // bricks always (nicer, but can jank at a very full mempool zoomed out).
+        // Level-of-detail: when zoomed way out (<0.3x) with an extreme mempool
+        // (>100k bricks), draw per-column density bars instead of every brick.
+        // Toggle at runtime with window._hbToggleLod() (persisted in localStorage).
         _lodEnabled: (function() { try { return localStorage.getItem('hb_lod') !== 'off'; } catch (e) { return true; } })(),
         // Cinematic block reveal (form→harvest→unfurl→hold→return). Off = instant
         // flow (spike appears, harvest, mempool re-lays, no camera hijack; follow
@@ -108,16 +111,26 @@ window.initHeartbeat = function(canvasId) {
         dragStartOffset: 0,
         hoveredBlock: null,
         hoveredBlip: null,
+        _pinnedTxid: null,
         _pinnedBlip: null,
         hoveredFlatline: null,
         hoverCanvasX: 0,
         _flashTimer: null,
 
-        // Mempool feed
+        // Mempool feed (v2 state owned by Rust/WASM client)
         ws: null,
         wsConnected: false,
+        _v2ConnState: 'live',
+        _coverage: { status: 'unknown' },
+        _pendingAdds: new Map(),
+        _txBatchQueue: [],
+        _removedTxids: new Set(),
+        _exactConfirmedByHash: new Map(),
+        _pendingBlocks: [],
+        _deferredDetails: new Map(),
+        _pendingCarryByTxid: null,
 
-        // SSE disconnection state (for overlay)
+        // Connection overlay state
         _sseDisconnected: false,
         _sseDisconnectedSince: 0,
 
@@ -257,9 +270,6 @@ window.initHeartbeat = function(canvasId) {
             }
         }
     };
-
-    // Connect to own node SSE feed (falls back to mempool.space WS)
-    connectOwnFeed();
 };
 
 window.pushHeartbeatBlocks = function(json, replay) {
@@ -290,15 +300,17 @@ window.pushHeartbeatBlocks = function(json, replay) {
             // on weight OR fees, matching the backend `estimated = size==0||weight==0`
             // definition. (Keying on total_fees alone missed the case where the
             // fee RPC stayed down but getblock gave real size/weight.)
-            if (!isReplay && b.height) {
+            if (!isReplay && (b.height || b.hash)) {
                 var existingSeg = null;
                 for (var di = _hb.timeline.length - 1; di >= Math.max(0, _hb.timeline.length - 30); di--) {
-                    if (_hb.timeline[di].type === 'block' && _hb.timeline[di].height === b.height) {
-                        existingSeg = _hb.timeline[di];
+                    var cand = _hb.timeline[di];
+                    if (cand.type === 'block' && ((b.hash && cand.hash === b.hash) || (b.height && cand.height === b.height))) {
+                        existingSeg = cand;
                         break;
                     }
                 }
                 if (existingSeg) {
+                    if (b.hash && !existingSeg.hash) existingSeg.hash = b.hash;
                     var existingMissing = (existingSeg.weight === 0 || existingSeg.total_fees === 0);
                     var incomingHasData = (b.weight > 0 || b.total_fees > 0);
                     if (existingMissing && incomingHasData) {
@@ -309,11 +321,9 @@ window.pushHeartbeatBlocks = function(json, replay) {
                         existingSeg.color = replacement.color;
                         existingSeg.tx_count = replacement.tx_count;
                         existingSeg.total_fees = replacement.total_fees;
+                        existingSeg.size = replacement.size;
                         existingSeg.weight = replacement.weight;
                         existingSeg.inter_block_seconds = replacement.inter_block_seconds;
-                        // Announce with whatever real data landed. Fees may still be
-                        // unknown (0) if getblockstats stayed down \u2014 omit them rather
-                        // than show "0.0000 BTC".
                         var heightStr = b.height.toLocaleString();
                         var feePart = b.total_fees > 0 ? (b.total_fees / 100000000).toFixed(4) + ' BTC fees \u00b7 ' : '';
                         var nowAnn = Date.now() / 1000;
@@ -357,102 +367,72 @@ window.pushHeartbeatBlocks = function(json, replay) {
                 if (!isReplay) {
                     lastSeg.color = _hb._preFlashColor || _hb.currentColor || COLORS.healthy;
                 }
-                // A block confirms some mempool txs and leaves the rest waiting.
-                // HARVEST (live blocks): split the active bricks by fee rate, the
-                // top `tx_count` (≈ what the block took) shatter into the spike;
-                // the lower-fee remainder is carried forward onto the new flatline
-                // (still unconfirmed = still in the mempool). Replay/history blocks
-                // shatter everything (no live mempool to carry).
+                // Exact-inclusion harvest ONLY: never approximate confirmation by fee rate.
+                // If block_inclusion has already arrived for this block's hash, shatter those
+                // exact txids and carry the rest forward. If block_inclusion hasn't arrived yet,
+                // carry all active bricks forward cleanly so block_inclusion shatters the exact
+                // confirmed set in place moments later (or partitions an armed reveal).
                 var carriedLeftovers = [];
                 if (lastSeg.blips) {
                     var absorbX = _hb.virtualX;
                     var absorbNow = Date.now() / 1000;
                     var zoom = _hb.zoom;
 
-                    // Count active (non-fading) bricks. maxPartsPerBlip scales the
-                    // shatter down when there's a lot to keep the frame cheap.
                     var activeCount = 0;
                     for (var ci = 0; ci < lastSeg.blips.length; ci++) {
-                        if (lastSeg.blips[ci].fadeStart === 0) activeCount++;
+                        if (!lastSeg.blips[ci]._removed && lastSeg.blips[ci].fadeStart === 0) activeCount++;
                     }
                     var maxPartsPerBlip;
                     if (zoom < 0.5 || activeCount > 1000) maxPartsPerBlip = 1;
                     else if (zoom < 1.0 || activeCount > 500) maxPartsPerBlip = 2;
                     else maxPartsPerBlip = 3 + Math.floor(Math.random() * 3);
 
-                    // Which active bricks did the block confirm? The top `tx_count`
-                    // by fee rate. Rather than sort the (up to ~45k) brick OBJECTS
-                    // and build a Set: a multi-ms stall right as the reveal camera
-                    // starts moving: sort just their fee rates (numbers, cheap) to
-                    // find the cutoff, then partition by comparing each brick's rate
-                    // to it. feeThreshold = -Infinity confirms everything (block took
-                    // >= what we show), matching prior behavior.
-                    var feeThreshold = -Infinity;
-                    var tieBudget = Infinity; // confirmations allowed AT the threshold
-                    if (harvestLive && !isReplay && activeCount > 0) {
-                        var harvestCount = Math.min(b.tx_count || activeCount, activeCount);
-                        if (harvestCount < activeCount) {
-                            var rates = new Float64Array(activeCount);
-                            var ri = 0;
-                            for (var fi = 0; fi < lastSeg.blips.length; fi++) {
-                                if (lastSeg.blips[fi].fadeStart === 0) {
-                                    rates[ri++] = lastSeg.blips[fi].feeRate || 0;
-                                }
-                            }
-                            rates.sort(); // TypedArray sorts numerically ascending
-                            // The harvestCount-th highest rate is the cutoff. Bricks
-                            // strictly above it all confirm; bricks exactly at it fill
-                            // the remaining budget (feeRate is stored rounded to 1dp,
-                            // so equality is exact: no float epsilon). Capping at
-                            // harvestCount stops a mass of equal low-fee bricks (a
-                            // quiet 1 sat/vB mempool) from all confirming at once.
-                            feeThreshold = rates[activeCount - harvestCount];
-                            var above = 0;
-                            for (var k = activeCount - 1; k >= 0 && rates[k] > feeThreshold; k--) above++;
-                            tieBudget = harvestCount - above; // >= 0 by construction
-                        }
-                    }
+                    var exactConf = (!isReplay && b.hash && _hb._exactConfirmedByHash)
+                        ? _hb._exactConfirmedByHash.get(b.hash)
+                        : null;
 
-                    // Single partition pass: confirmed bricks shatter into the spike;
-                    // the rest carry forward. Rebuild lastSeg.blips in place = kept
-                    // (already-fading + confirmed), dropping the carried, no separate
-                    // filter pass or Sets.
                     var kept = [];
                     var revealConfirmed = revealPending ? [] : null;
                     for (var bi = 0; bi < lastSeg.blips.length; bi++) {
                         var blp = lastSeg.blips[bi];
+                        if (!blp || blp._removed) continue;
                         if (blp.fadeStart !== 0) { kept.push(blp); continue; } // already fading
+                        if (!isReplay && blp._pendingInclusionHash && blp._pendingInclusionHash !== b.hash) {
+                            // Already confirmed by a different block whose block_details has not
+                            // arrived yet: exclude from carriedLeftovers so it cannot survive live.
+                            blp._removed = true;
+                            continue;
+                        }
+
                         var confirm;
-                        if (blp.feeRate > feeThreshold) {
+                        if (isReplay) {
                             confirm = true;
-                        } else if (blp.feeRate === feeThreshold && tieBudget > 0) {
-                            confirm = true;
-                            tieBudget--;
+                        } else if (harvestLive) {
+                            confirm = !!(exactConf && blp.txid && exactConf.set.has(blp.txid));
                         } else {
                             confirm = false;
                         }
+
                         if (!confirm) {
-                            carriedLeftovers.push(blp); // leftover: carry forward
-                            if (revealPending) kept.push(blp); // keep visible during the reveal (fades, then re-laid)
+                            carriedLeftovers.push(blp);
+                            if (revealPending) kept.push(blp);
                             continue;
                         }
+                        blp._pendingInclusionHash = null;
                         if (revealPending) {
-                            // Defer the shatter to the reveal's harvest beat: keep the
-                            // brick visible (normal) in the old segment until then; the
-                            // sequencer sets fadeStart + particles when that beat opens.
                             revealConfirmed.push(blp);
                             kept.push(blp);
                             continue;
                         }
                         blp.fadeStart = absorbNow;
-                        blp._confirmedHeight = b.height; // pinned/hovered tx shows "confirmed in block #N"
+                        blp._confirmedHeight = b.height;
                         blp.absorbTargetX = absorbX;
                         blp.absorbOriginX = blp.x;
                         blp.particles = [];
                         for (var pi = 0; pi < maxPartsPerBlip; pi++) {
                             blp.particles.push({
                                 offsetX: (Math.random() - 0.5) * 8,
-                                offsetY: Math.random() * blp.height * 0.8,
+                                offsetY: Math.random() * (blp.height || 10) * 0.8,
                                 speed: 0.7 + Math.random() * 0.6,
                                 arcHeight: 20 + Math.random() * 60,
                                 delay: Math.random() * 0.3,
@@ -462,6 +442,71 @@ window.pushHeartbeatBlocks = function(json, replay) {
                         kept.push(blp);
                     }
                     lastSeg.blips = kept;
+                    if (lastSeg._blipsByTxid) lastSeg._blipsByTxid.clear();
+                    if (lastSeg._colBlips) lastSeg._colBlips.clear();
+                    lastSeg._colHeights = {};
+                }
+                // Never drop bricks that were still queued in an in-flight chunked
+                // carry or snapshot placement for `lastSeg` (e.g. back-to-back blocks
+                // or hidden-tab catch-up): harvest all remaining unplaced items too.
+                if (!isReplay && harvestLive) {
+                    var seenCarried = null;
+                    var appendRemaining = function(blp) {
+                        if (!blp || blp._removed) return;
+                        if (_hb._removedTxids && blp.txid && _hb._removedTxids.has(blp.txid)) return;
+                        if (blp._pendingInclusionHash && blp._pendingInclusionHash !== b.hash) {
+                            blp._removed = true;
+                            return;
+                        }
+                        if (exactConf && blp.txid && exactConf.set.has(blp.txid)) return;
+                        if (!seenCarried) {
+                            seenCarried = new Set();
+                            for (var sc = 0; sc < carriedLeftovers.length; sc++) {
+                                if (carriedLeftovers[sc] && carriedLeftovers[sc].txid) {
+                                    seenCarried.add(carriedLeftovers[sc].txid);
+                                }
+                            }
+                        }
+                        if (blp.txid && seenCarried.has(blp.txid)) return;
+                        if (blp.txid) seenCarried.add(blp.txid);
+                        carriedLeftovers.push(blp);
+                    };
+                    if (_hb._pendingCarry && _hb._pendingCarry.seg === lastSeg) {
+                        if (_hb._carryRaf) { cancelAnimationFrame(_hb._carryRaf); _hb._carryRaf = null; }
+                        var pc = _hb._pendingCarry;
+                        _hb._pendingCarry = null;
+                        _hb._pendingCarryByTxid = null;
+                        for (var pci = pc.nextIdx; pci < pc.items.length; pci++) {
+                            var pItem = pc.items[pci];
+                            if (pItem && pItem.src) {
+                                if (_hb._deferredDetails && pItem.src.txid && _hb._deferredDetails.has(pItem.src.txid)) {
+                                    updateBlipMetadata(pItem.src, _hb._deferredDetails.get(pItem.src.txid));
+                                    _hb._deferredDetails.delete(pItem.src.txid);
+                                }
+                                appendRemaining(pItem.src);
+                            }
+                        }
+                    }
+                    if (_hb._pendingSnapshot && _hb._pendingSnapshot.seg === lastSeg) {
+                        if (_hb._historyRaf) { cancelAnimationFrame(_hb._historyRaf); _hb._historyRaf = null; }
+                        var ps = _hb._pendingSnapshot;
+                        _hb._pendingSnapshot = null;
+                        for (var psi = ps.nextIdx; psi < ps.items.length; psi++) {
+                            var sItem = ps.items[psi];
+                            if (sItem && sItem.tx && ps.buildBlip) {
+                                var sTx = sItem.tx;
+                                if (_hb._removedTxids && _hb._removedTxids.has(sTx.txid)) continue;
+                                if (_hb._deferredDetails && _hb._deferredDetails.has(sTx.txid)) {
+                                    var sDef = _hb._deferredDetails.get(sTx.txid);
+                                    if (sDef.value == null && sTx.value != null) sDef.value = sTx.value;
+                                    if (!sDef.first_seen && sTx.first_seen) sDef.first_seen = sTx.first_seen;
+                                    sTx = sDef;
+                                    _hb._deferredDetails.delete(sTx.txid);
+                                }
+                                appendRemaining(ps.buildBlip(sTx, 0, 0, 0, Date.now() / 1000, false));
+                            }
+                        }
+                    }
                 }
             }
 
@@ -494,7 +539,11 @@ window.pushHeartbeatBlocks = function(json, replay) {
             // sequencer, which re-lays them progressively during the relay beat (they stay
             // visible in the old segment meanwhile). Otherwise re-lay now (instant).
             if (harvestLive && !isReplay && carriedLeftovers.length > 0) {
-                if (revealPending) {
+                if (_hb._deferCarryList) {
+                    // Batch catch-up of multiple hidden blocks: stash leftovers in
+                    // memory and run placeCarriedLeftovers ONCE after the final block.
+                    _hb._deferCarryList = carriedLeftovers;
+                } else if (revealPending) {
                     _hb._pendingReveal = {
                         leftovers: carriedLeftovers,
                         confirmed: revealConfirmed,   // shatter deferred to the harvest beat
@@ -502,15 +551,18 @@ window.pushHeartbeatBlocks = function(json, replay) {
                         maxParts: maxPartsPerBlip,
                         oldSeg: lastSeg,
                         newSeg: _hb.timeline[_hb.timeline.length - 1],
-                        spikeSeg: blockSeg
+                        spikeSeg: blockSeg,
+                        _revealByTxid: null
                     };
+                    rebuildRevealIndex(_hb._pendingReveal);
                 } else {
-                    placeCarriedLeftovers(carriedLeftovers);
+                    placeCarriedLeftovers(carriedLeftovers, _hb._instantCarry ? 0 : undefined);
                 }
             }
 
             // Maintain recentBlocks list (up to 2016 for period history)
             _hb.recentBlocks.push({
+                hash: b.hash || null,
                 timestamp: b.timestamp,
                 height: b.height,
                 tx_count: b.tx_count,
@@ -552,18 +604,11 @@ window.pushHeartbeatBlocks = function(json, replay) {
             if (elapsed > 0 && elapsed < 7200) {
                 var advancePx = elapsed * FLATLINE_PX_PER_SEC;
                 _hb.virtualX += advancePx;
-                _hb.zoom = 1.9;
-                _hb.viewOffsetY = 0;
-                _hb.autoFollow = true;
-                _hb.viewOffset = _hb.virtualX - (_hb.width * HEAD_POSITION_FRAC);
-            }
-
-            // Place any SSE history txs that arrived before the replay
-            if (_hb._pendingHistory) {
-                var ph = _hb._pendingHistory;
-                _hb._pendingHistory = null;
-                console.log('[heartbeat] placing deferred history after replay');
-                placeHistoryTxs(ph.txs, ph.last_block_ts);
+                if (_hb.autoFollow && !_hb._pinnedTxid) {
+                    _hb.zoom = 1.9;
+                    _hb.viewOffsetY = 0;
+                    _hb.viewOffset = _hb.virtualX - (_hb.width * HEAD_POSITION_FRAC) / _hb.zoom;
+                }
             }
         }
 
@@ -612,66 +657,190 @@ function placeCarriedLeftovers(leftovers, staggerSecs) {
     // duration so the bricks appear in step with the camera; the non-reveal path
     // uses 2.5s; 0 finalizes instantly (abort / new block).
     var stagger = staggerSecs !== undefined ? staggerSecs : 2.5;
+    var TARGET_COL_H = 65;
     var maxStack = (_hb.height || 400) * 0.35;
-    var width = Math.max(30, Math.ceil(n / 10) * 5); // ~10 bricks/column
-    // Set the geometry UP FRONT (before placing), so the flatline width, virtualX,
-    // and the reveal-camera gate that reads them are all correct immediately, the
-    // bricks then stream in over the frames below.
+    var softMaxStack = Math.min(maxStack, 160);
+    // Preserve deterministic relative left-to-right order: unknown-time first
+    // sorted by txid, then ascending (firstSeen, txid).
+    var ordered = leftovers.slice().sort(function(a, b) {
+        var aKnown = (a.firstSeen || 0) > 0 ? 1 : 0;
+        var bKnown = (b.firstSeen || 0) > 0 ? 1 : 0;
+        if (aKnown !== bKnown) return aKnown - bKnown;
+        if (aKnown === 1 && a.firstSeen !== b.firstSeen) return a.firstSeen - b.firstSeen;
+        var at = a.txid || '';
+        var bt = b.txid || '';
+        return at < bt ? -1 : (at > bt ? 1 : 0);
+    });
+
+    var totalBrickH = 0;
+    var unknownBrickH = 0;
+    for (var ti = 0; ti < ordered.length; ti++) {
+        var oCheck = ordered[ti];
+        if (!oCheck || oCheck._removed) continue;
+        if (_hb._removedTxids && oCheck.txid && _hb._removedTxids.has(oCheck.txid)) continue;
+        var bh0 = (oCheck.brickH || 6);
+        totalBrickH += bh0;
+        if (!oCheck.firstSeen) unknownBrickH += bh0;
+    }
+    var numCols = Math.max(1, Math.ceil(totalBrickH / TARGET_COL_H));
+    var width = Math.max(30, numCols * 5 + 15);
+    // Set the geometry UP FRONT (before placing), matching the exact carried
+    // backlog footprint so no empty void appears between carried bricks and live head.
     _hb.virtualX = seg.x_start + width;
-    if (!seg._colHeights) seg._colHeights = {};
-    var usable = Math.max(10, width - 20);
+    ensureSegMaps(seg);
     var now = Date.now() / 1000;
 
-    // Place in CHUNKS across RAF frames instead of one synchronous pass. A
-    // full-mempool carry (~40k bricks) in a single loop stalls the frame the block
-    // lands on: which is exactly when the reveal camera starts moving, so the
-    // stall reads as jank at the start of the animation. Chunking also spreads the
-    // drop-in over the reveal so the camera visibly "follows" the placement. Each
-    // brick's drop timing stays keyed to its x (now + xFrac), so the left→right
-    // sweep holds regardless of which chunk placed it. Cancel any in-flight job.
     if (_hb._carryRaf) { cancelAnimationFrame(_hb._carryRaf); _hb._carryRaf = null; }
-    var CARRY_CHUNK = 2000;
+    _hb._pendingCarry = null;
+    _hb._pendingCarryByTxid = null;
+    var CARRY_CHUNK = 4000;
+    var startGridX = Math.ceil(seg.x_start / 5) * 5;
+    var usableSpan = Math.max(5, (_hb.virtualX - seg.x_start) - 15);
+    var usableCols = Math.max(1, Math.floor(usableSpan / 5));
+    seg._carryEndX = startGridX + usableCols * 5;
+    var denomH = Math.max(1, totalBrickH);
+    var unknownCols = unknownBrickH > 0
+        ? Math.max(1, Math.min(usableCols, Math.round((unknownBrickH / denomH) * usableCols)))
+        : 0;
+    var knownStartCol = unknownCols;
+    var knownCols = Math.max(1, usableCols - knownStartCol);
+    var localSpreadCols = Math.min(Math.max(12, Math.floor(usableCols * 0.08)), 160);
+    var colBuckets = new Array(usableCols);
+    var cumH = 0;
+    for (var pi = 0; pi < ordered.length; pi++) {
+        var oSrc = ordered[pi];
+        if (!oSrc || oSrc._removed) continue;
+        if (_hb._removedTxids && oSrc.txid && _hb._removedTxids.has(oSrc.txid)) continue;
+        var oH = oSrc.brickH || 6;
+        var oCol;
+        if (!oSrc.firstSeen && unknownCols > 0) {
+            oCol = Math.floor(((txidSkylineOffset(oSrc.txid) + 1) * 0.5) * unknownCols);
+            if (oCol >= unknownCols) oCol = unknownCols - 1;
+        } else {
+            var baseCol = Math.min(usableCols - 1, Math.floor((cumH * usableCols) / denomH));
+            var jitter = Math.round(txidSkylineOffset(oSrc.txid) * localSpreadCols);
+            oCol = baseCol + jitter;
+            if (oCol < knownStartCol) oCol = knownStartCol + (knownStartCol - oCol);
+            if (oCol >= usableCols) oCol = (usableCols - 1) - (oCol - (usableCols - 1));
+            oCol = Math.max(knownStartCol, Math.min(usableCols - 1, oCol));
+            if (knownCols <= 1) oCol = Math.min(usableCols - 1, baseCol);
+        }
+        cumH += oH;
+        var yKey = oSrc.bobPhase || 0;
+        var cBucket = colBuckets[oCol];
+        if (!cBucket) cBucket = colBuckets[oCol] = [];
+        cBucket.push({ src: oSrc, col: oCol, yKey: yKey });
+    }
+    var plannedCarry = [];
+    for (var bc = 0; bc < usableCols; bc++) {
+        var bList = colBuckets[bc];
+        if (!bList) continue;
+        if (bList.length > 1) {
+            bList.sort(function(a, b) { return a.yKey - b.yKey; });
+        }
+        for (var bi2 = 0; bi2 < bList.length; bi2++) {
+            plannedCarry.push(bList[bi2]);
+        }
+    }
+
+    var pendingCarryByTxid = new Map();
+    for (var pci = 0; pci < plannedCarry.length; pci++) {
+        var pcSrc = plannedCarry[pci].src;
+        if (pcSrc && pcSrc.txid) pendingCarryByTxid.set(pcSrc.txid, pcSrc);
+    }
+
     var i = 0;
     var placed = 0;
+    _hb._pendingCarry = { seg: seg, items: plannedCarry, nextIdx: 0 };
+    _hb._pendingCarryByTxid = pendingCarryByTxid;
     var placeChunk = function() {
         var s = getState();
-        // Abort if torn down, or the flatline closed/changed (a new block arrived
-        // mid-carry): the remaining leftovers would land on a stale segment.
         if (!s || s.timeline[s.timeline.length - 1] !== seg || seg.x_end !== null) {
-            _hb._carryRaf = null;
+            if (s) {
+                s._carryRaf = null;
+                if (s._pendingCarry && s._pendingCarry.seg === seg) {
+                    s._pendingCarry = null;
+                    s._pendingCarryByTxid = null;
+                }
+            }
             return;
         }
-        var end = Math.min(i + CARRY_CHUNK, n);
+        var end = Math.min(i + CARRY_CHUNK, plannedCarry.length);
+        var span = Math.max(1, usableSpan);
         for (; i < end; i++) {
-            var src = leftovers[i];
-            var txVX = seg.x_start + Math.random() * usable;
-            var gridX = Math.round(txVX / 5) * 5;
-            var stackY = seg._colHeights[gridX] || 0;
-            var isNotable = !!src.notableType;
-            if (stackY > maxStack && !isNotable) continue; // column full
+            var item = plannedCarry[i];
+            var src = item.src;
+            if (src && src.txid && s._pendingCarryByTxid) {
+                s._pendingCarryByTxid.delete(src.txid);
+            }
+            if (!src || src._removed) continue;
+            if (s._removedTxids && src.txid && s._removedTxids.has(src.txid)) continue;
+            if (src.txid && seg._blipsByTxid.has(src.txid)) continue;
+            if (s._deferredDetails && src.txid && s._deferredDetails.has(src.txid)) {
+                updateBlipMetadata(src, s._deferredDetails.get(src.txid));
+                s._deferredDetails.delete(src.txid);
+            }
+
             var brickH = src.brickH || 6;
-            seg._colHeights[gridX] = stackY + brickH;
-            // Reposition + reset the existing blip object for a staggered drop-in.
-            src.x = txVX;
-            src.gridX = gridX;
+            var gx = startGridX + item.col * 5;
+            var stackY = seg._colHeights[gx] || 0;
+
+            if (stackY > 0 && stackY + brickH > softMaxStack) {
+                var minZoneX = startGridX + (src.firstSeen ? knownStartCol : 0) * 5;
+                var maxZoneX = startGridX + (src.firstSeen ? usableCols - 1 : Math.max(0, unknownCols - 1)) * 5;
+                var bestX = gx;
+                var bestY = stackY;
+                for (var step = 1; step <= 10; step++) {
+                    var c1 = gx + step * 5;
+                    if (c1 <= maxZoneX) {
+                        var h1 = seg._colHeights[c1] || 0;
+                        if (h1 < bestY) { bestX = c1; bestY = h1; if (bestY + brickH <= softMaxStack) break; }
+                    }
+                    var c2 = gx - step * 5;
+                    if (c2 >= minZoneX) {
+                        var h2 = seg._colHeights[c2] || 0;
+                        if (h2 < bestY) { bestX = c2; bestY = h2; if (bestY + brickH <= softMaxStack) break; }
+                    }
+                }
+                gx = bestX;
+                stackY = bestY;
+            }
+
+            src.x = gx;
+            src.gridX = gx;
             src.stackY = stackY;
             src.height = brickH + stackY;
             src.fadeStart = 0;
             src.particles = null;
             src.absorbTargetX = undefined;
             src.absorbOriginX = undefined;
-            src.isDrop = true;
-            var xFrac = width > 0 ? (txVX - seg.x_start) / width : 0;
-            src.timestamp = now + xFrac * stagger; // sweep left→right over `stagger`
-            seg.blips.push(src);
+            src.isDrop = stagger > 0;
+            var xFrac = Math.min(1, Math.max(0, (gx - seg.x_start) / span));
+            var rainJitter = ((txidSkylineOffset(src.txid) + 1) * 0.5) * 0.55;
+            var stackDelay = stagger > 0 ? (stackY * 0.0025 + rainJitter) : 0;
+            src.timestamp = now + xFrac * stagger + stackDelay;
+
+            registerBlipInSeg(seg, src);
+            if (s._pinnedTxid && src.txid === s._pinnedTxid) {
+                s._pinnedBlip = src;
+            }
             placed++;
         }
-        if (i < n) {
-            _hb._carryRaf = requestAnimationFrame(placeChunk);
+        if (s._pendingCarry && s._pendingCarry.seg === seg) {
+            s._pendingCarry.nextIdx = i;
+        }
+        if (i < plannedCarry.length) {
+            s._carryRaf = requestAnimationFrame(placeChunk);
         } else {
-            _hb._carryRaf = null;
-            console.log('[heartbeat] harvest: carried ' + placed + '/' + n +
-                ' unconfirmed leftovers onto new flatline (width ' + Math.round(width) + 'px, chunked)');
+            s._carryRaf = null;
+            if (s._pendingCarry && s._pendingCarry.seg === seg) {
+                s._pendingCarry = null;
+                s._pendingCarryByTxid = null;
+            }
+            maybeClearRemovedTxids(s);
+            if (s._pinnedTxid) {
+                s._pinnedBlip = seg._blipsByTxid.get(s._pinnedTxid) || null;
+            }
         }
     };
     placeChunk();
@@ -689,7 +858,7 @@ window._hbToggleLod = function() {
     s._lodEnabled = !s._lodEnabled;
     try { localStorage.setItem('hb_lod', s._lodEnabled ? 'on' : 'off'); } catch (e) {}
     console.log('[heartbeat] LOD ' + (s._lodEnabled
-        ? 'ENABLED — density columns when zoomed out (<0.3x) + full (>60k bricks)'
+        ? 'ENABLED (density columns when zoomed out <0.3x and >100k bricks)'
         : 'DISABLED — individual bricks always'));
     return s._lodEnabled;
 };
@@ -786,6 +955,8 @@ window.destroyHeartbeat = function() {
     if (_hb._sseRetryTimer) { clearTimeout(_hb._sseRetryTimer); _hb._sseRetryTimer = null; }
     if (_hb._historyRaf) { cancelAnimationFrame(_hb._historyRaf); _hb._historyRaf = null; }
     if (_hb._carryRaf) { cancelAnimationFrame(_hb._carryRaf); _hb._carryRaf = null; }
+    _hb._pendingCarry = null;
+    _hb._pendingCarryByTxid = null;
     if (_hb._sse) {
         try { _hb._sse.close(); } catch(e) {}
     }
@@ -804,6 +975,7 @@ window.destroyHeartbeat = function() {
         document.removeEventListener('fullscreenchange', _hb._fullscreenHandler);
         document.removeEventListener('webkitfullscreenchange', _hb._fullscreenHandler);
     }
+    if (window._seenNotableTxids) window._seenNotableTxids.clear();
     setState(null);
 };
 
@@ -826,267 +998,223 @@ function replayQueuedBlock(qb) {
     var _hb = getState();
     if (_hb) _hb._harvestLive = true;
     window.pushHeartbeatBlocks(JSON.stringify([{
+        hash: qb.hash || null,
         height: qb.height,
         timestamp: qb.timestamp || Math.floor(Date.now() / 1000),
-        tx_count: qb.tx_count || qb.confirmed_count || 3000,
+        tx_count: qb.tx_count || qb.confirmed_count || 0,
         total_fees: qb.total_fees || 0,
         size: qb.size || 0,
-        weight: qb.weight || 3000000
+        weight: qb.weight || 0
     }]), false);
 }
 
-// After a tab return, make the timeline end at the live tip. SSE-queued blocks
-// (delivered while hidden) are the freshest, most complete source, so replay
-// those first; if the timeline is still behind the tip, fetch /api/stats/blocks
-// once and replay the remainder. pushHeartbeatBlocks dedups by height, so an
-// overlap between the queue and the fetch cannot double-render a block.
-function catchUpBlocks(queued, tipHeight) {
+// Replay blocks queued while the tab was hidden.
+// Carries surviving bricks in memory across intermediate blocks (sized
+// proportionally via historyFlatlineWidth) and runs placeCarriedLeftovers ONCE
+// with stagger=0 (instant, settled, no rain-down after returning to a hidden tab).
+// Optional `extraPreBlockTxs` carries pre-block txs buffered in `_hiddenTxMap`
+// into the carried backlog instead of clamping them onto `gapStart`.
+function catchUpBlocks(queued, extraPreBlockTxs) {
     var _hb = getState();
-    if (!_hb) return;
+    if (!_hb || !queued || queued.length === 0) return 0;
 
-    function timelineMaxHeight() {
-        for (var i = _hb.timeline.length - 1; i >= 0; i--) {
-            if (_hb.timeline[i].type === 'block') return _hb.timeline[i].height;
-        }
-        return 0;
+    var maxH = 0;
+    for (var hi = _hb.timeline.length - 1; hi >= 0; hi--) {
+        if (_hb.timeline[hi].type === 'block') { maxH = _hb.timeline[hi].height; break; }
     }
 
-    var maxH = timelineMaxHeight();
-    var q = (queued || [])
-        .filter(function(b) { return b && b.height; })
+    var q = queued
+        .filter(function(b) { return b && b.height && b.height > maxH; })
         .sort(function(a, b) { return a.height - b.height; });
-    var replayed = 0;
-    var newestTs = 0;
-    for (var i = 0; i < q.length; i++) {
-        if (q[i].height <= maxH) continue;
-        replayQueuedBlock(q[i]);
-        maxH = q[i].height;
-        newestTs = q[i].timestamp || newestTs;
-        replayed++;
-    }
-    if (replayed > 0) {
-        console.log('[heartbeat] tab return: replayed', replayed, 'queued blocks (tip ' + tipHeight + ')');
-        // Widen the post-block flatline to the newest block's age so the resumed
-        // live tx flow spreads instead of piling (same as processLiveBlock).
-        fastForwardLiveFlatline(newestTs);
-    }
+    if (q.length === 0) return 0;
 
-    // Still behind the tip? The queue missed some (e.g. SSE reconnected while
-    // hidden). Fetch the canonical list once and replay the gap.
-    if (tipHeight > maxH) {
-        var fromH = maxH;
-        fetch('/api/stats/blocks')
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
-                // Re-read state fresh: a full reset could have replaced it while
-                // the fetch was in flight. Advancing virtualX must target the same
-                // object replayQueuedBlock writes to.
-                var s = getState();
-                if (!s) return;
-                var blocks = (data.blocks || [])
-                    .filter(function(b) { return b.height > fromH; })
-                    .sort(function(a, b) { return a.height - b.height; });
-                for (var j = 0; j < blocks.length; j++) {
-                    // Give inner gap blocks a proportional (compressed) lead-in
-                    // flatline from their real inter-block time, so a multi-block
-                    // fetch-fill doesn't collapse to ~30px per block. The first
-                    // block's lead-in is the existing live flatline (already sized
-                    // to time since the last known block), so only widen for j>0.
-                    if (j > 0) {
-                        var gap = Math.max(0, blocks[j].timestamp - blocks[j - 1].timestamp);
-                        s.virtualX += historyFlatlineWidth(gap);
+    var hasExtra = Array.isArray(extraPreBlockTxs) && extraPreBlockTxs.length > 0;
+    var carried = null;
+    var newestTs = 0;
+    _hb._instantCarry = true;
+    try {
+        for (var i = 0; i < q.length; i++) {
+            var qb = q[i];
+            if (i > 0) {
+                var gapSecs = Math.max(0, (qb.timestamp || 0) - (q[i - 1].timestamp || 0));
+                _hb.virtualX += historyFlatlineWidth(gapSecs);
+            }
+            if (i < q.length - 1) {
+                // Defer chunked placement on intermediate blocks; accumulate carried bricks in memory.
+                _hb._deferCarryList = [];
+                replayQueuedBlock(qb);
+                var stepCarried = _hb._deferCarryList;
+                _hb._deferCarryList = null;
+                if (carried === null) {
+                    carried = stepCarried;
+                } else {
+                    // Filter previously carried bricks against this intermediate block's exact inclusions.
+                    var conf = (qb.hash && _hb._exactConfirmedByHash) ? _hb._exactConfirmedByHash.get(qb.hash) : null;
+                    if (conf && conf.set && conf.set.size > 0) {
+                        carried = carried.filter(function(b) { return b && !b._removed && (!b.txid || !conf.set.has(b.txid)); });
                     }
-                    replayQueuedBlock(blocks[j]);
+                    if (stepCarried && stepCarried.length > 0) {
+                        carried = carried.concat(stepCarried);
+                    }
                 }
-                if (blocks.length > 0) {
-                    console.log('[heartbeat] tab return: filled', blocks.length, 'blocks from fetch');
-                    fastForwardLiveFlatline(blocks[blocks.length - 1].timestamp);
+            } else if (carried !== null || hasExtra) {
+                // Final block after deferred intermediate blocks (or with extra pre-block hidden txs):
+                // filter against final block's exact inclusions, merge extra pre-block txs, and carry ONCE.
+                var finalConf = (qb.hash && _hb._exactConfirmedByHash) ? _hb._exactConfirmedByHash.get(qb.hash) : null;
+                if (carried !== null && finalConf && finalConf.set && finalConf.set.size > 0) {
+                    carried = carried.filter(function(b) { return b && !b._removed && (!b.txid || !finalConf.set.has(b.txid)); });
                 }
-            })
-            .catch(function() {});
+                _hb._deferCarryList = [];
+                replayQueuedBlock(qb);
+                var tailCarried = _hb._deferCarryList;
+                _hb._deferCarryList = null;
+                if (carried === null) carried = [];
+                if (tailCarried && tailCarried.length > 0) {
+                    carried = carried.concat(tailCarried);
+                }
+                if (hasExtra) {
+                    var seenIds = new Set();
+                    for (var si = 0; si < carried.length; si++) {
+                        if (carried[si] && carried[si].txid) seenIds.add(carried[si].txid);
+                    }
+                    var nowSec = Date.now() / 1000;
+                    for (var ei = 0; ei < extraPreBlockTxs.length; ei++) {
+                        var etx = extraPreBlockTxs[ei];
+                        if (!etx || !etx.txid || seenIds.has(etx.txid)) continue;
+                        if (_hb._removedTxids && _hb._removedTxids.has(etx.txid)) continue;
+                        seenIds.add(etx.txid);
+                        var eBlip = buildBlip(etx, 0, 0, 0, nowSec, false);
+                        carried.push(eBlip);
+                        if (eBlip.notableType && window._notableFeed) {
+                            window._notableFeed(etx);
+                        }
+                    }
+                }
+                if (carried.length > 0) {
+                    placeCarriedLeftovers(carried, 0);
+                }
+            } else {
+                replayQueuedBlock(qb);
+            }
+            newestTs = qb.timestamp || newestTs;
+        }
+    } finally {
+        _hb._instantCarry = false;
     }
+    return newestTs;
 }
 
-// Safety net for blocks queued while the tab was hidden (see the SSE 'block'
-// handler). Normally _hbVisibilityChange drains the queue on return, but if that
-// event doesn't fire: a brief/edge-case hide, a focus race, or the block event
-// landing with document.hidden===true just before the tab is shown, the queued
-// block would strand: the canvas stays on the old block while the header (fed by
-// LiveStats, which updates regardless of visibility) shows the new height.
-// drawFrame calls this every frame, and RAF only runs at full rate when the tab
-// is genuinely visible, so a stranded block is replayed within a frame of the
-// tab being shown: no dependence on visibilitychange. Cheap: no-ops instantly
-// when the queue is empty (the normal case).
 window._hbDrainBlockQueue = function() {
     var _hb = getState();
     if (!_hb || document.hidden) return;
     if (!_hb._blockQueue || _hb._blockQueue.length === 0) return;
     var queued = _hb._blockQueue.slice();
-    var tipHeight = _hb.blockHeight || 0;
     _hb._blockQueue = [];
-    console.log('[heartbeat] draining', queued.length, 'queued block(s) on visible frame');
-    catchUpBlocks(queued, tipHeight);
+    catchUpBlocks(queued);
 };
 
-// Recover the timeline after a gap where the draw loop wasn't advancing virtualX
-// while SSE kept flowing. Two triggers share this: a hidden tab (visibilitychange,
-// below) and a throttled/paused rAF with the tab still "visible", window occluded,
-// on another monitor, or the machine slept, which fires NO visibilitychange and is
-// caught by the gap detector in drawFrame. Without recovery the backlog grinds into
-// a few columns at a frozen virtualX (tall stacks + clustered block spikes).
-// `gapSecs` = how long the loop was effectively stalled.
+// Recover the timeline smoothly after a hidden-tab or rAF stall without ever
+// wiping state or resetting an inspecting viewer's camera or pinned tx.
+// The Rust/WASM v2 client handles stream resync automatically.
 function recoverTimeline(gapSecs) {
     var _hb = getState();
     if (!_hb) return;
     var now = Date.now() / 1000;
 
-    // Finalize any in-progress block reveal FIRST. Its beats are keyed to a
-    // wall-clock start (now - r.start); resuming after a stall would make elapsed
-    // huge, teleporting through the beats and snapping the camera back to a spike
-    // that's now far behind the advanced head. Ending it settles the state cleanly
-    // before the catch-up below.
-    if (_hb._reveal && window._hbEndReveal) window._hbEndReveal();
+    // Finalize any in-progress reveal; if the viewer was following LIVE, restore
+    // their entry zoom and snap cleanly back to the live head rather than leaving
+    // them stranded zoomed in on an old block spike.
+    if (_hb._reveal && window._hbEndReveal) window._hbEndReveal(true);
 
-    // Blocks that arrived via SSE while hidden (the freshest source) plus the
-    // live tip height from LiveStats. Captured before any reset so we can catch
-    // the timeline up to the real tip on return (see catchUpBlocks). During an
-    // occlusion stall blocks are processed live (not queued), so this is usually
-    // empty there and catchUpBlocks no-ops.
     var queuedBlocks = (_hb._blockQueue || []).slice();
-    var tipHeight = _hb.blockHeight || 0;
     _hb._blockQueue = [];
 
-    // Full reset for a long gap (>5 min): the mempool is stale and blocks were
-    // likely missed. Rebuild from the canonical block list + fresh SSE history.
-    if (gapSecs > 300) {
-        var canvasId = _hb.canvas ? _hb.canvas.id : null;
-        console.log('[heartbeat] timeline resume after', Math.round(gapSecs), 's - full reset');
-        if (canvasId) {
-            // Fetch blocks FIRST, then destroy/init/replay so SSE (which starts
-            // inside initHeartbeat) can't deliver blocks before history is loaded.
-            fetch('/api/stats/blocks')
-                .then(function(r) { return r.json(); })
-                .then(function(data) {
-                    var blocks = data.blocks || [];
-                    // Compute inter_block_seconds from timestamps (API doesn't include it)
-                    for (var i = 0; i < blocks.length; i++) {
-                        var prevTs = i > 0 ? blocks[i - 1].timestamp : (blocks[i].timestamp - 600);
-                        blocks[i].inter_block_seconds = Math.max(0, blocks[i].timestamp - prevTs);
-                    }
-                    window.destroyHeartbeat();
-                    window.initHeartbeat(canvasId);
-                    // Suppress announcements until replay finishes (SSE may
-                    // deliver blocks between init and replay completion)
-                    var s = getState();
-                    if (s) s._suppressAnnounce = true;
-                    if (blocks.length > 0) {
-                        console.log('[heartbeat] replaying', blocks.length, 'blocks after reset');
-                        window.pushHeartbeatBlocks(JSON.stringify(blocks), true);
-                    }
-                    // /api/stats/blocks can trail the ZMQ tip (the 15s poller
-                    // writes it; the ZMQ block path does not), so the fetched
-                    // rebuild may be behind. Catch up from the SSE-queued blocks
-                    // captured before the reset, then fetch-fill if still short.
-                    catchUpBlocks(queuedBlocks, tipHeight);
-                    if (s) s._suppressAnnounce = false;
-                })
-                .catch(function(err) {
-                    console.log('[heartbeat] block refetch failed:', err);
-                    // Still reset even if fetch fails
-                    window.destroyHeartbeat();
-                    window.initHeartbeat(canvasId);
-                });
-        }
-        return;
+    // Check whether any queued block is actually newer than our current timeline tip.
+    var maxH = 0;
+    for (var hi = _hb.timeline.length - 1; hi >= 0; hi--) {
+        if (_hb.timeline[hi].type === 'block') { maxH = _hb.timeline[hi].height; break; }
     }
+    var newQueued = queuedBlocks.filter(function(b) { return b && b.height && b.height > maxH; });
 
-    // Advance virtualX by the full gap so the flatline reflects real elapsed time.
-    if (gapSecs > 0) {
-        _hb.virtualX += gapSecs * FLATLINE_PX_PER_SEC;
-        console.log('[heartbeat] timeline resume: advanced virtualX by', Math.round(gapSecs), 's (',
-            Math.round(gapSecs * FLATLINE_PX_PER_SEC), 'px)');
-    }
-    // The load veil is NOT re-armed here. It exists to hide data streaming in on a
-    // cold start; on resume the bricks are already in state and keep their original
-    // timestamps, so there is nothing to hide and fading the whole timeline back up
-    // just looks like the page reloaded when you switch tabs.
+    var countBufferedHidden = function() {
+        return (_hb._hiddenTxMap ? _hb._hiddenTxMap.size : 0)
+            + (_hb._pendingAdds ? _hb._pendingAdds.size : 0)
+            + (_hb._txBatchQueue ? _hb._txBatchQueue.length : 0);
+    };
 
-    // Place buffered txs across the gap (the region between old bricks and
-    // new virtualX). Timing is unreliable when hidden, but random spread
-    // across the gap gives a natural fill instead of a visible hole.
-    var liveSeg = _hb.timeline[_hb.timeline.length - 1];
-    if (liveSeg && liveSeg.type === 'flatline' && liveSeg.x_end === null) {
-        var buffered = (_hb._hiddenTxBuffer || []).concat(_hb._txBatchQueue || []);
-        if (buffered.length > 0) {
-            // Find where existing bricks end
-            var rightmost = liveSeg.x_start;
-            for (var bi = 0; bi < (liveSeg.blips || []).length; bi++) {
-                if (liveSeg.blips[bi].fadeStart === 0 && liveSeg.blips[bi].x > rightmost) {
-                    rightmost = liveSeg.blips[bi].x;
-                }
-            }
-            var gapStart = rightmost + 5;
-            var gapEnd = _hb.virtualX - 20; // leave 20px for live txs
-            var gapSpan = gapEnd - gapStart;
-
-            if (gapSpan > 10 && buffered.length > 0) {
-                var medianFee = _hb._wsMedianFee || 5;
-                var placed = 0;
-                var maxStack = (_hb.height || 400) * 0.35;
-                if (!liveSeg._colHeights) liveSeg._colHeights = {};
-
-                for (var ti = 0; ti < buffered.length; ti++) {
-                    var tx = buffered[ti];
-                    if (!tx.fee || !tx.vsize) continue;
-                    var feeRate = tx.fee / tx.vsize;
-                    var feeNorm = Math.min(Math.log2(feeRate + 1) / 6, 1.0);
-                    var brickH = 3 + feeNorm * 14 + Math.random() * 3;
-                    var txVX = gapStart + Math.random() * gapSpan;
-                    var gridX = Math.round(txVX / 5) * 5;
-                    var stackY = liveSeg._colHeights[gridX] || 0;
-                    if (stackY > maxStack) continue;
-                    liveSeg._colHeights[gridX] = stackY + brickH;
-
-                    liveSeg.blips.push({
-                        x: txVX, gridX: gridX,
-                        height: brickH + stackY, brickH: brickH, brickW: 4, stackY: stackY,
-                        color: feeRateColor(feeRate, medianFee), opacity: 0.75 + feeNorm * 0.2,
-                        txCount: 1, txid: tx.txid || null,
-                        feeRate: Math.round(feeRate * 10) / 10,
-                        vsize: tx.vsize || 0, value: tx.value || 0,
-                        timestamp: now, isDrop: false, fadeStart: 0,
-                        bobPhase: Math.random() * Math.PI * 2,
-                        bobSpeed: 1.2 + feeNorm * 0.8,
-                        lane: Math.floor(Math.random() * 5) - 2,
-                        feeRatio: medianFee > 0 ? feeRate / medianFee : 1
-                    });
-                    placed++;
-                }
-                if (placed > 0) {
-                    console.log('[heartbeat] timeline resume: placed', placed, 'buffered txs across gap');
-                }
+    if (newQueued.length > 0) {
+        // Partition _hiddenTxMap BEFORE calling catchUpBlocks:
+        // - pre-block txs (first_seen > 0 && first_seen < newestQueuedTs) are dropped if
+        //   confirmed in any queued block and otherwise merged into the carried backlog;
+        // - post-block txs (first_seen >= newestQueuedTs) stay in _hiddenTxMap for
+        //   drainHiddenTxsAcrossGap across the post-block elapsed span.
+        var newestQueuedTs = 0;
+        var queuedConfirmedSets = [];
+        for (var qi = 0; qi < newQueued.length; qi++) {
+            var qb = newQueued[qi];
+            if (qb.timestamp && qb.timestamp > newestQueuedTs) newestQueuedTs = qb.timestamp;
+            if (qb.hash && _hb._exactConfirmedByHash && _hb._exactConfirmedByHash.has(qb.hash)) {
+                var cEnt = _hb._exactConfirmedByHash.get(qb.hash);
+                if (cEnt && cEnt.set && cEnt.set.size > 0) queuedConfirmedSets.push(cEnt.set);
             }
         }
+        var preBlockHidden = [];
+        if (_hb._hiddenTxMap && _hb._hiddenTxMap.size > 0 && newestQueuedTs > 0) {
+            var toDelete = [];
+            _hb._hiddenTxMap.forEach(function(htx, htxid) {
+                if (htx && htx.first_seen > 0 && htx.first_seen < newestQueuedTs) {
+                    toDelete.push(htxid);
+                    if (_hb._removedTxids && _hb._removedTxids.has(htxid)) return;
+                    for (var cs = 0; cs < queuedConfirmedSets.length; cs++) {
+                        if (queuedConfirmedSets[cs].has(htxid)) return;
+                    }
+                    preBlockHidden.push(htx);
+                }
+            });
+            for (var di = 0; di < toDelete.length; di++) {
+                _hb._hiddenTxMap.delete(toDelete[di]);
+            }
+        }
+
+        // Replay hidden blocks FIRST so all pre-block bricks (including pre-block
+        // hidden arrivals) carry cleanly onto the post-block flatline, then advance
+        // only by real elapsed time since the newest block (or volume width if
+        // many txs arrived) and map timestamps over the ACTUAL post-block window.
+        var newestBlockTs = catchUpBlocks(newQueued, preBlockHidden);
+        var gapStart = _hb.virtualX;
+        var actualPostElapsed = newestBlockTs > 0 ? Math.max(0, now - newestBlockTs) : Math.max(0, gapSecs);
+        var clampedPostElapsed = Math.min(actualPostElapsed, 300);
+        var postVolPx = Math.ceil(countBufferedHidden() / 8) * 5;
+        var postSpanPx = Math.max(clampedPostElapsed * FLATLINE_PX_PER_SEC, postVolPx);
+        if (postSpanPx > 0) {
+            _hb.virtualX += postSpanPx;
+        }
+        var winStart = newestBlockTs > 0 ? newestBlockTs : (now - actualPostElapsed);
+        drainHiddenTxsAcrossGap(gapStart, Math.max(gapStart, _hb.virtualX - 5), winStart, now);
+    } else {
+        // No blocks while away: advance the live head across the elapsed gap
+        // (sized to hold all hidden arrivals at normal skyline height without
+        // clamping timestamps to 300s, which piled older hidden txs into a
+        // tower wall at the 300s boundary).
+        var gapStartNoBlk = _hb.virtualX;
+        var actualGap = gapSecs > 0 ? gapSecs : 0;
+        var clampedGap = Math.min(actualGap, 300);
+        var volPx = Math.ceil(countBufferedHidden() / 8) * 5;
+        var spanPx = Math.max(clampedGap * FLATLINE_PX_PER_SEC, volPx);
+        if (spanPx > 0) {
+            _hb.virtualX += spanPx;
+        }
+        drainHiddenTxsAcrossGap(gapStartNoBlk, Math.max(gapStartNoBlk, _hb.virtualX - 5), now - actualGap, now);
     }
-    _hb._hiddenTxBuffer = [];
-    _hb._txBatchQueue = [];
 
-    // Catch the timeline up to the live tip: replay the SSE-queued blocks that
-    // arrived while hidden, then fetch-fill any remaining gap (see catchUpBlocks).
-    catchUpBlocks(queuedBlocks, tipHeight);
+    if (_hb.autoFollow && !_hb._pinnedTxid && _hb.width > 0 && _hb.zoom > 0) {
+        _hb.viewOffset = _hb.virtualX - (_hb.width * HEAD_POSITION_FRAC) / _hb.zoom;
+    }
 
-    // Sync frame timing so the draw loop doesn't try to catch up
     _hb.lastFrameTime = now;
 }
-// Exposed so drawFrame (render.js) can invoke the same recovery when it detects a
-// throttled/paused rAF gap (occluded window / other monitor / sleep), no
-// visibilitychange fires for those.
 window._hbRecoverTimeline = function(gapSecs) { recoverTimeline(gapSecs); };
 
-// Hidden-tab path: mark the hide time going out; on return, recover with the
-// elapsed hidden duration. The occlusion path is handled by drawFrame's gap
-// detector, which excludes the hidden case (guards on !_hb._hiddenSince) so the
-// two never double-fire.
 function _hbVisibilityChange() {
     var _hb = getState();
     if (!_hb) return;
@@ -1100,14 +1228,33 @@ function _hbVisibilityChange() {
 }
 document.addEventListener('visibilitychange', _hbVisibilityChange);
 
+// ── Heartbeat v2 bridge entry points (called by Rust/WASM client) ────────
+
+window.hbV2InstallSnapshot = function(payloadJson, isResync) {
+    return hbV2InstallSnapshot(payloadJson, isResync);
+};
+window.hbV2ApplyEffect = function(effectJson) {
+    return hbV2ApplyEffect(effectJson);
+};
+window.hbV2FocusTx = function(txid) {
+    return hbV2FocusTx(txid);
+};
+window.hbV2SetPinnedTx = function(txidOrNull) {
+    return hbV2SetPinnedTx(txidOrNull);
+};
+window.hbV2FocusBlockHeight = function(height) {
+    return hbV2FocusBlockHeight(height);
+};
+window.hbV2SetConnectionState = function(state) {
+    return hbV2SetConnectionState(state);
+};
+
 // ── Re-export vitals functions on window ───────────────────
 
 window.getHeartbeatVitals = function() { return getHeartbeatVitals(); };
 window.renderRhythmStrip = function(id, json) { renderRhythmStrip(id, json); };
 window.getHeartbeatRecentBlocks = function() { return getHeartbeatRecentBlocks(); };
-// Freshest block on the timeline (height + on-chain timestamp), from the
-// SSE/ZMQ stream. The Rust header polls this so the block height and
-// "last block" timer follow the fastest source, not just the LiveStats RPC.
+// Freshest block on the timeline (height + on-chain timestamp).
 window.getHeartbeatLatestBlock = function() {
     var _hb = getState();
     if (!_hb || !_hb.timeline) return '{"height":0,"timestamp":0}';
@@ -1119,37 +1266,17 @@ window.getHeartbeatLatestBlock = function() {
     }
     return '{"height":0,"timestamp":0}';
 };
-// Live mempool stats from the SSE-driven timeline: the count of active (non-
-// fading) bricks on the current flatline + their total vsize as vMB. With the
-// ZMQ `sequence` removals (C) the brick set tracks the node's real mempool, so
-// this reads real-time AND accurate: the Rust bottom bar polls it on the 1s tick
-// to replace the ~15s RPC getmempoolinfo value. One O(n) pass over the live
-// segment (~tens of k) once/sec is negligible. Returns {tx, vmb}; tx=0 signals
-// "not ready" so the caller falls back to the RPC value.
-window.getHeartbeatMempoolStats = function() {
-    var _hb = getState();
-    if (!_hb || !_hb.timeline || _hb.timeline.length === 0) return '{"tx":0,"vmb":0}';
-    var seg = _hb.timeline[_hb.timeline.length - 1];
-    if (!seg || seg.type !== 'flatline' || seg.x_end !== null || !seg.blips) return '{"tx":0,"vmb":0}';
-    var tx = 0, vbytes = 0;
-    for (var i = 0; i < seg.blips.length; i++) {
-        var b = seg.blips[i];
-        if (b.fadeStart !== 0) continue; // skip fading/harvesting bricks
-        tx++;
-        vbytes += b.vsize || 0;
-    }
-    return JSON.stringify({ tx: tx, vmb: Math.round(vbytes / 1000) / 1000 });
-};
-// Connection state for the header LIVE indicator: 'disconnected' when the SSE
-// EventSource errored, 'stale' when it's open but silent past the threshold
-// (node RPC stall), otherwise 'live'. The Rust header polls this on its 1s tick.
+// Connection state owned by the Rust/WASM v2 client via hbV2SetConnectionState.
+// Promotes 'live' to 'stale' after HEARTBEAT_STALL_SECS of SSE silence.
 window.getHeartbeatConnectionState = function() {
     var _hb = getState();
     if (!_hb) return 'live';
-    if (_hb._sseDisconnected) return 'disconnected';
-    var last = _hb._lastSseEventTs || 0;
-    if (last > 0 && (Date.now() / 1000 - last) > HEARTBEAT_STALL_SECS) return 'stale';
-    return 'live';
+    var conn = _hb._v2ConnState || 'live';
+    if (conn === 'live' && _hb._lastSseEventTs > 0 &&
+        (Date.now() / 1000 - _hb._lastSseEventTs) > HEARTBEAT_STALL_SECS) {
+        return 'stale';
+    }
+    return conn;
 };
 window.heartbeatCenter = function() { heartbeatCenter(); };
 window.heartbeatSearchTx = function(txid) { return heartbeatSearchTx(txid); };

@@ -1,10 +1,10 @@
 // heartbeat-render.js: Main draw loop and all drawing helpers for the heartbeat canvas.
 
 import { getState, COLORS, BG_COLOR, GRID_COLOR, POINT_WIDTH, FLATLINE_PX_PER_SEC, HEAD_POSITION_FRAC, MAX_BLIPS_PER_SEGMENT } from './heartbeat-state.js';
-import { computeColor, lerpColor, drawGrid, hexToRgb, lerp, feeRateColor, cellRadiusForVsize, fmtBtc, formatDuration } from './heartbeat-timeline.js';
+import { computeColor, lerpColor, drawGrid, hexToRgb, lerp, feeRateColor, PENDING_FEE_COLOR, feeBandLabel, formatFeeRate, cellRadiusForVsize, fmtBtc, formatDuration } from './heartbeat-timeline.js';
 import { canvasToVirtual, virtualToCanvas, blockAtVirtualX, flatlineAtVirtualX, blipAtCanvasXY } from './heartbeat-blips.js';
 import { stopMomentum } from './heartbeat-interaction.js';
-import { flushTxBatch } from './heartbeat-sse.js';
+import { flushTxBatch, maybeClearRemovedTxids } from './heartbeat-sse.js';
 
 // ── Control bar constants ──────────────────────────────────────
 var CTRL_BTNS = [
@@ -110,15 +110,16 @@ export function drawBlipTooltip(ctx, blip, canvasX, baseline) {
         // This tx just got mined (harvested into the block) while pinned/hovered.
         lines.push('✓ Confirmed in block #' + blip._confirmedHeight);
     }
-    lines.push('Fee rate: ' + (blip.feeRate ? Math.round(blip.feeRate * 10) / 10 : '?') + ' sat/vB');
-    if (blip.feeRate && blip.vsize) {
-        var feeSats = Math.round(blip.feeRate * blip.vsize);
-        lines.push('Fee paid: ' + feeSats.toLocaleString() + ' sats');
+    if (blip.feePending || blip.feeRate == null || !isFinite(blip.feeRate)) {
+        lines.push('Fee rate: Pending...');
+    } else {
+        lines.push('Fee rate: ' + formatFeeRate(blip.feeRate) + ' sat/vB (' + feeBandLabel(blip.feeRate) + ')');
     }
-    if (blip.vsize) {
+    lines.push('Fee paid: ' + (blip.fee != null ? blip.fee.toLocaleString() + ' sats' : 'Pending...'));
+    if (blip.vsize != null && blip.vsize > 0) {
         lines.push('Size: ' + Math.round(blip.vsize) + ' vB');
     }
-    if (blip.value) {
+    if (blip.value != null && blip.value > 0) {
         var btcVal = blip.value / 100000000;
         lines.push('Value: ' + fmtBtc(btcVal) + ' BTC');
     }
@@ -141,7 +142,7 @@ export function drawBlipTooltip(ctx, blip, canvasX, baseline) {
         }
         // Show input/output structure for structural types
         if (blip.notableType === 'consolidation' || blip.notableType === 'fan_out') {
-            if (blip.inputCount != null && blip.outputCount != null) {
+            if (blip.inputCount > 0 && blip.outputCount > 0) {
                 lines.push(blip.inputCount + ' in -> ' + blip.outputCount + ' out');
             }
         }
@@ -153,12 +154,14 @@ export function drawBlipTooltip(ctx, blip, canvasX, baseline) {
             lines.push('"' + msg + '"');
         }
     }
-    if (blip.timestamp) {
-        var d = new Date(blip.timestamp * 1000);
-        lines.push(d.toLocaleTimeString());
+    if (blip.firstSeen && blip.firstSeen > 0) {
+        var d = new Date(blip.firstSeen * 1000);
+        lines.push('First seen: ' + d.toLocaleTimeString());
+    } else {
+        lines.push('First seen: Already waiting (time unknown)');
     }
-    // Show the "open detail" hint for the pinned blip (touch first-tap also pins it).
-    if (blip.txid && _hb._pinnedBlip === blip) {
+    // Show the "open detail" hint only when the live PinnedTxPanel callback isn't wired.
+    if (blip.txid && _hb._pinnedBlip === blip && typeof window.__hbSelectTx !== 'function') {
         lines.push(_hb._isTouch ? '\u2192 Tap again for details' : '\u2192 Click again to view on mempool.space');
     }
     var tooltipColors = {
@@ -409,7 +412,7 @@ function startRevealHarvest(r, now) {
     r.harvested = true;
     for (var i = 0; i < r.confirmed.length; i++) {
         var blp = r.confirmed[i];
-        if (blp.fadeStart !== 0) continue;
+        if (!blp || blp._removed || blp.fadeStart !== 0) continue;
         blp.fadeStart = now;
         blp._confirmedHeight = r.height; // so a pinned/hovered tx shows "confirmed in block #N"
         blp.absorbTargetX = r.absorbX;
@@ -433,7 +436,13 @@ function startRevealHarvest(r, now) {
 function relayRevealLeftovers(_hb, r, staggerSecs) {
     if (r.laid) return;
     r.laid = true;
-    if (r.oldSeg) { r.oldSeg.blips = r.oldSeg.blips.filter(function(b) { return b.fadeStart > 0; }); r.oldSeg._revealFade = undefined; }
+    if (r.leftovers) {
+        r.leftovers = r.leftovers.filter(function(b) {
+            return b && !b._removed && (!(_hb._removedTxids && b.txid && _hb._removedTxids.has(b.txid)));
+        });
+    }
+    r._revealByTxid = null;
+    if (r.oldSeg) { r.oldSeg.blips = r.oldSeg.blips.filter(function(b) { return b && !b._removed && b.fadeStart > 0; }); r.oldSeg._revealFade = undefined; }
     if (window._hbPlaceCarried) window._hbPlaceCarried(r.leftovers, staggerSecs);
     // placeCarriedLeftovers sets _hb.virtualX = x_start + width SYNCHRONOUSLY (before
     // its RAF-chunked placement), so virtualX is already the final head here, that
@@ -444,7 +453,7 @@ function relayRevealLeftovers(_hb, r, staggerSecs) {
 // End the reveal: make sure the harvest + leftover placement have actually
 // happened (if we abort mid-beat), then clear it. Camera is left where it is, on
 // a natural finish it's at the head; on a user takeover the user now owns it.
-function endBlockReveal(_hb) {
+function endBlockReveal(_hb, restoreLiveCamera) {
     var r = _hb._reveal;
     if (!r) return;
     var now = Date.now() / 1000;
@@ -454,9 +463,14 @@ function endBlockReveal(_hb) {
     }
     startRevealHarvest(r, now);     // shatter confirmed if we hadn't yet
     relayRevealLeftovers(_hb, r, 0); // lay leftovers instantly if we hadn't yet
+    if (restoreLiveCamera && _hb.autoFollow && !_hb._pinnedTxid && r.entryZoom > 0 && _hb.width > 0) {
+        _hb.zoom = r.entryZoom;
+        _hb.viewOffset = _hb.virtualX - (_hb.width * HEAD_POSITION_FRAC) / _hb.zoom;
+    }
     _hb._reveal = null;
+    maybeClearRemovedTxids(_hb);
 }
-window._hbEndReveal = function() { var s = getState(); if (s) endBlockReveal(s); };
+window._hbEndReveal = function(restoreLiveCamera) { var s = getState(); if (s) endBlockReveal(s, !!restoreLiveCamera); };
 
 function runBlockReveal(_hb, dt, now, w) {
     var r = _hb._reveal;
@@ -557,9 +571,20 @@ function runBlockReveal(_hb, dt, now, w) {
         _hb.zoom = r.fitZoom + (r.entryZoom - r.fitZoom) * tr;
         _hb.viewOffset = headOff(_hb.virtualX, _hb.zoom);
         if (elapsed >= REVEAL_RETURN_SECS) {
+            var postRevealElapsed = r.revealWallStart > 0
+                ? Math.max(0, Math.min(now - r.revealWallStart, 60))
+                : 0;
+            var basePostX = (r.newSeg && r.newSeg._carryEndX)
+                ? (r.newSeg._carryEndX + 10)
+                : _hb.virtualX;
+            var targetPostX = basePostX + postRevealElapsed * FLATLINE_PX_PER_SEC;
+            if (targetPostX > _hb.virtualX) {
+                _hb.virtualX = targetPostX;
+            }
             _hb.zoom = r.entryZoom;
             _hb.viewOffset = headOff(_hb.virtualX, r.entryZoom);
             _hb._reveal = null;
+            maybeClearRemovedTxids(_hb);
             return false; // back at the head, entry zoom — normal follow resumes
         }
     }
@@ -573,7 +598,7 @@ function runBlockReveal(_hb, dt, now, w) {
 // static fit-all view. Camera-only (live tx flow keeps running, unlike the block
 // reveal). Armed by placeHistoryTxs (heartbeat-sse.js), runs from drawFrame, aborts
 // on any user takeover (autoFollow drops / drag / pinch / control press).
-var INTRO_HOLD_SECS = 2.0;    // show the whole mempool laying in
+var INTRO_HOLD_SECS = 3.5;    // let the raining brick cascade finish settling before zooming in
 var INTRO_ZOOM_SECS = 2.5;    // slow zoom to the head
 var INTRO_TARGET_ZOOM = 1.5;  // first-load resting zoom (also gated in placeHistoryTxs)
 function runIntro(_hb, dt, now, w) {
@@ -656,20 +681,6 @@ export function drawFrame(frameTime) {
     var liveSeg = _hb.timeline.length > 0 ? _hb.timeline[_hb.timeline.length - 1] : null;
     if (!_hb._reveal && liveSeg && liveSeg.type === 'flatline' && liveSeg.x_end === null) {
         _hb.virtualX += dt * FLATLINE_PX_PER_SEC;
-
-        // Prune _colHeights every ~30s to prevent unbounded growth.
-        // Remove entries more than 2000px behind the viewport.
-        if (!_hb._lastColPrune) _hb._lastColPrune = now;
-        if (now - _hb._lastColPrune > 30 && liveSeg._colHeights) {
-            _hb._lastColPrune = now;
-            var pruneThresh = _hb.viewOffset - 2000;
-            var keys = Object.keys(liveSeg._colHeights);
-            for (var pk = 0; pk < keys.length; pk++) {
-                if (Number(keys[pk]) < pruneThresh) {
-                    delete liveSeg._colHeights[keys[pk]];
-                }
-            }
-        }
     }
 
     // Lay down queued mempool-tx bricks once per frame (RAF-driven), spreading
@@ -768,10 +779,10 @@ export function drawFrame(frameTime) {
         var hSeg = _hb.hoveredBlock;
         var midX = virtualToCanvas((hSeg.x_start + hSeg.x_end) / 2);
         drawTooltip(ctx, hSeg, midX, baseline - 30, baseline);
-    } else if (_hb._pinnedBlip && _hb._pinnedBlip.x !== undefined) {
+    } else if (_hb._pinnedBlip && !_hb._pinnedBlip._removed && _hb._pinnedBlip.x !== undefined) {
         var pbx = virtualToCanvas(_hb._pinnedBlip.x);
         drawBlipTooltip(ctx, _hb._pinnedBlip, pbx, baseline);
-    } else if (_hb.hoveredBlip) {
+    } else if (_hb.hoveredBlip && !_hb.hoveredBlip._removed) {
         drawBlipTooltip(ctx, _hb.hoveredBlip, _hb.hoverCanvasX, baseline);
     } else if (_hb.hoveredFlatline) {
         drawFlatlineTooltip(ctx, _hb.hoveredFlatline, _hb.hoverCanvasX || w / 2, baseline);
@@ -1050,9 +1061,9 @@ export function drawBlockSegment(ctx, seg, viewLeft, baseline, fallbackColor, no
 }
 
 // LOD engages only when a segment has more than this many bricks (≈ the mempool
-// size) AND is zoomed out. DEFAULT 60000: individual bricks up to ~60k (preferred,
-// tested smooth to ~55k), LOD as the safety valve above that. Tune in prod.
-var LOD_MIN_BLIPS = 60000;
+// size) AND is zoomed out. DEFAULT 100000: color-batched individual bricks stay
+// smooth up to ~100k; LOD engages above 100k as a performance safety valve.
+var LOD_MIN_BLIPS = 100000;
 
 // ── P2: Level-of-detail blip rendering ────────────────────────
 // When zoomed out so far that grid columns are sub-pixel, drawing every brick
@@ -1078,7 +1089,7 @@ export function drawFlatlineBlipsLOD(ctx, seg, viewLeft, viewRight, baseline, zo
     var cols = {};                    // stable virtual bucket -> aggregate
     for (var i = 0; i < blips.length; i++) {
         var b = blips[i];
-        if (b.fadeStart > 0) continue; // skip absorbing/fading particles
+        if (!b || b._removed || b.fadeStart > 0) continue; // skip removed/absorbing particles
         var vx = b.gridX !== undefined ? b.gridX : b.x;
         if (vx < viewLeft || vx > viewRight) continue;
         // Honour the drop-in: bricks arrive left-to-right on first load
@@ -1093,17 +1104,13 @@ export function drawFlatlineBlipsLOD(ctx, seg, viewLeft, viewRight, baseline, zo
         if (!c) c = cols[k] = { h: 0, notable: false, ncolor: null, counts: {}, topN: 0, topColor: null };
         if (top > c.h) c.h = top;
         if (b.notableType) {
-            // Notables punch through: any notable in the column colours it (they
-            // read as the sparse coloured bars among the ribbon, like the
-            // individual notable bricks in the zoomed-in view).
             if (!c.notable) { c.notable = true; c.ncolor = b.color; }
         } else {
-            // Colour by the DOMINANT (mode) fee tier, so the ribbon reads by the
-            // majority of txs in the column (mostly low-fee/blue) rather than its
-            // single hottest tx, which biased every column toward red/orange.
-            var cc = (c.counts[b.color] || 0) + 1;
-            c.counts[b.color] = cc;
-            if (cc > c.topN) { c.topN = cc; c.topColor = b.color; }
+            // Dominant (mode) fixed fee band color for this column.
+            var colKey = b.color || feeRateColor(b.feeRate);
+            var cc = (c.counts[colKey] || 0) + 1;
+            c.counts[colKey] = cc;
+            if (cc > c.topN) { c.topN = cc; c.topColor = colKey; }
         }
     }
     // During a block reveal, the old segment's leftovers fade out (harvest beat).
@@ -1112,9 +1119,249 @@ export function drawFlatlineBlipsLOD(ctx, seg, viewLeft, viewRight, baseline, zo
     for (var key in cols) {
         var col = cols[key];
         // blip.color is an "rgba(r, g, b, " prefix awaiting an alpha + ")".
-        var color = col.notable ? col.ncolor : (col.topColor || 'rgba(0, 230, 118, ');
+        var color = col.notable ? col.ncolor : (col.topColor || PENDING_FEE_COLOR);
         ctx.fillStyle = color + (col.notable ? 0.95 : 0.72) * rf + ')';
         ctx.fillRect(Number(key) - offPx, baseline - col.h, colW, col.h);
+    }
+    // Keep the pinned brick visibly marked even when LOD is active.
+    if (_hb._pinnedTxid && _hb._pinnedBlip && !_hb._pinnedBlip._removed && _hb._pinnedBlip.fadeStart === 0) {
+        var pb = _hb._pinnedBlip;
+        var pvx = pb.gridX !== undefined ? pb.gridX : pb.x;
+        if (pvx >= viewLeft && pvx <= viewRight) {
+            var px = (pvx - _hb.viewOffset) * zoom;
+            var ph = Math.max(6, pb.height || pb.brickH || 8);
+            ctx.save();
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(px - 2, baseline - ph - 2, Math.max(colW, 4) + 4, ph + 4);
+            ctx.restore();
+        }
+    }
+}
+
+// Color-batched fast brick renderer for zoom <= 4 (plain solid rectangles,
+// zero gradients/roundRects/text labels). Batches up to 50k+ visible bricks
+// into ~14 fixed-color beginPath()+rect()+fill() calls instead of 45k individual
+// fillStyle+fillRect calls, preserving 100% pixel-identical individual bricks
+// at a locked 60 FPS during initial cascade, zoomed-out overview, and reveals.
+function drawFlatlineBricksBatched(ctx, _hb, seg, viewLeft, viewRight, baseline, zoom, nowSec) {
+    var blips = seg.blips;
+    var rf = seg._revealFade !== undefined ? seg._revealFade : 1;
+    var viewOffset = _hb.viewOffset;
+    var pinnedTxid = _hb._pinnedTxid;
+    var pinnedRect = null;
+
+    var settledNorm = Object.create(null);
+    var settledNotable = Object.create(null);
+    var enteringNorm = Object.create(null);
+    var notableEdges = [];
+    var absorbing = [];
+    // Below ~0.3x zoom, 5px columns are < 1.5 screen px wide; snapping rx/rw to
+    // integer pixels eliminates the sub-pixel moire wave that ripples across
+    // bricks while scrolling zoomed way out.
+    var subPixelZoom = (5 * zoom) < 1.5;
+
+    var _wStart = 0;
+    var _wSorted = false;
+    if (seg.x_end !== null && blips.length > 512) {
+        if (!seg._sortedByX) {
+            blips.sort(function(a, b) { return (a.x || 0) - (b.x || 0); });
+            seg._sortedByX = true;
+        }
+        _wSorted = true;
+        var _lo = 0, _hi = blips.length;
+        while (_lo < _hi) {
+            var _mid = (_lo + _hi) >> 1;
+            if ((blips[_mid].x || 0) < viewLeft) _lo = _mid + 1; else _hi = _mid;
+        }
+        _wStart = _lo;
+    }
+
+    for (var i = _wStart; i < blips.length; i++) {
+        var blip = blips[i];
+        if (!blip || blip._removed) continue;
+        var bxVirt = blip.x;
+        if (_wSorted && bxVirt > viewRight) break;
+        if (bxVirt < viewLeft || bxVirt > viewRight) continue;
+
+        if (blip.fadeStart > 0) {
+            absorbing.push(blip);
+            continue;
+        }
+        if (rf <= 0) continue;
+
+        var age = nowSec - blip.timestamp;
+        if (age < 0) continue;
+
+        var isNotable = !!blip.notableType;
+        var fadeTime = isNotable ? 1.15 : 0.9;
+        var bw = (blip.brickW || 4) * zoom;
+        var bh = blip.brickH || blip.height;
+        var sy = blip.stackY || 0;
+        var bx = (bxVirt - viewOffset) * zoom;
+        var baseColor = (blip.feePending && !isNotable) ? PENDING_FEE_COLOR : (blip.color || PENDING_FEE_COLOR);
+
+        // Compute drop offset when falling: full-size bricks rain down from high
+        // above the baseline with a crisp ease-out + subtle landing bounce, and
+        // batch into the exact same single path per color as settled bricks (so
+        // zero opacity quantization bands and zero overdraw seam at landing).
+        var dropOffset = 0;
+        var isEntering = false;
+        if (age < fadeTime) {
+            var fadeIn = age / fadeTime;
+            var baseDrop = isNotable ? Math.min(220, Math.max(170, baseline * 0.55)) : Math.min(165, Math.max(125, baseline * 0.42));
+            // Per-brick height variation (from uncorrelated bobPhase) breaks up
+            // the solid carpet underside into individual falling raindrops.
+            var heightVar = 0.72 + ((blip.bobPhase || 0) / 6.2831853) * 0.56;
+            var dropHeight = baseDrop * heightVar;
+            var inv = 1 - fadeIn;
+            var dropEase = inv * inv * inv;
+            var bounceAmt = isNotable ? 0.25 : 0.12;
+            var bounce = fadeIn > 0.78 ? Math.sin((fadeIn - 0.78) * (Math.PI / 0.22)) * bounceAmt * 0.05 : 0;
+            dropOffset = (dropEase + bounce) * dropHeight;
+            isEntering = fadeIn < 0.22;
+        }
+
+        var minDim = bw < bh ? bw : bh;
+        var gap = minDim > 2.5 ? Math.min(Math.max(minDim * 0.13, 0.5), 1.1) : 0;
+        var rx = bx - bw * 0.5 + gap;
+        var ry = baseline - sy - bh + gap - dropOffset;
+        var rw = bw - gap * 2;
+        var rh = bh - gap * 2;
+        if (subPixelZoom) {
+            rx = Math.floor(rx);
+            ry = Math.floor(ry);
+            rw = Math.max(1, Math.ceil(rw));
+            rh = Math.max(1, Math.ceil(rh));
+        } else {
+            if (rw < 0.5) rw = 0.5;
+            if (rh < 0.5) rh = 0.5;
+        }
+
+        if (isNotable) {
+            var nb = settledNotable[baseColor];
+            if (!nb) nb = settledNotable[baseColor] = [];
+            nb.push(rx, ry, rw, rh);
+            if (!subPixelZoom && rw >= 2.2 && rh >= 4) {
+                notableEdges.push(rx, ry, rw, rh);
+            }
+        } else if (isEntering) {
+            var ea = enteringNorm[baseColor];
+            if (!ea) ea = enteringNorm[baseColor] = [];
+            ea.push(rx, ry, rw, rh);
+        } else {
+            var arr = settledNorm[baseColor];
+            if (!arr) arr = settledNorm[baseColor] = [];
+            arr.push(rx, ry, rw, rh);
+        }
+
+        if (pinnedTxid && blip.txid === pinnedTxid) {
+            pinnedRect = [rx, ry, rw, rh];
+        }
+    }
+
+    // 1. Batched normal bricks (high-sky entry fade + main settled/falling path;
+    // single beginPath+fill per color = zero overdraw seams and zero band chunks)
+    var enterAlpha = (0.42 * rf).toFixed(2);
+    for (var eKey in enteringNorm) {
+        var eCoords = enteringNorm[eKey];
+        ctx.fillStyle = eKey + enterAlpha + ')';
+        ctx.beginPath();
+        for (var eci = 0; eci < eCoords.length; eci += 4) {
+            ctx.rect(eCoords[eci], eCoords[eci + 1], eCoords[eci + 2], eCoords[eci + 3]);
+        }
+        ctx.fill();
+    }
+    var normAlpha = (0.84 * rf).toFixed(2);
+    for (var cKey in settledNorm) {
+        var coords = settledNorm[cKey];
+        ctx.fillStyle = cKey + normAlpha + ')';
+        ctx.beginPath();
+        for (var ci = 0; ci < coords.length; ci += 4) {
+            ctx.rect(coords[ci], coords[ci + 1], coords[ci + 2], coords[ci + 3]);
+        }
+        ctx.fill();
+    }
+
+    // 2. Batched notable fills + crisp dark seam & subtle top highlight
+    // (keeps clustered notables separated as distinct bricks without bleeding across columns)
+    var notAlpha = (1.0 * rf).toFixed(2);
+    for (var nKey in settledNotable) {
+        var nCoords = settledNotable[nKey];
+        ctx.fillStyle = nKey + notAlpha + ')';
+        ctx.beginPath();
+        for (var ni = 0; ni < nCoords.length; ni += 4) {
+            ctx.rect(nCoords[ni], nCoords[ni + 1], nCoords[ni + 2], nCoords[ni + 3]);
+        }
+        ctx.fill();
+    }
+    if (notableEdges.length > 0) {
+        ctx.strokeStyle = 'rgba(8, 15, 30, ' + (0.72 * rf).toFixed(2) + ')';
+        ctx.lineWidth = Math.max(0.8, Math.min(1.2, zoom * 0.4));
+        ctx.beginPath();
+        for (var ei = 0; ei < notableEdges.length; ei += 4) {
+            ctx.rect(notableEdges[ei], notableEdges[ei + 1], notableEdges[ei + 2], notableEdges[ei + 3]);
+        }
+        ctx.stroke();
+        // Subtle bright top rim inside each notable brick so it reads crisp and elevated
+        ctx.fillStyle = 'rgba(255, 255, 255, ' + (0.28 * rf).toFixed(2) + ')';
+        ctx.beginPath();
+        for (var ti = 0; ti < notableEdges.length; ti += 4) {
+            if (notableEdges[ti + 2] >= 2.5 && notableEdges[ti + 3] >= 6) {
+                ctx.rect(notableEdges[ti] + 0.5, notableEdges[ti + 1] + 0.5, notableEdges[ti + 2] - 1, 1);
+            }
+        }
+        ctx.fill();
+    }
+
+    // 4. Absorbing block-inclusion shatter particles
+    if (absorbing.length > 0) {
+        var spikeTopY = baseline - 80 * zoom;
+        for (var ai = 0; ai < absorbing.length; ai++) {
+            var ab = absorbing[ai];
+            var fadeDt = nowSec - ab.fadeStart;
+            if (ab.particles && ab.particles.length > 0) {
+                var animDist = Math.abs(ab.absorbTargetX - ab.absorbOriginX);
+                var animDuration = Math.max(1.5, Math.min(animDist / 40, 4.0));
+                if (fadeDt >= animDuration / 0.7 + 0.3) continue;
+                var aColor = (ab.feePending && !ab.notableType) ? PENDING_FEE_COLOR : (ab.color || PENDING_FEE_COLOR);
+                for (var pi = 0; pi < ab.particles.length; pi++) {
+                    var p = ab.particles[pi];
+                    var pElapsed = fadeDt - p.delay;
+                    if (pElapsed < 0) {
+                        var sx = (ab.x - viewOffset) * zoom + p.offsetX * Math.min(zoom, 2);
+                        var sy0 = baseline - p.offsetY;
+                        ctx.fillStyle = aColor + (ab.opacity * 0.85) + ')';
+                        ctx.fillRect(sx, sy0, p.size * Math.min(zoom, 2), p.size * Math.min(zoom, 2));
+                        continue;
+                    }
+                    var pt = Math.min(pElapsed / (animDuration / p.speed), 1.0);
+                    if (pt >= 1.0) continue;
+                    var ease = pt * pt * pt;
+                    var curVX = ab.absorbOriginX + (ab.absorbTargetX - ab.absorbOriginX) * ease;
+                    var px = (curVX - viewOffset) * zoom + p.offsetX * (1 - ease);
+                    var startY = baseline - p.offsetY;
+                    var targetY = spikeTopY + (baseline - spikeTopY) * 0.3;
+                    var arc = Math.sin(pt * Math.PI * 0.7) * p.arcHeight * 0.3;
+                    var py = startY + (targetY - startY) * ease - arc;
+                    var pSize = p.size * Math.min(zoom, 2) * (pt > 0.6 ? 1 - (pt - 0.6) / 0.4 * 0.6 : 1);
+                    var pAlpha = ab.opacity * (pt > 0.7 ? (1 - pt) / 0.3 : 1);
+                    ctx.fillStyle = aColor + pAlpha + ')';
+                    ctx.fillRect(px - pSize / 2, py - pSize / 2, pSize, pSize);
+                }
+            }
+        }
+    }
+
+    // 5. Persistent highlight ring around the pinned brick
+    if (pinnedRect) {
+        ctx.save();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = Math.max(2, Math.min(3.5, zoom * 0.35));
+        ctx.shadowColor = '#00e676';
+        ctx.shadowBlur = 10;
+        ctx.strokeRect(pinnedRect[0] - 2, pinnedRect[1] - 2, pinnedRect[2] + 4, pinnedRect[3] + 4);
+        ctx.restore();
     }
 }
 
@@ -1210,6 +1457,8 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
         var lodCount = seg._loadFillCount || seg.blips.length;
         if (_hb._lodEnabled !== false && 5 * zoom < 1.5 && lodCount > LOD_MIN_BLIPS) {
             drawFlatlineBlipsLOD(ctx, seg, viewLeft, viewRight, baseline, zoom, nowSec);
+        } else if (_hb.renderMode !== 'bloodstream' && zoom <= 4) {
+            drawFlatlineBricksBatched(ctx, _hb, seg, viewLeft, viewRight, baseline, zoom, nowSec);
         } else {
         // P3: for closed (immutable) segments, lazily sort blips by x once and
         // binary-search the visible window so a zoomed-in view of a dense
@@ -1237,6 +1486,7 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
         var lw = zoom > 10 ? 1.5 : zoom > 6 ? 1 : 0.5;
         for (var bi = _wStart; bi < seg.blips.length; bi++) {
             var blip = seg.blips[bi];
+            if (!blip || blip._removed) continue;
             // Skip blips outside visible range. When sorted, everything past the
             // right edge is too, so stop iterating.
             if (_wSorted && blip.x > viewRight) break;
@@ -1514,15 +1764,31 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
                     }
 
                     // Fee rate text inside large cells at very high zoom
-                    if (zoom > 14 && cellRadius > 8 && blip.feeRate) {
+                    if (zoom > 14 && cellRadius > 8) {
                         ctx.font = Math.round(cellRadius * 0.5) + 'px monospace';
                         ctx.textAlign = 'center';
                         ctx.textBaseline = 'middle';
                         ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-                        ctx.fillText(blip.feeRate.toFixed(1), cellCX, cellCY);
+                        ctx.fillText(blip.feePending ? 'pending' : formatFeeRate(blip.feeRate), cellCX, cellCY);
+                    }
+
+                    // Persistent highlight ring around the pinned cell
+                    if (_hb._pinnedTxid && blip.txid === _hb._pinnedTxid) {
+                        ctx.save();
+                        ctx.strokeStyle = '#ffffff';
+                        ctx.lineWidth = Math.max(2, Math.min(3.5, zoom * 0.3));
+                        ctx.shadowColor = '#00e676';
+                        ctx.shadowBlur = 10;
+                        ctx.beginPath();
+                        ctx.arc(cellCX, cellCY, cellRadius + 3, 0, Math.PI * 2);
+                        ctx.stroke();
+                        ctx.restore();
                     }
                 } else {
                     // Brick rendering (original)
+                    var brickBaseColor = blip.feePending && !blip.notableType
+                        ? PENDING_FEE_COLOR
+                        : blipColor;
                     // Draw filled rectangle with 1px gap for separation
                     // Gap scales with zoom so bricks stay visually separated.
                     // strokeRect bleeds half its lineWidth outside the rect,
@@ -1543,7 +1809,7 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
 
                     // At zoom > 8, use a vertical gradient for depth
                     if (zoom > 8 && rh > 6) {
-                        var rgbMatch = blipColor.match(/(\d+)\D+(\d+)\D+(\d+)/);
+                        var rgbMatch = brickBaseColor.match(/(\d+)\D+(\d+)\D+(\d+)/);
                         if (rgbMatch) {
                             var bR = parseInt(rgbMatch[1]);
                             var bG = parseInt(rgbMatch[2]);
@@ -1556,14 +1822,14 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
                             var botB = Math.max(bB - 20, 0);
                             var bGrad = ctx.createLinearGradient(rx, ry, rx, ry + rh);
                             bGrad.addColorStop(0, 'rgba(' + topR + ',' + topG + ',' + topB + ',' + bOpacity + ')');
-                            bGrad.addColorStop(0.45, blipColor + bOpacity + ')');
+                            bGrad.addColorStop(0.45, brickBaseColor + bOpacity + ')');
                             bGrad.addColorStop(1, 'rgba(' + botR + ',' + botG + ',' + botB + ',' + bOpacity + ')');
                             ctx.fillStyle = bGrad;
                         } else {
-                            ctx.fillStyle = blipColor + bOpacity + ')';
+                            ctx.fillStyle = brickBaseColor + bOpacity + ')';
                         }
                     } else {
-                        ctx.fillStyle = blipColor + bOpacity + ')';
+                        ctx.fillStyle = brickBaseColor + bOpacity + ')';
                     }
 
                     // No shadowBlur. The glow was the dominant render cost (an
@@ -1613,30 +1879,50 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
                     }
                     ctx.shadowBlur = 0;
 
-                    // Dark outline at 4x+ zoom for clear brick separation
-                    if (zoom > 4 && !blip.notableType) {
-                        ctx.lineWidth = lw;
-                        var ins = lw / 2;
-                        if (useRound) {
-                            ctx.strokeStyle = 'rgba(8, 15, 30, 0.6)';
-                            ctx.beginPath();
-                            roundRect(ctx, rx + ins, ry + ins, rw - lw, rh - lw, Math.max(cornerR - ins, 0));
-                            ctx.stroke();
-                            // Darker bottom edge for shadow depth
-                            if (zoom > 8 && rh > 8) {
-                                ctx.strokeStyle = 'rgba(0, 0, 0, 0.35)';
-                                ctx.lineWidth = Math.min(lw + 0.5, 2.5);
-                                var botIns = ctx.lineWidth / 2;
-                                ctx.beginPath();
-                                ctx.moveTo(rx + cornerR, ry + rh - botIns);
-                                ctx.lineTo(rx + rw - cornerR, ry + rh - botIns);
-                                ctx.stroke();
-                                ctx.lineWidth = lw;
+                    // Outline at 4x+ zoom: subtle dashed slate outline for fee-pending bricks,
+                    // crisp dark outline for priced bricks.
+                    if (zoom >= 4 && !blip.notableType) {
+                        if (blip.feePending) {
+                            ctx.save();
+                            var pendLw = Math.max(1, lw);
+                            var pendIns = pendLw / 2;
+                            ctx.strokeStyle = 'rgba(148, 163, 184, 0.75)';
+                            ctx.lineWidth = pendLw;
+                            if (typeof ctx.setLineDash === 'function') {
+                                ctx.setLineDash([Math.max(2, zoom * 0.35), Math.max(2, zoom * 0.25)]);
                             }
-                        } else {
-                            ctx.strokeStyle = 'rgba(8, 15, 30, 0.7)';
-                            // Inset by half lineWidth so stroke stays inside the rect
-                            ctx.strokeRect(rx + ins, ry + ins, rw - lw, rh - lw);
+                            if (useRound) {
+                                ctx.beginPath();
+                                roundRect(ctx, rx + pendIns, ry + pendIns, Math.max(0.5, rw - pendLw), Math.max(0.5, rh - pendLw), Math.max(cornerR - pendIns, 0));
+                                ctx.stroke();
+                            } else {
+                                ctx.strokeRect(rx + pendIns, ry + pendIns, Math.max(0.5, rw - pendLw), Math.max(0.5, rh - pendLw));
+                            }
+                            ctx.restore();
+                        } else if (zoom > 4) {
+                            ctx.lineWidth = lw;
+                            var ins = lw / 2;
+                            if (useRound) {
+                                ctx.strokeStyle = 'rgba(8, 15, 30, 0.6)';
+                                ctx.beginPath();
+                                roundRect(ctx, rx + ins, ry + ins, rw - lw, rh - lw, Math.max(cornerR - ins, 0));
+                                ctx.stroke();
+                                // Darker bottom edge for shadow depth
+                                if (zoom > 8 && rh > 8) {
+                                    ctx.strokeStyle = 'rgba(0, 0, 0, 0.35)';
+                                    ctx.lineWidth = Math.min(lw + 0.5, 2.5);
+                                    var botIns = ctx.lineWidth / 2;
+                                    ctx.beginPath();
+                                    ctx.moveTo(rx + cornerR, ry + rh - botIns);
+                                    ctx.lineTo(rx + rw - cornerR, ry + rh - botIns);
+                                    ctx.stroke();
+                                    ctx.lineWidth = lw;
+                                }
+                            } else {
+                                ctx.strokeStyle = 'rgba(8, 15, 30, 0.7)';
+                                // Inset by half lineWidth so stroke stays inside the rect
+                                ctx.strokeRect(rx + ins, ry + ins, rw - lw, rh - lw);
+                            }
                         }
                     }
 
@@ -1658,12 +1944,14 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
                             ctx.font = 'bold ' + fs + 'px monospace';
                             ctx.textAlign = 'left';
                             ctx.textBaseline = 'top';
-                            var feeStr = (blip.feeRate ? blip.feeRate.toFixed(1) : '?') + ' s/vB';
+                            var feeStr = blip.feePending
+                                ? 'pending'
+                                : (formatFeeRate(blip.feeRate) + ' s/vB');
                             var textY = ry + padY;
                             // Dark text shadow for readability on any color
                             ctx.fillStyle = 'rgba(0,0,0,0.55)';
                             ctx.fillText(feeStr, rx + padX + 1, textY + 1);
-                            ctx.fillStyle = 'rgba(255,255,255,0.95)';
+                            ctx.fillStyle = blip.feePending ? 'rgba(226,232,240,0.85)' : 'rgba(255,255,255,0.95)';
                             ctx.fillText(feeStr, rx + padX, textY);
 
                             // Value text (second line)
@@ -1690,6 +1978,37 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
                                     ctx.fillText(valText, rx + padX, valY);
                                 }
                             }
+                        }
+                        ctx.restore();
+                    }
+
+                    // Persistent highlight outline/ring around the currently pinned brick
+                    // so it stays unmistakably identified even after the 5s search pulse fades.
+                    if (_hb._pinnedTxid && blip.txid === _hb._pinnedTxid) {
+                        ctx.save();
+                        var pPad = Math.max(2, Math.min(4, zoom * 0.35));
+                        var pLw = Math.max(2, Math.min(3.5, zoom * 0.3));
+                        ctx.strokeStyle = '#ffffff';
+                        ctx.lineWidth = pLw;
+                        ctx.shadowColor = '#00e676';
+                        ctx.shadowBlur = 10;
+                        if (useRound) {
+                            ctx.beginPath();
+                            roundRect(ctx, rx - pPad, ry - pPad, rw + pPad * 2, rh + pPad * 2, cornerR + pPad * 0.5);
+                            ctx.stroke();
+                        } else {
+                            ctx.strokeRect(rx - pPad, ry - pPad, rw + pPad * 2, rh + pPad * 2);
+                        }
+                        ctx.strokeStyle = '#00e676';
+                        ctx.lineWidth = Math.max(1, pLw * 0.5);
+                        ctx.shadowBlur = 0;
+                        var outerPad = pPad + 1.5;
+                        if (useRound) {
+                            ctx.beginPath();
+                            roundRect(ctx, rx - outerPad, ry - outerPad, rw + outerPad * 2, rh + outerPad * 2, cornerR + outerPad * 0.5);
+                            ctx.stroke();
+                        } else {
+                            ctx.strokeRect(rx - outerPad, ry - outerPad, rw + outerPad * 2, rh + outerPad * 2);
                         }
                         ctx.restore();
                     }
@@ -1741,10 +2060,15 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
                 }
             }
             if (hasFaded) {
-                seg.blips = seg.blips.filter(function(b) {
-                    if (b.fadeStart > 0) return (cutoff2 - b.fadeStart) < 3;
-                    return true;
-                });
+                var keptLive = [];
+                for (var fl = 0; fl < seg.blips.length; fl++) {
+                    var lb = seg.blips[fl];
+                    if (!lb || lb._removed) continue;
+                    if (lb.fadeStart > 0 && (cutoff2 - lb.fadeStart) >= 3) continue;
+                    lb._segIdx = keptLive.length;
+                    keptLive.push(lb);
+                }
+                seg.blips = keptLive;
             }
         }
     }

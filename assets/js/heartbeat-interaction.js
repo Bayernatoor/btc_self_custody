@@ -113,10 +113,28 @@ export function listen(target, evt, fn, opts) {
     _hb._listeners.push({ target: target, evt: evt, fn: fn, opts: opts });
 }
 
-// Handle a canvas tap (touch). Two-stage: the first tap on a brick or block spike
-// SELECTS it (shows the tooltip, which carries a "tap again" hint on touch); a
-// second tap on the same target opens its detail modal. Mirrors the desktop
-// hover+click affordance for touch, where there's no hover.
+// Select and pin a brick on the canvas, notifying the Rust/WASM PinnedTxPanel
+// when registered (or falling back to the legacy detail modal).
+function selectBrick(_hb, blip) {
+    if (!_hb || !blip || !blip.txid) return;
+    _hb._pinnedTxid = blip.txid;
+    _hb._pinnedBlip = blip;
+    _hb.autoFollow = false;
+    if (typeof window.__hbSelectTx === 'function') {
+        window.__hbSelectTx(blip.txid);
+    } else if (typeof window.showTxDetail === 'function') {
+        window.showTxDetail(blip.txid, {
+            fee: blip.fee != null ? blip.fee : null,
+            vsize: blip.vsize != null ? blip.vsize : null,
+            value: blip.value != null ? blip.value : null,
+            feeRate: blip.feeRate != null ? blip.feeRate : null
+        });
+    }
+}
+
+// Handle a canvas tap (touch). On a brick: opens the live in-place PinnedTxPanel
+// immediately via window.__hbSelectTx when available (else falls back to two-tap
+// tooltip -> showTxDetail). On a block spike: two-tap tooltip -> showBlockDetail.
 function handleCanvasTap(mx, my) {
     var _hb = getState();
     if (!_hb) return;
@@ -131,17 +149,22 @@ function handleCanvasTap(mx, my) {
         if (!blip && _hb.zoom >= 1.5) blip = blipAtVirtualX(vx, 6 / _hb.zoom);
     }
     if (blip && blip.txid) {
-        if (_hb._pinnedBlip === blip || _hb.hoveredBlip === blip) {
-            // Second tap on the same brick -> open the tx detail modal.
-            if (typeof window.showTxDetail === 'function') {
-                window.showTxDetail(blip.txid, {
-                    fee: blip.fee, vsize: blip.vsize, value: blip.value, feeRate: blip.feeRate
-                });
-            }
-            _hb._pinnedBlip = null; _hb.hoveredBlip = null;
+        if (typeof window.__hbSelectTx === 'function') {
+            _hb.hoveredBlip = blip;
+            _hb.hoverCanvasX = mx;
+            _hb.hoveredBlock = null;
+            selectBrick(_hb, blip);
+        } else if (_hb._pinnedBlip === blip || _hb.hoveredBlip === blip) {
+            // Legacy fallback: second tap on the same brick -> open the tx detail modal.
+            selectBrick(_hb, blip);
+            _hb.hoveredBlip = null;
         } else {
-            // First tap -> select + show the tooltip.
-            _hb._pinnedBlip = blip; _hb.hoveredBlip = blip; _hb.hoverCanvasX = mx;
+            // Legacy fallback: first tap -> pin + show the tooltip.
+            _hb._pinnedTxid = blip.txid;
+            _hb._pinnedBlip = blip;
+            _hb.hoveredBlip = blip;
+            _hb.hoverCanvasX = mx;
+            _hb.autoFollow = false;
             _hb.hoveredBlock = null;
         }
         return;
@@ -159,13 +182,15 @@ function handleCanvasTap(mx, my) {
         } else {
             // First tap -> select + show the tooltip.
             _hb.hoveredBlock = tapped;
-            _hb._pinnedBlip = null; _hb.hoveredBlip = null;
+            _hb.hoveredBlip = null;
         }
         return;
     }
 
-    // Tapped empty space -> clear any selection.
-    _hb.hoveredBlock = null; _hb._pinnedBlip = null; _hb.hoveredBlip = null;
+    // Tapped empty space -> clear hover selection (keep pinned tx panel intact).
+    _hb.hoveredBlock = null;
+    _hb.hoveredBlip = null;
+    if (!_hb._pinnedTxid) _hb._pinnedBlip = null;
 }
 
 export function setupInputHandlers(canvas) {
@@ -314,19 +339,12 @@ export function setupInputHandlers(canvas) {
     listen(canvas, 'click', function(e) {
         if (!_hb) return;
         if (_hb._touchTapped) { _hb._touchTapped = false; return; }
-        var rect = canvas.getBoundingClientRect();
-        var mx = e.clientX - rect.left;
-        var my = e.clientY - rect.top;
-        // Click on a brick -> open tx detail modal immediately
+        var dragDist = Math.abs(e.clientX - (_hb.dragStartX != null ? _hb.dragStartX : e.clientX))
+            + Math.abs(e.clientY - (_hb.dragStartY != null ? _hb.dragStartY : e.clientY));
+        if (dragDist > 6) return;
+        // Click on a brick -> pin it and notify live PinnedTxPanel (or fallback detail modal)
         if (_hb.hoveredBlip && _hb.hoveredBlip.txid) {
-            if (typeof window.showTxDetail === 'function') {
-                window.showTxDetail(_hb.hoveredBlip.txid, {
-                    fee: _hb.hoveredBlip.fee,
-                    vsize: _hb.hoveredBlip.vsize,
-                    value: _hb.hoveredBlip.value,
-                    feeRate: _hb.hoveredBlip.feeRate
-                });
-            }
+            selectBrick(_hb, _hb.hoveredBlip);
         } else if (_hb.hoveredBlock && _hb.hoveredBlock.height > 0 && typeof window.showBlockDetail === 'function') {
             // Clicking a block spike -> open block detail modal
             window.showBlockDetail(_hb.hoveredBlock.height);
@@ -546,6 +564,13 @@ export function handleControlClick(id) {
             _hb.paused = false;
             _hb.viewOffsetY = 0;
             _hb.viewOffset = _hb.virtualX - (_hb.width * HEAD_POSITION_FRAC) / _hb.zoom;
+            _hb.hoveredBlock = null;
+            _hb.hoveredBlip = null;
+            _hb._pinnedBlip = null;
+            _hb._pinnedTxid = null;
+            if (typeof window.__hbClearPinnedTx === 'function') {
+                window.__hbClearPinnedTx();
+            }
             break;
         case 'mode':
             _hb.renderMode = _hb.renderMode === 'bricks' ? 'bloodstream' : 'bricks';
@@ -561,6 +586,10 @@ export function handleControlClick(id) {
             _hb.hoveredBlock = null;
             _hb.hoveredBlip = null;
             _hb._pinnedBlip = null;
+            _hb._pinnedTxid = null;
+            if (typeof window.__hbClearPinnedTx === 'function') {
+                window.__hbClearPinnedTx();
+            }
             break;
     }
 }
@@ -568,7 +597,7 @@ export function handleControlClick(id) {
 // Check if user has scrolled close enough to the live head to re-enable auto-follow
 export function checkAutoFollow() {
     var _hb = getState();
-    if (!_hb) return;
+    if (!_hb || _hb._pinnedTxid) return;
     var headOnCanvas = virtualToCanvas(_hb.virtualX);
     // If the head is visible and near the right edge, snap back to auto-follow
     // but preserve the user's zoom level

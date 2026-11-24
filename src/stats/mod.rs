@@ -10,6 +10,7 @@ pub mod hall_of_fame_data;
 /// bundle, which have no use for them.
 #[cfg(all(test, feature = "ssr"))]
 mod hall_of_fame_records;
+pub mod heartbeat_client;
 pub mod heartbeat_sync;
 pub mod server_fns;
 pub mod types;

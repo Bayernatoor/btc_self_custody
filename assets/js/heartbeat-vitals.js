@@ -370,38 +370,16 @@ export function heartbeatCenter() {
     _hb.hoveredBlock = null;
     _hb.hoveredBlip = null;
     _hb._pinnedBlip = null;
+    _hb._pinnedTxid = null;
+    if (typeof window !== 'undefined' && typeof window.__hbClearPinnedTx === 'function') {
+        window.__hbClearPinnedTx();
+    }
 }
 
-// Search for a txid across all flatline segments. If found, scroll to
-// it, zoom in, and highlight with a pulsing glow.
+// Search for a txid across the timeline via the v2 focus entry point.
 export function heartbeatSearchTx(txid) {
-    var _hb = getState();
-    if (!_hb || !txid) return false;
-    var needle = txid.trim().toLowerCase();
-    if (needle.length < 8) return false;
-
-    // Scan all flatline segments for a matching blip
-    for (var si = _hb.timeline.length - 1; si >= 0; si--) {
-        var seg = _hb.timeline[si];
-        if (seg.type !== 'flatline' || !seg.blips) continue;
-        for (var bi = 0; bi < seg.blips.length; bi++) {
-            var blip = seg.blips[bi];
-            if (!blip.txid) continue;
-            if (blip.txid.toLowerCase().indexOf(needle) === 0) {
-                // Found it: scroll viewport to center on this blip
-                _hb.autoFollow = false;
-                _hb.zoom = Math.max(_hb.zoom, 3.0); // zoom in enough to see it
-                _hb.viewOffset = blip.x - (_hb.width * 0.5) / _hb.zoom;
-                _hb.viewOffsetY = 0;
-
-                // Highlight: pin the blip and set a glow timer
-                _hb._pinnedBlip = blip;
-                _hb._searchHighlight = { x: blip.x, gridX: blip.gridX, start: Date.now() / 1000, duration: 5.0 };
-
-                console.log('[heartbeat] found tx', blip.txid, 'at virtualX', Math.round(blip.x));
-                return true;
-            }
-        }
+    if (typeof window !== 'undefined' && typeof window.hbV2FocusTx === 'function') {
+        return window.hbV2FocusTx(txid);
     }
     return false;
 }

@@ -60,6 +60,7 @@ export function blipAtVirtualX(vx, hitRadius) {
     var best = null, bestDist = hitRadius;
     var viewLeft = _hb.viewOffset;
     var viewRight = _hb.viewOffset + _hb.width / _hb.zoom;
+    var nowSec = Date.now() / 1000;
     for (var i = 0; i < _hb.timeline.length; i++) {
         var seg = _hb.timeline[i];
         if (seg.type !== 'flatline' || !seg.blips) continue;
@@ -68,7 +69,7 @@ export function blipAtVirtualX(vx, hitRadius) {
         if (segEnd < viewLeft || seg.x_start > viewRight) continue;
         for (var bi = 0; bi < seg.blips.length; bi++) {
             var blip = seg.blips[bi];
-            if (blip.fadeStart > 0) continue;
+            if (!blip || blip._removed || blip.fadeStart > 0 || blip.timestamp > nowSec) continue;
             var dist = Math.abs(blip.x - vx);
             if (dist < bestDist) {
                 bestDist = dist;
@@ -88,6 +89,7 @@ export function blipAtCanvasXY(cx, cy, baseline) {
     var heightScale = zoom > 4 ? 1 + (zoom - 4) * 0.15 : 1;
     var viewLeft = _hb.viewOffset;
     var viewRight = _hb.viewOffset + _hb.width / zoom;
+    var nowSec = Date.now() / 1000;
 
     for (var i = _hb.timeline.length - 1; i >= 0; i--) {
         var seg = _hb.timeline[i];
@@ -96,7 +98,7 @@ export function blipAtCanvasXY(cx, cy, baseline) {
         if (segEnd < viewLeft || seg.x_start > viewRight) continue;
         for (var bi = seg.blips.length - 1; bi >= 0; bi--) {
             var blip = seg.blips[bi];
-            if (blip.fadeStart > 0) continue;
+            if (!blip || blip._removed || blip.fadeStart > 0 || blip.timestamp > nowSec) continue;
             var bvx = blip.gridX || blip.x;
             if (bvx < viewLeft || bvx > viewRight) continue;
 

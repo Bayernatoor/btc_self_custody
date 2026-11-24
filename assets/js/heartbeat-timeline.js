@@ -124,12 +124,37 @@ export function lerpColor(a, b, t) {
     return 'rgb(' + r + ',' + g + ',' + bl + ')';
 }
 
-// Fee rate to RGBA color prefix (close with opacity + ')')
-export function feeRateColor(feeRate, medianFee) {
-    if (feeRate < medianFee * 0.8) return 'rgba(33, 150, 243, ';
-    if (feeRate < medianFee * 1.5) return 'rgba(0, 230, 118, ';
-    if (feeRate < medianFee * 4)   return 'rgba(255, 152, 0, ';
-    return 'rgba(244, 67, 54, ';
+// Neutral slate color prefix for bricks whose fee metadata is still pending
+export var PENDING_FEE_COLOR = 'rgba(100, 116, 139, ';
+
+// Fixed 6-band + sub-1 + pending fee rate to RGBA color prefix (close with opacity + ')')
+export function feeRateColor(feeRate) {
+    if (feeRate == null || !isFinite(feeRate)) return PENDING_FEE_COLOR;
+    if (feeRate < 1)  return 'rgba(37, 99, 235, ';    // #2563eb cobalt blue (< 1 sat/vB)
+    if (feeRate < 2)  return 'rgba(56, 189, 248, ';   // #38bdf8 sky cyan (1-2 sat/vB)
+    if (feeRate < 5)  return 'rgba(0, 230, 118, ';     // #00e676 green (2-5 sat/vB)
+    if (feeRate < 15) return 'rgba(247, 147, 26, ';   // #f7931a amber (5-15 sat/vB)
+    if (feeRate < 50) return 'rgba(255, 87, 34, ';    // #ff5722 orange-red (15-50 sat/vB)
+    return 'rgba(244, 67, 54, ';                      // #f44336 crimson red (50+ sat/vB)
+}
+
+// Human-readable label for the fixed fee band
+export function feeBandLabel(feeRate) {
+    if (feeRate == null || !isFinite(feeRate)) return 'Fee pending';
+    if (feeRate < 1)  return '< 1 sat/vB';
+    if (feeRate < 2)  return '1-2 sat/vB';
+    if (feeRate < 5)  return '2-5 sat/vB';
+    if (feeRate < 15) return '5-15 sat/vB';
+    if (feeRate < 50) return '15-50 sat/vB';
+    return '50+ sat/vB';
+}
+
+// Format fee rate preserving sub-1 precision (2dp for 0 < r < 1 sat/vB, 1dp for 0 or >= 1)
+export function formatFeeRate(feeRate) {
+    if (feeRate == null || !isFinite(feeRate)) return 'pending';
+    if (feeRate === 0) return '0.0';
+    if (feeRate > 0 && feeRate < 1) return feeRate.toFixed(2);
+    return feeRate.toFixed(1);
 }
 
 // Bloodstream cell radius based on transaction vsize
@@ -177,10 +202,12 @@ export function createBlockSegment(block, xStart) {
 
     return {
         type: 'block',
+        hash: block.hash || null,
         height: block.height || 0,
         timestamp: block.timestamp || 0,
         tx_count: block.tx_count || 0,
         total_fees: block.total_fees || 0,
+        size: block.size || 0,
         weight: block.weight || 0,
         inter_block_seconds: interBlock,
         points: points,
@@ -197,7 +224,10 @@ export function createFlatlineSegment(xStart, xEnd) {
         x_start: xStart,
         x_end: xEnd,   // null for live (open-ended)
         color: null,    // set when closed (block arrives). null = use live color
-        blips: []
+        blips: [],
+        _blipsByTxid: new Map(),
+        _colHeights: {},
+        _colBlips: new Map()
     };
 }
 
