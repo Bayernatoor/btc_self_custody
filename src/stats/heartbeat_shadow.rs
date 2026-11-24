@@ -10,10 +10,11 @@ use zeromq::{Socket, SocketRecv, SubSocket};
 
 use super::{block_jobs::BlockJob, StatsError};
 use super::{bytes_to_hex, observe_block, HeartbeatEvent, StatsState};
+use crate::stats::db;
 use crate::stats::heartbeat_membership::{
     BlockTicket, CheckpointTicket, HeartbeatMembership, Notification,
 };
-use crate::stats::heartbeat_sync::Coverage;
+use crate::stats::heartbeat_sync::{Coverage, TxFlags, TxMetadataHydration};
 use crate::stats::rpc::{BlockTxids, MembershipCheckpoint};
 
 // While coverage is complete, every A/R delta is verified sequentially, so a
@@ -245,13 +246,23 @@ async fn subscribe(
                             // buffered pre-checkpoint removals before syncing
                             // the store.
                             store_removed.clear();
+                            let was_uninitialized =
+                                !state.heartbeat_store.is_initialized();
+                            let initial_hydration = if was_uninitialized {
+                                load_sqlite_hydration(Arc::clone(state)).await
+                            } else {
+                                Vec::new()
+                            };
                             let members: Vec<&String> =
                                 view.members().collect();
-                            state.heartbeat_store.install_checkpoint(
-                                &members,
-                                view.complete(),
-                                now_unix_secs(),
-                            );
+                            state
+                                .heartbeat_store
+                                .install_checkpoint_with_hydration(
+                                    &members,
+                                    view.complete(),
+                                    now_unix_secs(),
+                                    &initial_hydration,
+                                );
                         } else if was_complete && !view.complete() {
                             state.heartbeat_store.set_coverage(
                                 Coverage::Partial {
@@ -338,6 +349,54 @@ fn flush_removals(
         let txids: Vec<String> = legacy_removed.drain().collect();
         let _ = state.heartbeat_tx.send(HeartbeatEvent::TxRemoved { txids });
     }
+}
+
+async fn load_sqlite_hydration(
+    state: Arc<StatsState>,
+) -> Vec<TxMetadataHydration> {
+    tokio::task::spawn_blocking(move || {
+        let conn = match state.db.get() {
+            Ok(conn) => conn,
+            Err(e) => {
+                tracing::warn!(
+                    "heartbeat SQLite hydration: DB pool error: {e}"
+                );
+                return Vec::new();
+            }
+        };
+        match db::query_recent_mempool_txs(&conn, 0, 200_000) {
+            Ok(rows) => {
+                let entries: Vec<TxMetadataHydration> = rows
+                    .into_iter()
+                    .map(|row| TxMetadataHydration {
+                        txid: row.txid,
+                        first_seen: (row.first_seen > 0)
+                            .then_some(row.first_seen),
+                        fee: Some(row.fee),
+                        vsize: Some(row.vsize),
+                        value: (row.value > 0).then_some(row.value),
+                        flags: TxFlags::from_notable_type(
+                            row.notable_type.as_deref(),
+                        ),
+                        op_return_text: row.op_return_text,
+                    })
+                    .collect();
+                tracing::info!(
+                    total = entries.len(),
+                    "heartbeat SQLite pre-checkpoint hydration loaded"
+                );
+                entries
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "heartbeat SQLite hydration: query_recent_mempool_txs failed: {e}"
+                );
+                Vec::new()
+            }
+        }
+    })
+    .await
+    .unwrap_or_default()
 }
 
 fn now_unix_secs() -> u64 {

@@ -174,7 +174,12 @@ fn late_disconnect_only_revokes_the_matching_hash_without_readmitting() {
     // Core's reconcile, independently of D, can supply the next admission.
     db::insert_missing_mempool_txs(
         &db,
-        &[("old-only".into(), 17, 200)],
+        &[crate::stats::rpc::VerboseMempoolEntry {
+            txid: "old-only".into(),
+            fee: 17,
+            vsize: 200,
+            time: 0,
+        }],
         200,
         10,
     )

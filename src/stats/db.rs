@@ -2977,16 +2977,17 @@ pub fn prune_departed_mempool_txs(
 /// the table drifts BELOW the node's real mempool. This backfills that gap so the
 /// heartbeat brick count tracks the node instead of under-reporting.
 ///
-/// Only txid/fee/vsize are known from the verbose mempool, so backfilled rows
-/// carry no notable enrichment (value_usd / notable_type / op_return_text),
-/// identical to how the startup seed inserts. `first_seen` is stamped by the
-/// caller. Capped at `max_insert` per call so a large first-time backlog can't
-/// hold a long write lock or exhaust the pool; the remainder clears over
-/// subsequent reconcile cycles. Returns the number of rows inserted.
+/// Only txid/fee/vsize/time are known from the verbose mempool, so backfilled
+/// rows carry no notable enrichment (value_usd / notable_type / op_return_text),
+/// identical to how the startup seed inserts. Each entry's `time` is used as
+/// `first_seen` when non-zero, falling back to `fallback_first_seen` otherwise.
+/// Capped at `max_insert` per call so a large first-time backlog can't hold a
+/// long write lock or exhaust the pool; the remainder clears over subsequent
+/// reconcile cycles. Returns the number of rows inserted.
 pub fn insert_missing_mempool_txs(
     conn: &Connection,
-    entries: &[(String, u64, u32)],
-    first_seen: u64,
+    entries: &[super::rpc::VerboseMempoolEntry],
+    fallback_first_seen: u64,
     max_insert: usize,
 ) -> rusqlite::Result<u64> {
     if entries.is_empty() {
@@ -3004,18 +3005,23 @@ pub fn insert_missing_mempool_txs(
     };
     let tx = conn.unchecked_transaction()?;
     let mut inserted = 0u64;
-    for (txid, fee, vsize) in entries {
-        if existing.contains(txid) {
+    for entry in entries {
+        if existing.contains(&entry.txid) {
             continue;
         }
+        let first_seen = if entry.time > 0 {
+            entry.time
+        } else {
+            fallback_first_seen
+        };
         // Clears awaiting_readmission only once any revoked block claim has
         // cleared confirmed_height (see insert_mempool_tx).
         insert_mempool_tx(
             &tx,
             &MempoolTxInsert {
-                txid,
-                fee: *fee,
-                vsize: *vsize,
+                txid: &entry.txid,
+                fee: entry.fee,
+                vsize: entry.vsize,
                 first_seen,
                 ..Default::default()
             },
@@ -5063,9 +5069,24 @@ mod tests {
         // Node's mempool (getrawmempool verbose) has tx1, tx2, tx3, tx2 and tx3
         // are the ones ZMQ missed.
         let entries = vec![
-            ("tx1".to_string(), 100u64, 150u32),
-            ("tx2".to_string(), 200u64, 250u32),
-            ("tx3".to_string(), 300u64, 350u32),
+            crate::stats::rpc::VerboseMempoolEntry {
+                txid: "tx1".to_string(),
+                fee: 100,
+                vsize: 150,
+                time: 1700000000,
+            },
+            crate::stats::rpc::VerboseMempoolEntry {
+                txid: "tx2".to_string(),
+                fee: 200,
+                vsize: 250,
+                time: 1700000500,
+            },
+            crate::stats::rpc::VerboseMempoolEntry {
+                txid: "tx3".to_string(),
+                fee: 300,
+                vsize: 350,
+                time: 0,
+            },
         ];
         let inserted =
             insert_missing_mempool_txs(&conn, &entries, 1700009999, 5000)
@@ -5077,6 +5098,17 @@ mod tests {
         assert!(unconfirmed.contains(&"tx2".to_string()));
         assert!(unconfirmed.contains(&"tx3".to_string()));
 
+        // tx2 keeps its real Core admission time; tx3 (time == 0) falls back to fallback_first_seen.
+        let rows = query_recent_mempool_txs(&conn, 0, 100).unwrap();
+        assert_eq!(
+            rows.iter().find(|r| r.txid == "tx2").unwrap().first_seen,
+            1700000500
+        );
+        assert_eq!(
+            rows.iter().find(|r| r.txid == "tx3").unwrap().first_seen,
+            1700009999
+        );
+
         // Idempotent: a second pass with the same node set inserts nothing.
         let again =
             insert_missing_mempool_txs(&conn, &entries, 1700009999, 5000)
@@ -5084,8 +5116,14 @@ mod tests {
         assert_eq!(again, 0);
 
         // Cap is respected: only max_insert new rows per call.
-        let big: Vec<(String, u64, u32)> =
-            (0..10).map(|i| (format!("new{i}"), 10u64, 20u32)).collect();
+        let big: Vec<crate::stats::rpc::VerboseMempoolEntry> = (0..10)
+            .map(|i| crate::stats::rpc::VerboseMempoolEntry {
+                txid: format!("new{i}"),
+                fee: 10,
+                vsize: 20,
+                time: 1700000100 + i,
+            })
+            .collect();
         let capped =
             insert_missing_mempool_txs(&conn, &big, 1700009999, 4).unwrap();
         assert_eq!(capped, 4);

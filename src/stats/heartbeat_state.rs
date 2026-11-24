@@ -16,7 +16,7 @@ use uuid::Uuid;
 use super::heartbeat_sync::{
     ApplyOutcome, CanonicalBlock, CompactTx, Coverage, DeltaKind,
     HeartbeatDelta, HeartbeatMirror, HeartbeatSnapshot, NodeMempoolAggregate,
-    ResyncRequired, TxLookupStatus, PROTOCOL_VERSION,
+    ResyncRequired, TxLookupStatus, TxMetadataHydration, PROTOCOL_VERSION,
 };
 
 /// Maximum number of sequenced deltas retained in the in-memory replay buffer.
@@ -459,8 +459,9 @@ impl HeartbeatStore {
         if existing.fee == Some(fee)
             && existing.vsize == Some(vsize)
             && existing.value == Some(value)
-            && existing.flags == flags
-            && existing.op_return_text == op_return_text
+            && (existing.flags | flags) == existing.flags
+            && (op_return_text.is_none()
+                || existing.op_return_text == op_return_text)
         {
             return;
         }
@@ -472,9 +473,10 @@ impl HeartbeatStore {
                 txid,
                 fee,
                 vsize,
-                value,
+                value: Some(value),
                 flags,
                 op_return_text,
+                first_seen: None,
             },
         );
     }
@@ -598,6 +600,24 @@ impl HeartbeatStore {
         complete: bool,
         observed_at: u64,
     ) {
+        self.install_checkpoint_with_hydration(
+            members,
+            complete,
+            observed_at,
+            &[],
+        );
+    }
+
+    /// Reconcile the store against an authoritative membership checkpoint,
+    /// applying optional details-only `initial_hydration` entries onto the
+    /// checkpoint snapshot before installing and publishing on the reset path.
+    pub fn install_checkpoint_with_hydration(
+        &self,
+        members: &[&String],
+        complete: bool,
+        observed_at: u64,
+        initial_hydration: &[TxMetadataHydration],
+    ) {
         let target_coverage = if complete {
             Coverage::Complete
         } else {
@@ -654,18 +674,20 @@ impl HeartbeatStore {
                 .map(|tx| (tx.txid.clone(), tx))
                 .collect();
 
-            let mut transactions = Vec::with_capacity(incoming_set.len());
+            let mut tx_by_id: HashMap<&str, CompactTx> =
+                HashMap::with_capacity(incoming_set.len());
             for &txid in &incoming_set {
-                if let Some(existing) = surviving_by_id.remove(txid) {
-                    transactions.push(existing);
-                } else {
-                    transactions.push(CompactTx::pending(
-                        txid.to_string(),
-                        observed_at,
-                    ));
+                let tx = surviving_by_id
+                    .remove(txid)
+                    .unwrap_or_else(|| CompactTx::pending(txid.to_string(), 0));
+                tx_by_id.insert(txid, tx);
+            }
+            for entry in initial_hydration {
+                if let Some(tx) = tx_by_id.get_mut(entry.txid.as_str()) {
+                    tx.apply_hydration(entry);
                 }
             }
-            snapshot.transactions = transactions;
+            snapshot.transactions = tx_by_id.into_values().collect();
 
             inner
                 .mirror
@@ -710,7 +732,7 @@ impl HeartbeatStore {
                 observed_at,
                 DeltaKind::MembershipAdd {
                     txid,
-                    first_seen: observed_at,
+                    first_seen: 0,
                 },
             );
         }
@@ -724,6 +746,98 @@ impl HeartbeatStore {
                 },
             );
         }
+    }
+
+    /// Details-only bulk metadata hydration for existing mempool members
+    /// (for example from SQLite history or `getrawmempool(true)`).
+    ///
+    /// Strictly details-only: never admits membership for unknown txids.
+    /// Returns the number of distinct members whose metadata changed.
+    ///
+    /// Small updates (`<= 256` members on an initialized store whose updated
+    /// members all carry `fee` and `vsize`) emit incremental
+    /// `DeltaKind::TxDetails` frames without rotating `stream_epoch`.
+    /// Larger bulk hydrations (`> 256` members) on an initialized store update
+    /// the mirror in place, clear `snapshot_cache`, and always rotate
+    /// `stream_epoch` (`seq = 1`) with
+    /// `ResyncRequired { reason: "metadata_hydrated" }` so resuming clients
+    /// cannot replay across an unlogged bulk mutation.
+    pub fn hydrate_details(&self, entries: &[TxMetadataHydration]) -> usize {
+        if entries.is_empty() {
+            return 0;
+        }
+
+        let mut inner = self.write_inner();
+        let mut updated_txids = Vec::new();
+        let mut seen_updated = HashSet::new();
+
+        for entry in entries {
+            if inner.mirror.hydrate_member_details(entry)
+                && seen_updated.insert(entry.txid.clone())
+            {
+                updated_txids.push(entry.txid.clone());
+            }
+        }
+
+        if updated_txids.is_empty() {
+            return 0;
+        }
+
+        let updated_count = updated_txids.len();
+        let can_emit_deltas = inner.initialized
+            && updated_count <= 256
+            && updated_txids.iter().all(|txid| {
+                inner
+                    .mirror
+                    .get_tx(txid)
+                    .is_some_and(|tx| tx.fee.is_some() && tx.vsize.is_some())
+            });
+
+        if can_emit_deltas {
+            let now = now_unix_secs();
+            for txid in updated_txids {
+                if let Some(tx) = inner.mirror.get_tx(&txid).cloned() {
+                    if let (Some(fee), Some(vsize)) = (tx.fee, tx.vsize) {
+                        self.emit_delta_locked(
+                            &mut inner,
+                            now,
+                            DeltaKind::TxDetails {
+                                txid,
+                                fee,
+                                vsize,
+                                value: tx.value,
+                                flags: tx.flags,
+                                op_return_text: tx.op_return_text,
+                                first_seen: (tx.first_seen > 0)
+                                    .then_some(tx.first_seen),
+                            },
+                        );
+                    }
+                }
+            }
+            *self.write_snapshot_cache() = None;
+            return updated_count;
+        }
+
+        *self.write_snapshot_cache() = None;
+        if inner.initialized {
+            let new_epoch = Uuid::new_v4().to_string();
+            inner.mirror.reset_revision(new_epoch.clone(), 1);
+            inner.stream_epoch = new_epoch.clone();
+            inner.seq = 1;
+            inner.replay.clear();
+            inner.replay_bytes = 0;
+
+            let resync = Arc::new(ResyncRequired {
+                protocol_version: PROTOCOL_VERSION,
+                stream_epoch: new_epoch,
+                reason: "metadata_hydrated".to_string(),
+                latest_seq: 1,
+            });
+            let _ = self.live_tx.send(Arc::new(StoreEvent::Resync(resync)));
+        }
+
+        updated_count
     }
 
     fn emit_delta_locked(
@@ -1205,5 +1319,339 @@ mod tests {
             store.lookup_tx(&tx_after_b2),
             TxLookupStatus::Unconfirmed(_)
         ));
+    }
+
+    #[test]
+    fn install_checkpoint_sets_unknown_first_seen_only_for_new_members() {
+        let store = HeartbeatStore::new();
+        let tx_existing = hex_id(1);
+        let tx_boot = hex_id(2);
+        let tx_incremental = hex_id(3);
+
+        // Pre-checkpoint live arrival has a real first_seen timestamp.
+        store.observe_add(tx_existing.clone(), 1_700_000_111);
+
+        // Initial checkpoint (reset path) preserves tx_existing's first_seen
+        // and stamps newly discovered tx_boot with first_seen = 0.
+        store.install_checkpoint(
+            &[&tx_existing, &tx_boot],
+            true,
+            1_700_000_222,
+        );
+        match store.lookup_tx(&tx_existing) {
+            TxLookupStatus::Unconfirmed(tx) => {
+                assert_eq!(tx.first_seen, 1_700_000_111);
+            }
+            other => panic!("expected tx_existing, got {other:?}"),
+        }
+        match store.lookup_tx(&tx_boot) {
+            TxLookupStatus::Unconfirmed(tx) => {
+                assert_eq!(tx.first_seen, 0);
+            }
+            other => panic!("expected tx_boot, got {other:?}"),
+        }
+
+        // Incremental checkpoint stamps newly discovered tx_incremental with 0.
+        store.install_checkpoint(
+            &[&tx_existing, &tx_boot, &tx_incremental],
+            true,
+            1_700_000_333,
+        );
+        match store.lookup_tx(&tx_incremental) {
+            TxLookupStatus::Unconfirmed(tx) => {
+                assert_eq!(tx.first_seen, 0);
+            }
+            other => panic!("expected tx_incremental, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn hydrate_details_is_details_only_invalidates_cache_and_notifies_cleanly()
+    {
+        let store = HeartbeatStore::new();
+        let tx1 = hex_id(10);
+        let tx2 = hex_id(11);
+        let tx_unknown = hex_id(12);
+
+        store.install_checkpoint(&[&tx1, &tx2], true, 1_700_000_000);
+        let (epoch0, seq0) = store.current_revision();
+
+        // Unknown txid is never admitted and returns 0.
+        assert_eq!(
+            store.hydrate_details(&[TxMetadataHydration {
+                txid: tx_unknown.clone(),
+                first_seen: Some(1_700_000_005),
+                fee: Some(1_000),
+                vsize: Some(140),
+                value: Some(50_000),
+                flags: TxFlags::WHALE,
+                op_return_text: Some("ghost".to_string()),
+            }]),
+            0
+        );
+        assert!(matches!(
+            store.lookup_tx(&tx_unknown),
+            TxLookupStatus::Absent { .. }
+        ));
+        assert_eq!(store.current_revision(), (epoch0.clone(), seq0));
+
+        // Populate snapshot cache and attach a live subscriber.
+        let snap_before = store.snapshot();
+        let mut live_rx = match store.subscribe_from(Some(&epoch0), Some(seq0))
+        {
+            SubscribeResult::Stream { live_rx, .. } => live_rx,
+            other => panic!("expected live stream, got {other:?}"),
+        };
+
+        // Small partial-value + first_seen-backfilling hydration emits an
+        // incremental DeltaKind::TxDetails with ZERO epoch rotation!
+        assert_eq!(
+            store.hydrate_details(&[TxMetadataHydration {
+                txid: tx1.clone(),
+                first_seen: Some(1_699_999_500),
+                fee: Some(2_000),
+                vsize: Some(200),
+                value: None,
+                flags: TxFlags::NONE,
+                op_return_text: None,
+            }]),
+            1
+        );
+        let (epoch1, seq1) = store.current_revision();
+        assert_eq!(epoch1, epoch0);
+        assert_eq!(seq1, seq0 + 1);
+        match live_rx.try_recv().expect("partial delta event").as_ref() {
+            StoreEvent::Delta(d) => assert!(matches!(
+                &d.kind,
+                DeltaKind::TxDetails {
+                    txid,
+                    fee: 2_000,
+                    vsize: 200,
+                    value: None,
+                    flags,
+                    op_return_text: None,
+                    first_seen: Some(1_699_999_500),
+                } if txid == &tx1 && *flags == TxFlags::NONE
+            )),
+            other => panic!("expected TxDetails delta, got {other:?}"),
+        }
+        match store.lookup_tx(&tx1) {
+            TxLookupStatus::Unconfirmed(tx) => {
+                assert_eq!(tx.first_seen, 1_699_999_500);
+                assert_eq!(tx.fee, Some(2_000));
+                assert_eq!(tx.vsize, Some(200));
+                assert_eq!(tx.value, None);
+            }
+            other => panic!("expected hydrated tx1, got {other:?}"),
+        }
+
+        // Small complete-detail hydration emits incremental DeltaKind::TxDetails
+        // without rotating epoch and invalidates snapshot_cache.
+        assert_eq!(
+            store.hydrate_details(&[TxMetadataHydration {
+                txid: tx1.clone(),
+                first_seen: None,
+                fee: Some(2_000),
+                vsize: Some(200),
+                value: Some(500_000),
+                flags: TxFlags::ROUND_NUMBER,
+                op_return_text: None,
+            }]),
+            1
+        );
+        let (epoch2, seq2) = store.current_revision();
+        assert_eq!(epoch2, epoch0);
+        assert_eq!(seq2, seq1 + 1);
+        match live_rx.try_recv().expect("delta event").as_ref() {
+            StoreEvent::Delta(d) => assert!(matches!(
+                &d.kind,
+                DeltaKind::TxDetails {
+                    txid,
+                    fee: 2_000,
+                    vsize: 200,
+                    value: Some(500_000),
+                    flags,
+                    op_return_text: None,
+                    first_seen: Some(1_699_999_500),
+                } if txid == &tx1 && *flags == TxFlags::ROUND_NUMBER
+            )),
+            other => panic!("expected TxDetails delta, got {other:?}"),
+        }
+        let snap_mid = store.snapshot();
+        assert!(!Arc::ptr_eq(&snap_before, &snap_mid));
+
+        // Bulk hydration (> 256 members) updates in place, clears snapshot_cache,
+        // and ALWAYS rotates stream_epoch + resets seq = 1 + emits ResyncRequired.
+        let bulk_store = HeartbeatStore::new();
+        let bulk_ids: Vec<String> = (100..370u64).map(hex_id).collect();
+        let bulk_refs: Vec<&String> = bulk_ids.iter().collect();
+        bulk_store.install_checkpoint(&bulk_refs, true, 1_700_000_000);
+        let (bulk_epoch0, bulk_seq0) = bulk_store.current_revision();
+        assert_eq!(bulk_seq0, 1);
+
+        // Even with ZERO subscribers and NO cached snapshot, bulk hydration
+        // rotates stream_epoch so a resuming client at bulk_epoch0 cannot
+        // replay across an unlogged bulk mutation.
+        let bulk_entries: Vec<TxMetadataHydration> = bulk_ids
+            .iter()
+            .map(|id| TxMetadataHydration {
+                txid: id.clone(),
+                first_seen: Some(1_699_999_800),
+                fee: Some(1_500),
+                vsize: Some(150),
+                value: None,
+                flags: TxFlags::NONE,
+                op_return_text: None,
+            })
+            .collect();
+        assert_eq!(bulk_store.hydrate_details(&bulk_entries), bulk_ids.len());
+        let (bulk_epoch1, bulk_seq1) = bulk_store.current_revision();
+        assert_ne!(bulk_epoch1, bulk_epoch0);
+        assert_eq!(bulk_seq1, 1);
+        assert!(matches!(
+            bulk_store.subscribe_from(Some(&bulk_epoch0), Some(bulk_seq0)),
+            SubscribeResult::Resync(ResyncRequired { ref reason, .. })
+                if reason == "epoch_mismatch"
+        ));
+
+        // With an active subscriber, a second bulk hydration (> 256) also sends
+        // ResyncRequired { reason: "metadata_hydrated" }.
+        let mut bulk_rx = match bulk_store
+            .subscribe_from(Some(&bulk_epoch1), Some(bulk_seq1))
+        {
+            SubscribeResult::Stream { live_rx, .. } => live_rx,
+            other => panic!("expected live stream, got {other:?}"),
+        };
+        let bulk_entries2: Vec<TxMetadataHydration> = bulk_ids
+            .iter()
+            .map(|id| TxMetadataHydration {
+                txid: id.clone(),
+                first_seen: None,
+                fee: None,
+                vsize: None,
+                value: Some(123_456),
+                flags: TxFlags::NONE,
+                op_return_text: None,
+            })
+            .collect();
+        assert_eq!(bulk_store.hydrate_details(&bulk_entries2), bulk_ids.len());
+        let (bulk_epoch2, bulk_seq2) = bulk_store.current_revision();
+        assert_ne!(bulk_epoch2, bulk_epoch1);
+        assert_eq!(bulk_seq2, 1);
+        match bulk_rx.try_recv().expect("resync event").as_ref() {
+            StoreEvent::Resync(r) => {
+                assert_eq!(r.reason, "metadata_hydrated");
+                assert_eq!(r.stream_epoch, bulk_epoch2);
+                assert_eq!(r.latest_seq, 1);
+            }
+            other => panic!("expected ResyncRequired, got {other:?}"),
+        }
+
+        // Subsequent live delta on the new epoch applies cleanly.
+        bulk_store.observe_add(hex_id(999), 1_700_000_999);
+        assert_eq!(bulk_store.current_revision(), (bulk_epoch2, 2));
+    }
+
+    #[test]
+    fn install_checkpoint_with_hydration_applies_details_before_initial_checkpoint(
+    ) {
+        let store = HeartbeatStore::new();
+        let tx_live = hex_id(1);
+        let tx_sqlite = hex_id(2);
+        let tx_unknown = hex_id(3);
+
+        // Live pre-checkpoint observation establishes a known first_seen > 0.
+        store.observe_add(tx_live.clone(), 1_700_000_500);
+        let (epoch0, seq0) = store.current_revision();
+        let mut live_rx = match store.subscribe_from(Some(&epoch0), Some(seq0))
+        {
+            SubscribeResult::Stream { live_rx, .. } => live_rx,
+            other => panic!("expected live stream, got {other:?}"),
+        };
+
+        let hydration = vec![
+            TxMetadataHydration {
+                txid: tx_live.clone(),
+                first_seen: Some(1_699_999_000),
+                fee: Some(1_200),
+                vsize: Some(140),
+                value: Some(50_000),
+                flags: TxFlags::ROUND_NUMBER,
+                op_return_text: None,
+            },
+            TxMetadataHydration {
+                txid: tx_sqlite.clone(),
+                first_seen: Some(1_700_000_100),
+                fee: Some(3_400),
+                vsize: Some(220),
+                value: Some(900_000),
+                flags: TxFlags::WHALE,
+                op_return_text: Some("boot".to_string()),
+            },
+            TxMetadataHydration {
+                txid: tx_unknown.clone(),
+                first_seen: Some(1_700_000_200),
+                fee: Some(500),
+                vsize: Some(100),
+                value: Some(10_000),
+                flags: TxFlags::NONE,
+                op_return_text: None,
+            },
+        ];
+
+        store.install_checkpoint_with_hydration(
+            &[&tx_live, &tx_sqlite],
+            true,
+            1_700_000_600,
+            &hydration,
+        );
+
+        let (epoch1, seq1) = store.current_revision();
+        assert_ne!(epoch1, epoch0);
+        assert_eq!(seq1, 1);
+
+        // Exactly ONE ResyncRequired (initial_checkpoint), no second rotation.
+        match live_rx.try_recv().expect("initial resync").as_ref() {
+            StoreEvent::Resync(r) => {
+                assert_eq!(r.reason, "initial_checkpoint");
+                assert_eq!(r.stream_epoch, epoch1);
+                assert_eq!(r.latest_seq, 1);
+            }
+            other => {
+                panic!("expected initial_checkpoint resync, got {other:?}")
+            }
+        }
+        assert!(live_rx.try_recv().is_err());
+
+        // Unknown hydration txid was never admitted.
+        assert!(matches!(
+            store.lookup_tx(&tx_unknown),
+            TxLookupStatus::Absent { .. }
+        ));
+
+        // Live member got hydrated details while preserving its live first_seen.
+        match store.lookup_tx(&tx_live) {
+            TxLookupStatus::Unconfirmed(tx) => {
+                assert_eq!(tx.first_seen, 1_700_000_500);
+                assert_eq!(tx.fee, Some(1_200));
+                assert_eq!(tx.vsize, Some(140));
+                assert_eq!(tx.value, Some(50_000));
+                assert_eq!(tx.flags, TxFlags::ROUND_NUMBER);
+            }
+            other => panic!("expected tx_live, got {other:?}"),
+        }
+
+        // SQLite-hydrated checkpoint member has all fields populated immediately.
+        match store.lookup_tx(&tx_sqlite) {
+            TxLookupStatus::Unconfirmed(tx) => {
+                assert_eq!(tx.first_seen, 1_700_000_100);
+                assert_eq!(tx.fee, Some(3_400));
+                assert_eq!(tx.vsize, Some(220));
+                assert_eq!(tx.value, Some(900_000));
+                assert_eq!(tx.flags, TxFlags::WHALE);
+                assert_eq!(tx.op_return_text.as_deref(), Some("boot"));
+            }
+            other => panic!("expected tx_sqlite, got {other:?}"),
+        }
     }
 }

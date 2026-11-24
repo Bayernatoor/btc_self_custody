@@ -32,8 +32,9 @@ use tokio::sync::broadcast;
 use super::api::{self, StatsState};
 use super::config::StatsConfig;
 use super::db;
+use super::heartbeat_sync::TxMetadataHydration;
 use super::ingest;
-use super::rpc::BitcoinRpc;
+use super::rpc::{BitcoinRpc, VerboseMempoolEntry};
 use super::zmq_subscriber;
 
 /// How long a fetched BTC/USD price stays usable.
@@ -450,22 +451,26 @@ pub fn spawn_background_tasks(
                 match state.rpc.get_raw_mempool_verbose().await {
                     Ok(entries) => {
                         let count = entries.len();
-                        // Stamp first_seen at insert time (not before the retry
-                        // loop), so late seeds record accurate observation times.
+                        // Fallback timestamp when a verbose entry reports time == 0.
                         let now = std::time::SystemTime::now()
                             .duration_since(std::time::UNIX_EPOCH)
                             .unwrap_or_default()
                             .as_secs();
                         if let Ok(conn) = state.db.get() {
                             let mut inserted = 0u64;
-                            for (txid, fee, vsize) in &entries {
+                            for entry in &entries {
+                                let first_seen = if entry.time > 0 {
+                                    entry.time
+                                } else {
+                                    now
+                                };
                                 if db::insert_mempool_tx(
                                     &conn,
                                     &db::MempoolTxInsert {
-                                        txid,
-                                        fee: *fee,
-                                        vsize: *vsize,
-                                        first_seen: now,
+                                        txid: &entry.txid,
+                                        fee: entry.fee,
+                                        vsize: entry.vsize,
+                                        first_seen,
                                         ..Default::default()
                                     },
                                 )
@@ -476,6 +481,20 @@ pub fn spawn_background_tasks(
                             }
                             tracing::info!(
                                 "Mempool seed: {inserted}/{count} txs inserted from getrawmempool"
+                            );
+                        }
+                        let hydration = verbose_entries_to_hydration(&entries);
+                        let store = Arc::clone(&state.heartbeat_store);
+                        let hydrated = tokio::task::spawn_blocking(move || {
+                            store.hydrate_details(&hydration)
+                        })
+                        .await
+                        .unwrap_or(0);
+                        if hydrated > 0 {
+                            tracing::info!(
+                                hydrated,
+                                total = count,
+                                "Mempool seed: hydrated HeartbeatStore details from getrawmempool"
                             );
                         }
                         break;
@@ -585,6 +604,22 @@ pub fn spawn_background_tasks(
                         if drift >= BACKFILL_DRIFT_THRESHOLD {
                             match state.rpc.get_raw_mempool_verbose().await {
                                 Ok(entries) if !entries.is_empty() => {
+                                    let hydration =
+                                        verbose_entries_to_hydration(&entries);
+                                    let store =
+                                        Arc::clone(&state.heartbeat_store);
+                                    let hydrated =
+                                        tokio::task::spawn_blocking(move || {
+                                            store.hydrate_details(&hydration)
+                                        })
+                                        .await
+                                        .unwrap_or(0);
+                                    if hydrated > 0 {
+                                        tracing::info!(
+                                            hydrated,
+                                            "Mempool reconcile: hydrated HeartbeatStore details from getrawmempool"
+                                        );
+                                    }
                                     let db = state.db.clone();
                                     let max_insert = 5000usize;
                                     let _ = tokio::task::spawn_blocking(
@@ -651,6 +686,23 @@ pub fn spawn_background_tasks(
     }
 
     tracing::info!("Connection pool: 16 connections (WAL mode enabled)");
+}
+
+fn verbose_entries_to_hydration(
+    entries: &[VerboseMempoolEntry],
+) -> Vec<TxMetadataHydration> {
+    entries
+        .iter()
+        .map(|e| TxMetadataHydration {
+            txid: e.txid.clone(),
+            first_seen: (e.time > 0).then_some(e.time),
+            fee: Some(e.fee),
+            vsize: Some(e.vsize),
+            value: None,
+            flags: 0,
+            op_return_text: None,
+        })
+        .collect()
 }
 
 #[cfg(test)]

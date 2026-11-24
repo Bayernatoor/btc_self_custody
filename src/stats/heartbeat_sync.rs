@@ -233,6 +233,19 @@ impl TxFlags {
         }
         bits
     }
+
+    pub fn from_notable_type(notable_type: Option<&str>) -> u8 {
+        match notable_type {
+            Some("whale") => Self::WHALE,
+            Some("fee_outlier") => Self::FEE_OUTLIER,
+            Some("consolidation") => Self::CONSOLIDATION,
+            Some("fan_out") => Self::FAN_OUT,
+            Some("large_inscription") => Self::LARGE_INSCRIPTION,
+            Some("round_number") => Self::ROUND_NUMBER,
+            Some("op_return_msg") => Self::OP_RETURN_MSG,
+            _ => Self::NONE,
+        }
+    }
 }
 
 impl From<u8> for TxFlags {
@@ -293,6 +306,54 @@ impl CompactTx {
         let fee = self.fee?;
         let vsize = self.vsize?;
         (vsize > 0).then(|| fee as f64 / f64::from(vsize))
+    }
+
+    /// Merge details-only metadata onto this transaction in place.
+    ///
+    /// Never pulls a known `first_seen > 0` earlier from a second clock, so
+    /// cross-clock reconcile hydration cannot churn timestamps and a
+    /// re-admitted transaction cannot inherit an older lifetime's timestamp.
+    pub(crate) fn apply_hydration(
+        &mut self,
+        entry: &TxMetadataHydration,
+    ) -> bool {
+        let mut changed = false;
+        if let Some(fee) = entry.fee {
+            if self.fee != Some(fee) {
+                self.fee = Some(fee);
+                changed = true;
+            }
+        }
+        if let Some(vsize) = entry.vsize {
+            if self.vsize != Some(vsize) {
+                self.vsize = Some(vsize);
+                changed = true;
+            }
+        }
+        if let Some(value) = entry.value {
+            if self.value != Some(value) {
+                self.value = Some(value);
+                changed = true;
+            }
+        }
+        let merged_flags = self.flags | entry.flags;
+        if merged_flags != self.flags {
+            self.flags = merged_flags;
+            changed = true;
+        }
+        if let Some(text) = &entry.op_return_text {
+            if self.op_return_text.as_ref() != Some(text) {
+                self.op_return_text = Some(text.clone());
+                changed = true;
+            }
+        }
+        if let Some(ts) = entry.first_seen {
+            if self.first_seen == 0 && ts > 0 {
+                self.first_seen = ts;
+                changed = true;
+            }
+        }
+        changed
     }
 }
 
@@ -458,10 +519,13 @@ pub enum DeltaKind {
         txid: String,
         fee: u64,
         vsize: u32,
-        value: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        value: Option<u64>,
         flags: u8,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         op_return_text: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        first_seen: Option<u64>,
     },
     BlockObserved {
         hash: String,
@@ -549,6 +613,65 @@ pub enum ApplyOutcome {
     Applied,
     DuplicateIgnored,
     ResyncNeeded(String),
+}
+
+/// Effective state transition emitted alongside [`ApplyOutcome::Applied`].
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ApplyEffect {
+    MembershipAdd {
+        txid: String,
+        first_seen: u64,
+    },
+    MembershipRemove {
+        txids: Vec<String>,
+    },
+    TxDetails {
+        tx: CompactTx,
+    },
+    BlockObserved {
+        hash: String,
+        observed_at: u64,
+    },
+    BlockDetails(CanonicalBlock),
+    BlockInclusion {
+        hash: String,
+        height: u64,
+        confirmed_txids: Vec<String>,
+    },
+    BlockDisconnected {
+        hash: String,
+    },
+    CoverageChanged {
+        coverage: Coverage,
+    },
+    MetricsUpdated {
+        node_mempool: Option<NodeMempoolAggregate>,
+    },
+}
+
+/// Details-only metadata used to hydrate existing [`HeartbeatMirror`] members
+/// without admitting membership.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TxMetadataHydration {
+    pub txid: String,
+    pub first_seen: Option<u64>,
+    pub fee: Option<u64>,
+    pub vsize: Option<u32>,
+    pub value: Option<u64>,
+    pub flags: u8,
+    pub op_return_text: Option<String>,
+}
+
+/// Result of searching [`HeartbeatMirror`] by full txid or hex prefix.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum MirrorTxMatch {
+    Unconfirmed(CompactTx),
+    Confirmed {
+        txid: String,
+        block_hash: String,
+        block_height: u64,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -706,19 +829,32 @@ impl HeartbeatMirror {
     /// gap, sets `resync_reason`, preserves the last coherent state, and
     /// returns [`ApplyOutcome::ResyncNeeded`].
     pub fn apply_delta(&mut self, delta: HeartbeatDelta) -> ApplyOutcome {
+        self.apply_delta_with_effect(&delta).0
+    }
+
+    /// Apply a single sequenced delta frame and return the effective state
+    /// transition for downstream renderers.
+    ///
+    /// On protocol mismatch, epoch mismatch, uninitialized state, or sequence
+    /// gap, sets `resync_reason`, preserves the last coherent state, and
+    /// returns `(ApplyOutcome::ResyncNeeded(_), None)`.
+    pub fn apply_delta_with_effect(
+        &mut self,
+        delta: &HeartbeatDelta,
+    ) -> (ApplyOutcome, Option<ApplyEffect>) {
         if delta.protocol_version != PROTOCOL_VERSION {
             let reason = format!(
                 "unsupported protocol version: expected {}, got {}",
                 PROTOCOL_VERSION, delta.protocol_version
             );
             self.resync_reason = Some(reason.clone());
-            return ApplyOutcome::ResyncNeeded(reason);
+            return (ApplyOutcome::ResyncNeeded(reason), None);
         }
 
         let Some(current_epoch) = self.epoch.as_deref() else {
             let reason = "no snapshot installed".to_string();
             self.resync_reason = Some(reason.clone());
-            return ApplyOutcome::ResyncNeeded(reason);
+            return (ApplyOutcome::ResyncNeeded(reason), None);
         };
 
         if delta.stream_epoch != current_epoch {
@@ -727,46 +863,56 @@ impl HeartbeatMirror {
                 delta.stream_epoch
             );
             self.resync_reason = Some(reason.clone());
-            return ApplyOutcome::ResyncNeeded(reason);
+            return (ApplyOutcome::ResyncNeeded(reason), None);
         }
 
         if let Some(reason) = &self.resync_reason {
-            return ApplyOutcome::ResyncNeeded(reason.clone());
+            return (ApplyOutcome::ResyncNeeded(reason.clone()), None);
         }
 
         if delta.seq <= self.seq {
-            return ApplyOutcome::DuplicateIgnored;
+            return (ApplyOutcome::DuplicateIgnored, None);
         }
 
         let Some(expected) = self.seq.checked_add(1) else {
             let reason = "sequence number overflow".to_string();
             self.resync_reason = Some(reason.clone());
-            return ApplyOutcome::ResyncNeeded(reason);
+            return (ApplyOutcome::ResyncNeeded(reason), None);
         };
 
         if delta.seq > expected {
             let reason =
                 format!("sequence gap: expected {expected}, got {}", delta.seq);
             self.resync_reason = Some(reason.clone());
-            return ApplyOutcome::ResyncNeeded(reason);
+            return (ApplyOutcome::ResyncNeeded(reason), None);
         }
 
-        match delta.kind {
+        let effect = match &delta.kind {
             DeltaKind::MembershipAdd { txid, first_seen } => {
                 let order = self.tick();
                 // A transaction re-admitted to the mempool is no longer confirmed.
-                self.confirmed.remove(&txid);
-                self.members
-                    .entry(txid.clone())
-                    .or_insert_with(|| MirrorTx {
-                        tx: CompactTx::pending(txid, first_seen),
+                self.confirmed.remove(txid);
+                let mut inserted = false;
+                self.members.entry(txid.clone()).or_insert_with(|| {
+                    inserted = true;
+                    MirrorTx {
+                        tx: CompactTx::pending(txid.clone(), *first_seen),
                         observed_order: order,
-                    });
+                    }
+                });
+                inserted.then(|| ApplyEffect::MembershipAdd {
+                    txid: txid.clone(),
+                    first_seen: *first_seen,
+                })
             }
             DeltaKind::MembershipRemove { txids } => {
+                let mut removed = Vec::new();
                 for txid in txids {
-                    self.members.remove(&txid);
+                    if self.members.remove(txid).is_some() {
+                        removed.push(txid.clone());
+                    }
                 }
+                Some(ApplyEffect::MembershipRemove { txids: removed })
             }
             DeltaKind::TxDetails {
                 txid,
@@ -775,13 +921,28 @@ impl HeartbeatMirror {
                 value,
                 flags,
                 op_return_text,
+                first_seen,
             } => {
-                if let Some(member) = self.members.get_mut(&txid) {
-                    member.tx.fee = Some(fee);
-                    member.tx.vsize = Some(vsize);
-                    member.tx.value = Some(value);
-                    member.tx.flags = flags;
-                    member.tx.op_return_text = op_return_text;
+                if let Some(member) = self.members.get_mut(txid) {
+                    member.tx.fee = Some(*fee);
+                    member.tx.vsize = Some(*vsize);
+                    if let Some(v) = value {
+                        member.tx.value = Some(*v);
+                    }
+                    member.tx.flags |= *flags;
+                    if op_return_text.is_some() {
+                        member.tx.op_return_text = op_return_text.clone();
+                    }
+                    if member.tx.first_seen == 0 {
+                        if let Some(ts) = first_seen.filter(|&t| t > 0) {
+                            member.tx.first_seen = ts;
+                        }
+                    }
+                    Some(ApplyEffect::TxDetails {
+                        tx: member.tx.clone(),
+                    })
+                } else {
+                    None
                 }
             }
             DeltaKind::BlockObserved { hash, observed_at } => {
@@ -789,76 +950,128 @@ impl HeartbeatMirror {
                 self.block_observed_order
                     .entry(hash.clone())
                     .or_insert(order);
-                if !self.pending_blocks.iter().any(|b| b.hash == hash)
-                    && !self.recent_blocks.iter().any(|b| b.hash == hash)
+                if !self.pending_blocks.iter().any(|b| b.hash == *hash)
+                    && !self.recent_blocks.iter().any(|b| b.hash == *hash)
                 {
                     self.pending_blocks.push(PendingBlock {
-                        hash,
-                        observed_at,
+                        hash: hash.clone(),
+                        observed_at: *observed_at,
                         height: None,
                         observed_order: 0,
                     });
                     sort_and_cap_pending_blocks(&mut self.pending_blocks);
                     self.prune_block_observed_orders();
                 }
+                Some(ApplyEffect::BlockObserved {
+                    hash: hash.clone(),
+                    observed_at: *observed_at,
+                })
             }
             DeltaKind::BlockDetails(block) => {
                 self.pending_blocks.retain(|b| b.hash != block.hash);
                 self.recent_blocks.retain(|b| b.hash != block.hash);
-                self.recent_blocks.push(block);
+                self.recent_blocks.push(block.clone());
                 sort_and_cap_recent_blocks(&mut self.recent_blocks);
                 self.prune_block_observed_orders();
+                Some(ApplyEffect::BlockDetails(block.clone()))
             }
             DeltaKind::BlockInclusion {
                 hash,
                 height,
                 txids,
             } => {
-                let Some(cutoff) =
-                    self.block_observed_order.get(&hash).copied()
+                let Some(cutoff) = self.block_observed_order.get(hash).copied()
                 else {
                     self.seq = delta.seq;
-                    return ApplyOutcome::Applied;
+                    return (
+                        ApplyOutcome::Applied,
+                        Some(ApplyEffect::BlockInclusion {
+                            hash: hash.clone(),
+                            height: *height,
+                            confirmed_txids: Vec::new(),
+                        }),
+                    );
                 };
                 if let Some(pending) =
-                    self.pending_blocks.iter_mut().find(|b| b.hash == hash)
+                    self.pending_blocks.iter_mut().find(|b| b.hash == *hash)
                 {
                     if pending.height.is_none() {
-                        pending.height = Some(height);
+                        pending.height = Some(*height);
                     }
                 }
+                let mut confirmed_txids = Vec::new();
                 for txid in txids {
                     let eligible = self
                         .members
-                        .get(&txid)
+                        .get(txid)
                         .is_some_and(|m| m.observed_order <= cutoff);
                     if eligible {
-                        self.members.remove(&txid);
-                        self.record_confirmed(txid, hash.clone(), height);
+                        self.members.remove(txid);
+                        self.record_confirmed(
+                            txid.clone(),
+                            hash.clone(),
+                            *height,
+                        );
+                        confirmed_txids.push(txid.clone());
                     }
                 }
+                Some(ApplyEffect::BlockInclusion {
+                    hash: hash.clone(),
+                    height: *height,
+                    confirmed_txids,
+                })
             }
             DeltaKind::BlockDisconnected { hash } => {
-                self.pending_blocks.retain(|b| b.hash != hash);
-                self.recent_blocks.retain(|b| b.hash != hash);
-                self.block_observed_order.remove(&hash);
-                self.confirmed.retain(|_, entry| entry.block_hash != hash);
+                self.pending_blocks.retain(|b| b.hash != *hash);
+                self.recent_blocks.retain(|b| b.hash != *hash);
+                self.block_observed_order.remove(hash);
+                self.confirmed.retain(|_, entry| entry.block_hash != *hash);
                 if self.confirmed_order.len()
                     > self.confirmed.len().saturating_add(MAX_CONFIRMED_HISTORY)
                 {
                     self.compact_confirmed_order();
                 }
+                Some(ApplyEffect::BlockDisconnected { hash: hash.clone() })
             }
             DeltaKind::CoverageChanged { coverage } => {
-                self.coverage = coverage;
+                self.coverage = coverage.clone();
+                Some(ApplyEffect::CoverageChanged {
+                    coverage: coverage.clone(),
+                })
             }
             DeltaKind::MetricsUpdated { node_mempool } => {
-                self.node_mempool = node_mempool;
+                self.node_mempool = node_mempool.clone();
+                Some(ApplyEffect::MetricsUpdated {
+                    node_mempool: node_mempool.clone(),
+                })
             }
-        }
+        };
 
         self.seq = delta.seq;
-        ApplyOutcome::Applied
+        (ApplyOutcome::Applied, effect)
+    }
+
+    /// Details-only metadata hydration for an existing member.
+    ///
+    /// Never admits membership: returns `false` immediately if `entry.txid` is
+    /// not currently in `self.members`. Returns `true` iff any field changed.
+    pub fn hydrate_member_details(
+        &mut self,
+        entry: &TxMetadataHydration,
+    ) -> bool {
+        let Some(member) = self.members.get_mut(&entry.txid) else {
+            return false;
+        };
+        member.tx.apply_hydration(entry)
+    }
+
+    /// Update the mirror's `(stream_epoch, seq)` revision in place without
+    /// cloning member state (used by server-side bulk metadata hydration).
+    #[cfg(feature = "ssr")]
+    pub(crate) fn reset_revision(&mut self, stream_epoch: String, seq: u64) {
+        self.epoch = Some(stream_epoch);
+        self.seq = seq;
+        self.resync_reason = None;
     }
 
     /// Current `(stream_epoch, seq)` revision once a snapshot is installed.
@@ -976,6 +1189,70 @@ impl HeartbeatMirror {
         }
     }
 
+    /// Search for a transaction by exact txid or hex prefix (>= 8 chars).
+    ///
+    /// Checks exact matches in unconfirmed members first, then confirmed
+    /// history. For prefixes of length >= 8, searches `self.members` in
+    /// O(log n) using its `BTreeMap` order before falling back to a
+    /// deterministic lowest-txid scan of `self.confirmed`.
+    pub fn search_tx(&self, query: &str) -> Option<MirrorTxMatch> {
+        let needle = query.trim().to_ascii_lowercase();
+        if needle.is_empty() || !needle.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return None;
+        }
+
+        if let Some(member) = self.members.get(&needle) {
+            return Some(MirrorTxMatch::Unconfirmed(member.tx.clone()));
+        }
+        if let Some(entry) = self.confirmed.get(&needle) {
+            return Some(MirrorTxMatch::Confirmed {
+                txid: needle,
+                block_hash: entry.block_hash.clone(),
+                block_height: entry.block_height,
+            });
+        }
+
+        if needle.len() < 8 {
+            return None;
+        }
+
+        if let Some((txid, member)) =
+            self.members.range(needle.clone()..).next()
+        {
+            if txid.starts_with(&needle) {
+                return Some(MirrorTxMatch::Unconfirmed(member.tx.clone()));
+            }
+        }
+
+        let mut best: Option<(&String, &ConfirmedEntry)> = None;
+        for (txid, entry) in &self.confirmed {
+            if txid.starts_with(&needle)
+                && best.is_none_or(|(best_txid, _)| txid < best_txid)
+            {
+                best = Some((txid, entry));
+            }
+        }
+        best.map(|(txid, entry)| MirrorTxMatch::Confirmed {
+            txid: txid.clone(),
+            block_hash: entry.block_hash.clone(),
+            block_height: entry.block_height,
+        })
+    }
+
+    /// Return all current members ordered deterministically for backlog
+    /// placement: unknown-time (`first_seen == 0`) first sorted by `txid`,
+    /// followed by known-time (`first_seen > 0`) sorted by `(first_seen, txid)`.
+    pub fn ordered_members(&self) -> Vec<&CompactTx> {
+        let mut out: Vec<&CompactTx> =
+            self.members.values().map(|m| &m.tx).collect();
+        out.sort_by(|a, b| {
+            a.first_seen
+                .cmp(&b.first_seen)
+                .then_with(|| a.txid.cmp(&b.txid))
+        });
+        out
+    }
+
     /// Materialize the observable state for continuous-vs-rejoining equality
     /// assertions.
     pub fn observable_state(&self) -> ObservableState {
@@ -1008,6 +1285,29 @@ impl HeartbeatMirror {
     /// Compare two mirrors on their snapshot-comparable observable state.
     pub fn same_observable_state(&self, other: &Self) -> bool {
         self.observable_state() == other.observable_state()
+    }
+
+    /// Grouped, deterministically sorted recent block confirmations retained
+    /// by the mirror.
+    pub fn recent_confirmations(&self) -> Vec<ConfirmedBlock> {
+        let mut grouped: BTreeMap<(u64, String), Vec<String>> = BTreeMap::new();
+        for (txid, entry) in &self.confirmed {
+            grouped
+                .entry((entry.block_height, entry.block_hash.clone()))
+                .or_default()
+                .push(txid.clone());
+        }
+        grouped
+            .into_iter()
+            .map(|((height, hash), mut txids)| {
+                txids.sort_unstable();
+                ConfirmedBlock {
+                    hash,
+                    height,
+                    txids,
+                }
+            })
+            .collect()
     }
 
     /// Export the mirror's current state as a [`HeartbeatSnapshot`] if
@@ -1060,24 +1360,7 @@ impl HeartbeatMirror {
                 .collect();
             (pending_blocks, transactions)
         };
-        let mut grouped: BTreeMap<(u64, String), Vec<String>> = BTreeMap::new();
-        for (txid, entry) in &self.confirmed {
-            grouped
-                .entry((entry.block_height, entry.block_hash.clone()))
-                .or_default()
-                .push(txid.clone());
-        }
-        let recent_confirmations: Vec<ConfirmedBlock> = grouped
-            .into_iter()
-            .map(|((height, hash), mut txids)| {
-                txids.sort_unstable();
-                ConfirmedBlock {
-                    hash,
-                    height,
-                    txids,
-                }
-            })
-            .collect();
+        let recent_confirmations = self.recent_confirmations();
 
         Some(HeartbeatSnapshot {
             protocol_version: PROTOCOL_VERSION,
@@ -1422,9 +1705,10 @@ mod tests {
                     txid: hex_id(2),
                     fee: 0,
                     vsize: 141,
-                    value: 0,
+                    value: Some(0),
                     flags: TxFlags::CONSOLIDATION,
                     op_return_text: None,
+                    first_seen: None,
                 },
             ),
             delta(
@@ -1658,9 +1942,10 @@ mod tests {
                     txid: tx1.clone(),
                     fee: 1000,
                     vsize: 141,
-                    value: 50_000,
+                    value: Some(50_000),
                     flags: TxFlags::WHALE,
                     op_return_text: Some("ghost".to_string()),
+                    first_seen: None,
                 },
             )),
             ApplyOutcome::Applied
@@ -1715,9 +2000,10 @@ mod tests {
                     txid: tx_unrelated_high_fee.clone(),
                     fee: 9_999_999,
                     vsize: 100,
-                    value: 1_000_000,
+                    value: Some(1_000_000),
                     flags: TxFlags::FEE_OUTLIER,
                     op_return_text: None,
+                    first_seen: None,
                 },
             )),
             ApplyOutcome::Applied
@@ -1746,9 +2032,10 @@ mod tests {
                     txid: tx_before_block.clone(),
                     fee: 500,
                     vsize: 140,
-                    value: 10_000,
+                    value: Some(10_000),
                     flags: TxFlags::NONE,
                     op_return_text: None,
+                    first_seen: None,
                 },
             )),
             ApplyOutcome::Applied
@@ -1942,9 +2229,10 @@ mod tests {
                     txid: tx1.clone(),
                     fee: 1_200,
                     vsize: 141,
-                    value: 50_000,
+                    value: Some(50_000),
                     flags: TxFlags::NONE,
                     op_return_text: None,
+                    first_seen: None,
                 },
             ),
             delta(
@@ -1974,9 +2262,10 @@ mod tests {
                     txid: tx2.clone(),
                     fee: 0,
                     vsize: 200,
-                    value: 0,
+                    value: Some(0),
                     flags: TxFlags::OP_RETURN_MSG,
                     op_return_text: Some("anchored".to_string()),
+                    first_seen: None,
                 },
             ),
             // Mid-stream snapshot cutpoint at seq 5 (with block_1 still pending!).
@@ -2160,9 +2449,10 @@ mod tests {
                     txid: tx1.clone(),
                     fee: 250,
                     vsize: 140,
-                    value: 10_000,
+                    value: Some(10_000),
                     flags,
                     op_return_text: None,
+                    first_seen: None,
                 },
             )),
             ApplyOutcome::Applied
@@ -2555,5 +2845,477 @@ mod tests {
         );
         assert_eq!(mirror.revision(), Some((EPOCH_A, 5)));
         assert!(mirror.has_tx(&tx3));
+    }
+
+    #[test]
+    fn tx_flags_from_notable_type_maps_all_known_variants() {
+        assert_eq!(TxFlags::from_notable_type(Some("whale")), TxFlags::WHALE);
+        assert_eq!(
+            TxFlags::from_notable_type(Some("fee_outlier")),
+            TxFlags::FEE_OUTLIER
+        );
+        assert_eq!(
+            TxFlags::from_notable_type(Some("consolidation")),
+            TxFlags::CONSOLIDATION
+        );
+        assert_eq!(
+            TxFlags::from_notable_type(Some("fan_out")),
+            TxFlags::FAN_OUT
+        );
+        assert_eq!(
+            TxFlags::from_notable_type(Some("large_inscription")),
+            TxFlags::LARGE_INSCRIPTION
+        );
+        assert_eq!(
+            TxFlags::from_notable_type(Some("round_number")),
+            TxFlags::ROUND_NUMBER
+        );
+        assert_eq!(
+            TxFlags::from_notable_type(Some("op_return_msg")),
+            TxFlags::OP_RETURN_MSG
+        );
+        assert_eq!(TxFlags::from_notable_type(Some("unknown")), TxFlags::NONE);
+        assert_eq!(TxFlags::from_notable_type(None), TxFlags::NONE);
+    }
+
+    #[test]
+    fn apply_delta_with_effect_filters_fenced_inclusions_non_members_and_removals(
+    ) {
+        let mut mirror = HeartbeatMirror::default();
+        let tx_before = hex_id(0x01);
+        let tx_after = hex_id(0x02);
+        let tx_ghost = hex_id(0x03);
+        let tx_remove = hex_id(0x04);
+        let block_hash = hex_id(0xb1);
+        let unknown_hash = hex_id(0xb2);
+
+        mirror
+            .install_snapshot(base_snapshot(
+                0,
+                vec![
+                    CompactTx::pending(tx_before.clone(), 100),
+                    CompactTx::pending(tx_remove.clone(), 101),
+                ],
+            ))
+            .expect("install");
+
+        // TxDetails for a non-member is ignored and emits no effect.
+        let (outcome, effect) = mirror.apply_delta_with_effect(&delta(
+            1,
+            DeltaKind::TxDetails {
+                txid: tx_ghost.clone(),
+                fee: 500,
+                vsize: 140,
+                value: Some(10_000),
+                flags: TxFlags::WHALE,
+                op_return_text: Some("ghost".to_string()),
+                first_seen: None,
+            },
+        ));
+        assert_eq!(outcome, ApplyOutcome::Applied);
+        assert_eq!(effect, None);
+
+        // TxDetails for a live member returns the updated CompactTx.
+        let (outcome, effect) = mirror.apply_delta_with_effect(&delta(
+            2,
+            DeltaKind::TxDetails {
+                txid: tx_before.clone(),
+                fee: 750,
+                vsize: 150,
+                value: Some(25_000),
+                flags: TxFlags::ROUND_NUMBER,
+                op_return_text: None,
+                first_seen: None,
+            },
+        ));
+        assert_eq!(outcome, ApplyOutcome::Applied);
+        assert_eq!(
+            effect,
+            Some(ApplyEffect::TxDetails {
+                tx: CompactTx {
+                    txid: tx_before.clone(),
+                    first_seen: 100,
+                    fee: Some(750),
+                    vsize: Some(150),
+                    value: Some(25_000),
+                    flags: TxFlags::ROUND_NUMBER,
+                    op_return_text: None,
+                    observed_order: 0,
+                },
+            })
+        );
+
+        // MembershipRemove emits only txids actually removed from self.members.
+        let (outcome, effect) = mirror.apply_delta_with_effect(&delta(
+            3,
+            DeltaKind::MembershipRemove {
+                txids: vec![tx_ghost.clone(), tx_remove.clone()],
+            },
+        ));
+        assert_eq!(outcome, ApplyOutcome::Applied);
+        assert_eq!(
+            effect,
+            Some(ApplyEffect::MembershipRemove {
+                txids: vec![tx_remove],
+            })
+        );
+
+        // BlockObserved then MembershipAdd creates a post-block tx that must
+        // not be confirmed by BlockInclusion for `block_hash`.
+        let (outcome, effect) = mirror.apply_delta_with_effect(&delta(
+            4,
+            DeltaKind::BlockObserved {
+                hash: block_hash.clone(),
+                observed_at: 200,
+            },
+        ));
+        assert_eq!(outcome, ApplyOutcome::Applied);
+        assert_eq!(
+            effect,
+            Some(ApplyEffect::BlockObserved {
+                hash: block_hash.clone(),
+                observed_at: 200,
+            })
+        );
+
+        let (outcome, effect) = mirror.apply_delta_with_effect(&delta(
+            5,
+            DeltaKind::MembershipAdd {
+                txid: tx_after.clone(),
+                first_seen: 205,
+            },
+        ));
+        assert_eq!(outcome, ApplyOutcome::Applied);
+        assert_eq!(
+            effect,
+            Some(ApplyEffect::MembershipAdd {
+                txid: tx_after.clone(),
+                first_seen: 205,
+            })
+        );
+
+        // BlockInclusion returns ONLY tx_before (passed fence); tx_after and
+        // tx_ghost are excluded.
+        let (outcome, effect) = mirror.apply_delta_with_effect(&delta(
+            6,
+            DeltaKind::BlockInclusion {
+                hash: block_hash.clone(),
+                height: 900_000,
+                txids: vec![tx_before.clone(), tx_after.clone(), tx_ghost],
+            },
+        ));
+        assert_eq!(outcome, ApplyOutcome::Applied);
+        assert_eq!(
+            effect,
+            Some(ApplyEffect::BlockInclusion {
+                hash: block_hash,
+                height: 900_000,
+                confirmed_txids: vec![tx_before],
+            })
+        );
+
+        // Unknown block hash fails closed with empty confirmed_txids.
+        let (outcome, effect) = mirror.apply_delta_with_effect(&delta(
+            7,
+            DeltaKind::BlockInclusion {
+                hash: unknown_hash.clone(),
+                height: 900_001,
+                txids: vec![tx_after],
+            },
+        ));
+        assert_eq!(outcome, ApplyOutcome::Applied);
+        assert_eq!(
+            effect,
+            Some(ApplyEffect::BlockInclusion {
+                hash: unknown_hash,
+                height: 900_001,
+                confirmed_txids: vec![],
+            })
+        );
+
+        // Duplicate delta returns no effect.
+        let (outcome, effect) = mirror.apply_delta_with_effect(&delta(
+            7,
+            DeltaKind::CoverageChanged {
+                coverage: Coverage::Complete,
+            },
+        ));
+        assert_eq!(outcome, ApplyOutcome::DuplicateIgnored);
+        assert_eq!(effect, None);
+    }
+
+    #[test]
+    fn hydrate_member_details_is_details_only_and_preserves_known_fields() {
+        let mut mirror = HeartbeatMirror::default();
+        let tx_known = hex_id(0x10);
+        let tx_unknown = hex_id(0x20);
+
+        mirror
+            .install_snapshot(base_snapshot(
+                0,
+                vec![CompactTx::pending(tx_known.clone(), 0)],
+            ))
+            .expect("install");
+
+        // Never admits unknown txids.
+        assert!(!mirror.hydrate_member_details(&TxMetadataHydration {
+            txid: tx_unknown.clone(),
+            first_seen: Some(1_700_000_000),
+            fee: Some(500),
+            vsize: Some(141),
+            value: Some(50_000),
+            flags: TxFlags::WHALE,
+            op_return_text: Some("ghost".to_string()),
+        }));
+        assert!(!mirror.has_tx(&tx_unknown));
+
+        // Hydrate fee, vsize, value, flags, op_return_text, and fill first_seen == 0.
+        assert!(mirror.hydrate_member_details(&TxMetadataHydration {
+            txid: tx_known.clone(),
+            first_seen: Some(1_700_000_500),
+            fee: Some(1_200),
+            vsize: Some(200),
+            value: Some(100_000),
+            flags: TxFlags::WHALE,
+            op_return_text: Some("hello".to_string()),
+        }));
+
+        let tx = mirror.get_tx(&tx_known).expect("member exists");
+        assert_eq!(tx.first_seen, 1_700_000_500);
+        assert_eq!(tx.fee, Some(1_200));
+        assert_eq!(tx.vsize, Some(200));
+        assert_eq!(tx.value, Some(100_000));
+        assert_eq!(tx.flags, TxFlags::WHALE);
+        assert_eq!(tx.op_return_text.as_deref(), Some("hello"));
+
+        // Re-hydrating with None value/op_return and later first_seen is a no-op
+        // and never overwrites known Some fields with None.
+        assert!(!mirror.hydrate_member_details(&TxMetadataHydration {
+            txid: tx_known.clone(),
+            first_seen: Some(1_700_000_999),
+            fee: Some(1_200),
+            vsize: Some(200),
+            value: None,
+            flags: TxFlags::NONE,
+            op_return_text: None,
+        }));
+        let tx = mirror.get_tx(&tx_known).expect("member exists");
+        assert_eq!(tx.first_seen, 1_700_000_500);
+        assert_eq!(tx.value, Some(100_000));
+        assert_eq!(tx.op_return_text.as_deref(), Some("hello"));
+
+        // Earlier first_seen must NEVER pull a known first_seen > 0 earlier,
+        // while additional flag bits still merge cleanly.
+        assert!(!mirror.hydrate_member_details(&TxMetadataHydration {
+            txid: tx_known.clone(),
+            first_seen: Some(1_700_000_100),
+            fee: None,
+            vsize: None,
+            value: None,
+            flags: TxFlags::NONE,
+            op_return_text: None,
+        }));
+        assert!(mirror.hydrate_member_details(&TxMetadataHydration {
+            txid: tx_known.clone(),
+            first_seen: Some(1_700_000_100),
+            fee: None,
+            vsize: None,
+            value: None,
+            flags: TxFlags::OP_RETURN_MSG,
+            op_return_text: None,
+        }));
+        let tx = mirror.get_tx(&tx_known).expect("member exists");
+        assert_eq!(tx.first_seen, 1_700_000_500);
+        assert_eq!(tx.flags, TxFlags::WHALE | TxFlags::OP_RETURN_MSG);
+        assert_eq!(tx.fee, Some(1_200));
+        assert_eq!(tx.vsize, Some(200));
+        assert_eq!(tx.value, Some(100_000));
+    }
+
+    #[test]
+    fn tx_details_delta_supports_optional_value_first_seen_and_merges_flags() {
+        let mut mirror = HeartbeatMirror::default();
+        let tx1 = hex_id(0x31);
+        mirror
+            .install_snapshot(base_snapshot(
+                0,
+                vec![CompactTx::pending(tx1.clone(), 0)],
+            ))
+            .expect("install");
+
+        // Partial TxDetails without value populates fee, vsize, and first_seen (from 0).
+        let (outcome, effect) = mirror.apply_delta_with_effect(&delta(
+            1,
+            DeltaKind::TxDetails {
+                txid: tx1.clone(),
+                fee: 500,
+                vsize: 140,
+                value: None,
+                flags: TxFlags::WHALE,
+                op_return_text: Some("first".to_string()),
+                first_seen: Some(1_700_000_500),
+            },
+        ));
+        assert_eq!(outcome, ApplyOutcome::Applied);
+        assert!(effect.is_some());
+        let tx = mirror.get_tx(&tx1).unwrap();
+        assert_eq!(tx.fee, Some(500));
+        assert_eq!(tx.vsize, Some(140));
+        assert_eq!(tx.value, None);
+        assert_eq!(tx.flags, TxFlags::WHALE);
+        assert_eq!(tx.op_return_text.as_deref(), Some("first"));
+        assert_eq!(tx.first_seen, 1_700_000_500);
+
+        // Follow-up TxDetails with value: Some, flags, op_return_text: None, and earlier
+        // first_seen preserves existing op_return_text and first_seen > 0 while merging flags.
+        let (outcome, _) = mirror.apply_delta_with_effect(&delta(
+            2,
+            DeltaKind::TxDetails {
+                txid: tx1.clone(),
+                fee: 500,
+                vsize: 140,
+                value: Some(250_000),
+                flags: TxFlags::OP_RETURN_MSG,
+                op_return_text: None,
+                first_seen: Some(1_700_000_100),
+            },
+        ));
+        assert_eq!(outcome, ApplyOutcome::Applied);
+        let tx = mirror.get_tx(&tx1).unwrap();
+        assert_eq!(tx.value, Some(250_000));
+        assert_eq!(tx.flags, TxFlags::WHALE | TxFlags::OP_RETURN_MSG);
+        assert_eq!(tx.op_return_text.as_deref(), Some("first"));
+        assert_eq!(tx.first_seen, 1_700_000_500);
+
+        // Follow-up TxDetails with value: None preserves previously known value.
+        let (outcome, _) = mirror.apply_delta_with_effect(&delta(
+            3,
+            DeltaKind::TxDetails {
+                txid: tx1.clone(),
+                fee: 500,
+                vsize: 140,
+                value: None,
+                flags: TxFlags::NONE,
+                op_return_text: None,
+                first_seen: None,
+            },
+        ));
+        assert_eq!(outcome, ApplyOutcome::Applied);
+        assert_eq!(mirror.get_tx(&tx1).unwrap().value, Some(250_000));
+    }
+
+    #[test]
+    fn search_tx_supports_exact_prefix_case_and_confirmed_matches() {
+        let mut mirror = HeartbeatMirror::default();
+        let unconfirmed_a = format!("abcd1234{}", "1".repeat(56));
+        let unconfirmed_b = format!("abcd1234{}", "2".repeat(56));
+        let confirmed_lo = format!("deadbeef{}", "0".repeat(56));
+        let confirmed_hi = format!("deadbeef{}", "f".repeat(56));
+        let block_hash = hex_id(0xaa);
+
+        mirror
+            .install_snapshot(base_snapshot(
+                0,
+                vec![
+                    CompactTx::pending(unconfirmed_a.clone(), 100),
+                    CompactTx::pending(unconfirmed_b.clone(), 101),
+                    CompactTx::pending(confirmed_lo.clone(), 102),
+                    CompactTx::pending(confirmed_hi.clone(), 103),
+                ],
+            ))
+            .expect("install");
+
+        mirror.apply_delta(delta(
+            1,
+            DeltaKind::BlockObserved {
+                hash: block_hash.clone(),
+                observed_at: 200,
+            },
+        ));
+        mirror.apply_delta(delta(
+            2,
+            DeltaKind::BlockInclusion {
+                hash: block_hash.clone(),
+                height: 900_123,
+                txids: vec![confirmed_hi.clone(), confirmed_lo.clone()],
+            },
+        ));
+
+        // Invalid queries: empty, whitespace, non-hex, short prefix (< 8 chars).
+        assert_eq!(mirror.search_tx(""), None);
+        assert_eq!(mirror.search_tx("   "), None);
+        assert_eq!(mirror.search_tx("abcd123g"), None);
+        assert_eq!(mirror.search_tx("abcd123"), None);
+        assert_eq!(mirror.search_tx("deadbee"), None);
+
+        // Exact match with trimming and uppercase normalization.
+        assert!(matches!(
+            mirror.search_tx(&format!("  {}  ", unconfirmed_b.to_ascii_uppercase())),
+            Some(MirrorTxMatch::Unconfirmed(tx)) if tx.txid == unconfirmed_b
+        ));
+        assert_eq!(
+            mirror.search_tx(&confirmed_hi.to_ascii_uppercase()),
+            Some(MirrorTxMatch::Confirmed {
+                txid: confirmed_hi,
+                block_hash: block_hash.clone(),
+                block_height: 900_123,
+            })
+        );
+
+        // Prefix match (>= 8 chars) picks lowest txid deterministically.
+        assert!(matches!(
+            mirror.search_tx("ABCD1234"),
+            Some(MirrorTxMatch::Unconfirmed(tx)) if tx.txid == unconfirmed_a
+        ));
+        assert_eq!(
+            mirror.search_tx("deadbeef"),
+            Some(MirrorTxMatch::Confirmed {
+                txid: confirmed_lo,
+                block_hash,
+                block_height: 900_123,
+            })
+        );
+
+        // Non-matching prefix returns None.
+        assert_eq!(mirror.search_tx("cafebabe"), None);
+    }
+
+    #[test]
+    fn ordered_members_puts_unknown_time_first_then_by_first_seen_and_txid() {
+        let mut mirror = HeartbeatMirror::default();
+        let tx_u_b = hex_id(0x0b);
+        let tx_u_a = hex_id(0x0a);
+        let tx_t1_b = hex_id(0x1b);
+        let tx_t1_a = hex_id(0x1a);
+        let tx_t2 = hex_id(0x20);
+
+        mirror
+            .install_snapshot(base_snapshot(
+                0,
+                vec![
+                    CompactTx::pending(tx_t2.clone(), 200),
+                    CompactTx::pending(tx_u_b.clone(), 0),
+                    CompactTx::pending(tx_t1_b.clone(), 100),
+                    CompactTx::pending(tx_u_a.clone(), 0),
+                    CompactTx::pending(tx_t1_a.clone(), 100),
+                ],
+            ))
+            .expect("install");
+
+        let ordered: Vec<&str> = mirror
+            .ordered_members()
+            .into_iter()
+            .map(|tx| tx.txid.as_str())
+            .collect();
+        assert_eq!(
+            ordered,
+            vec![
+                tx_u_a.as_str(),
+                tx_u_b.as_str(),
+                tx_t1_a.as_str(),
+                tx_t1_b.as_str(),
+                tx_t2.as_str(),
+            ]
+        );
     }
 }

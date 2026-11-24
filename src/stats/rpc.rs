@@ -445,20 +445,31 @@ struct RpcResponse<T> {
     error: Option<Value>,
 }
 
-/// Minimal subset of a `getrawmempool true` entry, only the two fields the
-/// heartbeat backfill needs. serde skips the ~dozen other fields (wtxid, weight,
-/// time, ancestor/descendant accounting, depends, spentby, flags) without
-/// allocating them, so deserializing into this via [`BitcoinRpc::call_typed`]
-/// costs a fraction of the full Value tree.
+/// Minimal subset of a `getrawmempool true` entry: only the fields the
+/// heartbeat seed/backfill needs (`vsize`, `fees.base`, `time`). serde skips
+/// the remaining fields (wtxid, weight, ancestor/descendant accounting,
+/// depends, spentby, flags) without allocating them, so deserializing into
+/// this via [`BitcoinRpc::call_typed`] costs a fraction of the full Value tree.
 #[derive(serde::Deserialize)]
 struct RawMempoolEntry {
     vsize: u32,
     fees: RawMempoolFees,
+    #[serde(default)]
+    time: u64,
 }
 
 #[derive(serde::Deserialize)]
 struct RawMempoolFees {
     base: f64,
+}
+
+/// Typed entry returned by [`BitcoinRpc::get_raw_mempool_verbose`].
+#[derive(Debug, Clone)]
+pub struct VerboseMempoolEntry {
+    pub txid: String,
+    pub fee: u64,
+    pub vsize: u32,
+    pub time: u64,
 }
 
 /// Core captures both fields under the mempool lock. `mempool_sequence` is
@@ -2309,23 +2320,28 @@ impl BitcoinRpc {
         Ok(())
     }
 
-    /// Get all mempool entries with fee/vsize data (verbose=true).
-    /// Used on startup to seed the mempool_txs table for full coverage.
+    /// Get all mempool entries with fee/vsize/time data (verbose=true).
+    /// Used on startup to seed the mempool_txs table and hydrate HeartbeatStore.
     pub async fn get_raw_mempool_verbose(
         &self,
-    ) -> Result<Vec<(String, u64, u32)>, StatsError> {
+    ) -> Result<Vec<VerboseMempoolEntry>, StatsError> {
         // Deserialize straight into the typed subset (RawMempoolEntry) via
         // call_typed rather than a serde_json::Value: the verbose response is
         // tens of MB of mostly-discarded fields, and a full Value tree of that
         // is a ~50-90MB transient allocation spike on the memory-tight droplet.
-        // This keeps only vsize + fees.base.
+        // This keeps only vsize + fees.base + time.
         let map: std::collections::HashMap<String, RawMempoolEntry> =
             self.call_typed("getrawmempool", &[json!(true)]).await?;
         let mut entries = Vec::with_capacity(map.len());
         for (txid, entry) in map {
             let fee_sats = (entry.fees.base * 100_000_000.0).round() as u64;
             if entry.vsize > 0 {
-                entries.push((txid, fee_sats, entry.vsize));
+                entries.push(VerboseMempoolEntry {
+                    txid,
+                    fee: fee_sats,
+                    vsize: entry.vsize,
+                    time: entry.time,
+                });
             }
         }
         Ok(entries)
