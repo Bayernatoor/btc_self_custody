@@ -718,6 +718,9 @@ pub struct LiveStats {
     pub mempool: LiveMempool,
     /// Estimated fee rate (sat/vB) to confirm in the next block (estimatesmartfee target=1).
     pub next_block_fee: f64,
+    /// Estimated fee rate (sat/vB) to confirm within ~1 hour (estimatesmartfee target=6).
+    #[serde(default)]
+    pub hour_fee: f64,
     pub network: LiveNetwork,
     /// True when one or more underlying RPC calls failed and the cache fell
     /// back to its last known good value. Clients can render a "data may be outdated"

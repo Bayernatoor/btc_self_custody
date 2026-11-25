@@ -1875,6 +1875,7 @@ mod tests {
                 mempoolminfee: 0.00001,
             },
             next_block_fee: 2.0,
+            hour_fee: 1.5,
             network: LiveNetwork {
                 price_usd: 100_000.0,
                 sats_per_dollar: 1_000,

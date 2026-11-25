@@ -352,6 +352,16 @@ async fn block_detail_returns_inserted_block() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["height"], 850_000);
     assert_eq!(body["hash"], "a1b2c3d4");
+    assert!(body.get("landmarks").is_none());
+
+    // Landmark block (First Halving #210,000) carries curated Archives context.
+    seed_block(&app, 210_000, "000000000000048b", 1_354_116_278);
+    let (status, body) = app.get("/blocks/210000").await;
+    assert_eq!(status, StatusCode::OK);
+    let landmarks = body["landmarks"].as_array().expect("landmarks array");
+    assert_eq!(landmarks.len(), 1);
+    assert_eq!(landmarks[0]["title"], "First Halving");
+    assert_eq!(landmarks[0]["category"], "Milestones");
 }
 
 #[tokio::test]
@@ -1345,4 +1355,323 @@ async fn heartbeat_v2_prefers_last_event_id_over_query_params() {
     let d5: HeartbeatDelta =
         serde_json::from_str(&second.data).expect("parse delta 5");
     assert_eq!(d5.seq, 5);
+}
+
+// =========================================================================
+// Heartbeat Phase 4: /heartbeat/block/{query} historical block spike windows
+// =========================================================================
+
+#[tokio::test]
+async fn heartbeat_block_window_lookup_by_height_prefixes_and_hash() {
+    let app = TestApp::new();
+    // Seed blocks 40..=65 so block 50 has a full radius=5 window [45..=55]
+    // plus parent 44 with a distinctive timestamp gap.
+    for h in 40..=65u64 {
+        let ts = if h == 44 {
+            1_700_000_000 + 44 * 600 - 123
+        } else {
+            1_700_000_000 + h * 600
+        };
+        seed_block(&app, h, &test_hex(h), ts);
+    }
+
+    // 1. Lookup by integer height with explicit radius=5 -> 11 blocks [45..=55].
+    //    max_returned=55 <= tip_height(65) - 6 = 59 -> deep history Cache-Control.
+    let resp = app
+        .send(
+            Request::builder()
+                .uri("/heartbeat/block/50?radius=5")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert_eq!(
+        resp.headers()
+            .get(axum::http::header::CACHE_CONTROL)
+            .and_then(|v| v.to_str().ok()),
+        Some("public, max-age=3600")
+    );
+    let raw = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&raw).unwrap();
+    assert_eq!(body["target_height"], 50);
+    assert_eq!(body["target_hash"], test_hex(50));
+    assert_eq!(body["tip_height"], 65);
+    let blocks = body["blocks"].as_array().expect("blocks array");
+    assert_eq!(blocks.len(), 11);
+    assert_eq!(blocks[0]["height"], 45);
+    assert_eq!(blocks[10]["height"], 55);
+    // Block 45 must use parent block 44's timestamp: (45*600) - (44*600 - 123) = 723.
+    assert_eq!(blocks[0]["inter_block_seconds"], 723);
+    assert_eq!(blocks[1]["inter_block_seconds"], 600);
+
+    // Near-tip window (block 63, max_returned=65 > tip_height(65) - 6) -> Cache-Control: no-store.
+    let near_tip_resp = app
+        .send(
+            Request::builder()
+                .uri("/heartbeat/block/63?radius=5")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+    assert_eq!(near_tip_resp.status(), StatusCode::OK);
+    assert_eq!(
+        near_tip_resp
+            .headers()
+            .get(axum::http::header::CACHE_CONTROL)
+            .and_then(|v| v.to_str().ok()),
+        Some("no-store")
+    );
+
+    // 2. Lookup by `#50` (URL-encoded `%2350`), `block:50`, `BLOCK:50`, and comma-formatted height.
+    for uri in [
+        "/heartbeat/block/%2350?radius=5",
+        "/heartbeat/block/block:50?radius=5",
+        "/heartbeat/block/BLOCK:50?radius=5",
+    ] {
+        let (status, body) = app.get(uri).await;
+        assert_eq!(status, StatusCode::OK, "expected 200 for {uri}");
+        assert_eq!(body["target_height"], 50);
+        assert_eq!(body["target_hash"], test_hex(50));
+        assert_eq!(body["blocks"].as_array().unwrap().len(), 11);
+    }
+
+    // Comma-formatted decimal height (e.g. 1,000).
+    seed_block(&app, 1_000, &test_hex(1_000), 1_700_600_000);
+    let (status, body) = app.get("/heartbeat/block/1,000?radius=5").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["target_height"], 1_000);
+    assert_eq!(body["target_hash"], test_hex(1_000));
+    assert_eq!(body["tip_height"], 1_000);
+
+    // 3. Lookup by mixed-case 64-hex hash.
+    let hash_50_mixed = {
+        let h = test_hex(50);
+        format!("{}{}", h[..32].to_ascii_uppercase(), &h[32..])
+    };
+    let (status, body) = app
+        .get(&format!("/heartbeat/block/{hash_50_mixed}?radius=5"))
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["target_height"], 50);
+    assert_eq!(body["target_hash"], test_hex(50));
+    assert_eq!(body["blocks"].as_array().unwrap().len(), 11);
+
+    // Radius clamping: radius=1 clamps up to 5 (11 blocks centered on 50).
+    let (status, body) = app.get("/heartbeat/block/50?radius=1").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["blocks"].as_array().unwrap().len(), 11);
+}
+
+#[tokio::test]
+async fn heartbeat_block_window_genesis_zero_and_negative_mtp_deltas() {
+    let app = TestApp::new();
+    seed_block(&app, 0, &test_hex(0), 1_231_006_505);
+    seed_block(&app, 1, &test_hex(1), 1_231_469_665);
+    seed_block(&app, 2, &test_hex(2), 1_231_469_665); // 0-second delta
+    seed_block(&app, 3, &test_hex(3), 1_231_469_650); // -15s MTP delta
+    seed_block(&app, 4, &test_hex(4), 1_231_470_000); // +350s delta
+
+    // Genesis block 0 -> inter_block_seconds is JSON null (never 600).
+    let (status, body) = app.get("/heartbeat/block/0?radius=5").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["target_height"], 0);
+    assert_eq!(body["target_hash"], test_hex(0));
+    assert_eq!(body["tip_height"], 4);
+
+    let blocks = body["blocks"].as_array().expect("blocks array");
+    assert_eq!(blocks.len(), 5);
+    assert!(
+        blocks[0]["inter_block_seconds"].is_null(),
+        "genesis inter_block_seconds must be null, got {:?}",
+        blocks[0]["inter_block_seconds"]
+    );
+    assert_eq!(
+        blocks[1]["inter_block_seconds"],
+        1_231_469_665 - 1_231_006_505
+    );
+    assert_eq!(blocks[2]["inter_block_seconds"], 0);
+    assert_eq!(blocks[3]["inter_block_seconds"], -15);
+    assert_eq!(blocks[4]["inter_block_seconds"], 350);
+}
+
+#[tokio::test]
+async fn heartbeat_block_window_not_found_and_malformed_queries() {
+    let app = TestApp::new();
+    seed_block(&app, 10, &test_hex(10), 1_700_000_000);
+
+    // Missing height -> 404.
+    let (status, body) = app.get("/heartbeat/block/999999").await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(body["error"], "Block not found");
+
+    // Missing 64-hex hash -> 404.
+    let missing_hash = test_hex(999_999);
+    let (status, body) =
+        app.get(&format!("/heartbeat/block/{missing_hash}")).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(body["error"], "Block not found");
+
+    // Malformed queries (including multi-byte UTF-8 around byte offset 6 and
+    // invalid comma grouping) -> 400, no panic.
+    for bad in [
+        "not-a-block",
+        "ab%C3%A9cd",
+        "a%C3%A9%C3%A9%C3%A9",
+        "12345678901", // 11 digits (> 10 max)
+        "8,4,0000",
+        ",840,000",
+        "840,000,",
+        "0,000",
+        "1234,567",
+        "zzzz",
+    ] {
+        let (status, body) = app.get(&format!("/heartbeat/block/{bad}")).await;
+        assert_eq!(
+            status,
+            StatusCode::BAD_REQUEST,
+            "expected 400 for malformed query {bad:?}"
+        );
+        assert_eq!(
+            body["error"],
+            "Expected a block height or 64-character hex block hash"
+        );
+    }
+}
+
+#[tokio::test]
+async fn heartbeat_block_range_returns_parent_derived_deltas_and_validates_bounds(
+) {
+    let app = TestApp::new();
+    // Seed genesis + 1..=5 with 0s and negative MTP deltas, plus 39..=60 with
+    // a distinctive timestamp offset on parent block 39.
+    seed_block(&app, 0, &test_hex(0), 1_231_006_505);
+    seed_block(&app, 1, &test_hex(1), 1_231_469_665);
+    seed_block(&app, 2, &test_hex(2), 1_231_469_665); // 0s delta
+    seed_block(&app, 3, &test_hex(3), 1_231_469_650); // -15s MTP delta
+    seed_block(&app, 4, &test_hex(4), 1_231_470_000); // +350s delta
+    seed_block(&app, 5, &test_hex(5), 1_231_470_600); // +600s delta
+
+    for h in 39..=60u64 {
+        let ts = if h == 39 {
+            1_700_000_000 + 39 * 600 - 111
+        } else {
+            1_700_000_000 + h * 600
+        };
+        seed_block(&app, h, &test_hex(h), ts);
+    }
+
+    // 1. Near-tip range 40..=55 (max_returned=55 > tip_height(60) - 6 = 54) ->
+    //    200, 16 blocks, exact parent-derived delta on block 40, tip_height
+    //    populated, and Cache-Control: no-store.
+    let resp = app
+        .send(
+            Request::builder()
+                .uri("/heartbeat/blocks?from=40&to=55")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert_eq!(
+        resp.headers()
+            .get(axum::http::header::CACHE_CONTROL)
+            .and_then(|v| v.to_str().ok()),
+        Some("no-store")
+    );
+    let raw = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&raw).unwrap();
+    assert_eq!(body["from_height"], 40);
+    assert_eq!(body["to_height"], 55);
+    assert_eq!(body["tip_height"], 60);
+    let blocks = body["blocks"].as_array().expect("blocks array");
+    assert_eq!(blocks.len(), 16);
+    assert_eq!(blocks[0]["height"], 40);
+    assert_eq!(blocks[15]["height"], 55);
+    // Block 40 uses parent 39's timestamp: (40*600) - (39*600 - 111) = 711.
+    assert_eq!(blocks[0]["inter_block_seconds"], 711);
+    assert_eq!(blocks[1]["inter_block_seconds"], 600);
+
+    // 1b. Deep-history range 40..=54 (max_returned=54 <= tip_height(60) - 6) ->
+    //     Cache-Control: public, max-age=3600.
+    let deep_resp = app
+        .send(
+            Request::builder()
+                .uri("/heartbeat/blocks?from=40&to=54")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+    assert_eq!(deep_resp.status(), StatusCode::OK);
+    assert_eq!(
+        deep_resp
+            .headers()
+            .get(axum::http::header::CACHE_CONTROL)
+            .and_then(|v| v.to_str().ok()),
+        Some("public, max-age=3600")
+    );
+
+    // 2. Genesis range 0..=5 -> 200, genesis inter_block_seconds is null.
+    let (status, body) = app.get("/heartbeat/blocks?from=0&to=5").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["from_height"], 0);
+    assert_eq!(body["to_height"], 5);
+    assert_eq!(body["tip_height"], 60);
+    let blocks = body["blocks"].as_array().expect("blocks array");
+    assert_eq!(blocks.len(), 6);
+    assert_eq!(blocks[0]["height"], 0);
+    assert!(
+        blocks[0]["inter_block_seconds"].is_null(),
+        "genesis inter_block_seconds must be null, got {:?}",
+        blocks[0]["inter_block_seconds"]
+    );
+    assert_eq!(
+        blocks[1]["inter_block_seconds"],
+        1_231_469_665 - 1_231_006_505
+    );
+    assert_eq!(blocks[2]["inter_block_seconds"], 0);
+    assert_eq!(blocks[3]["inter_block_seconds"], -15);
+
+    // 3. Reversed range -> 400.
+    let (status, body) = app.get("/heartbeat/blocks?from=60&to=50").await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(body["error"].is_string());
+
+    // 4. Over-cap range (0..=500 is 501 blocks) -> 400; 0..=499 (500 blocks) -> 200.
+    let (status, body) = app.get("/heartbeat/blocks?from=0&to=500").await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(body["error"].is_string());
+
+    let (status, _body) = app.get("/heartbeat/blocks?from=0&to=499").await;
+    assert_eq!(status, StatusCode::OK);
+
+    // 5. Above tip, valid range -> 200, empty blocks array, Cache-Control: no-store.
+    let empty_resp = app
+        .send(
+            Request::builder()
+                .uri("/heartbeat/blocks?from=900000&to=900010")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+    assert_eq!(empty_resp.status(), StatusCode::OK);
+    assert_eq!(
+        empty_resp
+            .headers()
+            .get(axum::http::header::CACHE_CONTROL)
+            .and_then(|v| v.to_str().ok()),
+        Some("no-store")
+    );
+    let raw = axum::body::to_bytes(empty_resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&raw).unwrap();
+    assert_eq!(body["from_height"], 900_000);
+    assert_eq!(body["to_height"], 900_010);
+    assert_eq!(body["tip_height"], 60);
+    assert_eq!(body["blocks"].as_array().unwrap().len(), 0);
 }

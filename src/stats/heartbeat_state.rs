@@ -192,6 +192,26 @@ impl HeartbeatStore {
         self.read_inner().initialized
     }
 
+    /// True when at least one pending block was observed within `max_wait_secs`
+    /// and has not yet received its `BlockInclusion` delta (`height.is_none()`).
+    ///
+    /// Used by the shadow sequence task to avoid running a `getrawmempool`
+    /// checkpoint ahead of an in-flight `getblock_txids` call, which would
+    /// otherwise strip mined transactions via `checkpoint_reset` before
+    /// `apply_block_inclusion` can record their confirmations and animate their
+    /// absorption into the block spike.
+    pub fn has_pending_inclusion(
+        &self,
+        now_secs: u64,
+        max_wait_secs: u64,
+    ) -> bool {
+        let inner = self.read_inner();
+        inner.mirror.pending_blocks().iter().any(|b| {
+            b.height.is_none()
+                && now_secs.saturating_sub(b.observed_at) < max_wait_secs
+        })
+    }
+
     /// Look up a single transaction's status against current mempool membership
     /// and retained recent confirmations.
     pub fn lookup_tx(&self, txid: &str) -> TxLookupStatus {
@@ -746,6 +766,42 @@ impl HeartbeatStore {
                 },
             );
         }
+    }
+
+    /// Return up to `max_count` mempool member txids that are still missing
+    /// `fee`/`vsize` details and have been waiting at least `min_age_secs`
+    /// (giving the normal ZMQ `rawtx` enrichment path time to arrive first).
+    ///
+    /// Txids present in `exclude` (for example entries currently backing off
+    /// after an RPC error) are skipped *before* applying `max_count` so a
+    /// handful of unresolvable txids can never starve other pending members.
+    pub fn unenriched_txids(
+        &self,
+        max_count: usize,
+        min_age_secs: u64,
+        now_secs: u64,
+        exclude: &HashSet<String>,
+    ) -> Vec<String> {
+        if max_count == 0 {
+            return Vec::new();
+        }
+        let inner = self.read_inner();
+        if !inner.initialized || inner.mirror.pending_details_count() == 0 {
+            return Vec::new();
+        }
+        inner
+            .mirror
+            .members()
+            .filter(|(txid, tx)| {
+                !exclude.contains(*txid)
+                    && (tx.fee.is_none() || tx.vsize.is_none())
+                    && (tx.first_seen == 0
+                        || now_secs.saturating_sub(tx.first_seen)
+                            >= min_age_secs)
+            })
+            .take(max_count)
+            .map(|(txid, _)| txid.to_string())
+            .collect()
     }
 
     /// Details-only bulk metadata hydration for existing mempool members
@@ -1653,5 +1709,93 @@ mod tests {
             }
             other => panic!("expected tx_sqlite, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn unenriched_txids_respects_age_and_resolves_zero_fee_truc_tx() {
+        let store = HeartbeatStore::new();
+        let tx_old = hex_id(0x41);
+        let tx_fresh = hex_id(0x42);
+        let tx_done = hex_id(0x43);
+        let empty = HashSet::new();
+
+        store.install_checkpoint(&[&tx_old, &tx_done], true, 1_700_000_000);
+        store.observe_add(tx_fresh.clone(), 1_700_000_098);
+        store.enrich_tx(tx_done.clone(), 500, 140, 10_000, 0, None);
+
+        // At now = 1_700_000_100, min_age_secs = 5: tx_old (first_seen=0) is
+        // eligible, tx_fresh (age 2s) is too new, tx_done already has details.
+        let pending = store.unenriched_txids(32, 5, 1_700_000_100, &empty);
+        assert_eq!(pending, vec![tx_old.clone()]);
+
+        // Hydrating a genuine 0-sat TRUC/package tx resolves it via incremental
+        // delta and removes it from unenriched_txids without epoch rotation.
+        let (epoch_before, _) = store.current_revision();
+        let updated = store.hydrate_details(&[TxMetadataHydration {
+            txid: tx_old.clone(),
+            fee: Some(0),
+            vsize: Some(139),
+            value: None,
+            flags: 0,
+            op_return_text: None,
+            first_seen: None,
+        }]);
+        assert_eq!(updated, 1);
+        assert_eq!(store.current_revision().0, epoch_before);
+        assert!(store
+            .unenriched_txids(32, 5, 1_700_000_100, &empty)
+            .is_empty());
+
+        // Once tx_fresh ages past 5s, it becomes eligible.
+        assert_eq!(
+            store.unenriched_txids(32, 5, 1_700_000_105, &empty),
+            vec![tx_fresh]
+        );
+    }
+
+    #[test]
+    fn unenriched_txids_excludes_backing_off_entries_before_limit() {
+        let store = HeartbeatStore::new();
+        let mut backing_off = HashSet::new();
+        let mut checkpoint_ids = Vec::new();
+        for i in 0..70u64 {
+            let id = hex_id(i);
+            if i < 66 {
+                backing_off.insert(id.clone());
+            }
+            checkpoint_ids.push(id);
+        }
+        let refs: Vec<&String> = checkpoint_ids.iter().collect();
+        store.install_checkpoint(&refs, true, 1_700_000_000);
+
+        // Even though 66 unenriched txids exceed max_count=32, excluding them
+        // before `.take(32)` ensures all 4 remaining eligible txids are returned.
+        let mut eligible =
+            store.unenriched_txids(32, 5, 1_700_000_100, &backing_off);
+        eligible.sort();
+        let mut expected: Vec<String> = (66..70u64).map(hex_id).collect();
+        expected.sort();
+        assert_eq!(eligible, expected);
+    }
+
+    #[test]
+    fn has_pending_inclusion_tracks_unresolved_blocks_with_timeout() {
+        let store = HeartbeatStore::new();
+        let tx1 = hex_id(1);
+        store.install_checkpoint(&[&tx1], true, 1_700_000_000);
+
+        assert!(!store.has_pending_inclusion(1_700_000_005, 90));
+
+        let block_hash = hex_id(99);
+        store.observe_block(block_hash.clone(), 1_700_000_010);
+        // Freshly observed block without BlockInclusion blocks premature checkpoint.
+        assert!(store.has_pending_inclusion(1_700_000_010, 90));
+        assert!(store.has_pending_inclusion(1_700_000_099, 90));
+        // Past the 90s fallback ceiling, checkpoints are allowed again.
+        assert!(!store.has_pending_inclusion(1_700_000_100, 90));
+
+        // Once BlockInclusion arrives, height is populated and the hold clears immediately.
+        store.apply_block_inclusion(block_hash, 900_000, vec![tx1]);
+        assert!(!store.has_pending_inclusion(1_700_000_020, 90));
     }
 }

@@ -31,7 +31,7 @@ type CheckpointResult =
     (CheckpointTicket, Result<MembershipCheckpoint, StatsError>);
 type InclusionResult = (
     Arc<BlockJob>,
-    BlockTicket,
+    Option<BlockTicket>,
     Result<Arc<BlockTxids>, StatsError>,
 );
 
@@ -187,10 +187,8 @@ async fn subscribe(
                             match action {
                                 ShadowAction::Connect(hash) => {
                                     tracing::info!(source = "sequence", stage = "connect", %hash, "heartbeat_block");
-                                    if let (Some(job), Some(ticket)) = (
-                                        observe_block(state, &hash, "sequence"),
-                                        view.block_ticket(&hash),
-                                    ) {
+                                    if let Some(job) = observe_block(state, &hash, "sequence") {
+                                        let ticket = view.block_ticket(&hash);
                                         if inclusions.len() < 4 {
                                             let state = Arc::clone(state);
                                             inclusions.spawn(async move {
@@ -227,6 +225,7 @@ async fn subscribe(
             }
             Some(joined) = checks.join_next(), if !checks.is_empty() => {
                 match joined {
+                    Err(e) if e.is_cancelled() => Ok(()),
                     Err(e) => Err(e.into()),
                     Ok((ticket, result)) => {
                         let capacity_hit = matches!(result, Err(StatsError::CheckpointCapacity));
@@ -235,10 +234,33 @@ async fn subscribe(
                         } else if result.is_ok() {
                             capacity_limited = false;
                         }
+                        let defer_for_inclusion = state
+                            .heartbeat_store
+                            .has_pending_inclusion(
+                                now_unix_secs(),
+                                POST_CONNECT_FALLBACK.as_secs(),
+                            );
                         let was_complete = view.complete();
-                        let installed = match result {
-                            Ok(cp) => view.finish_checkpoint(ticket, cp.txids, cp.mempool_sequence, true),
-                            Err(e) => { view.abort_checkpoint(ticket); tracing::warn!("heartbeat checkpoint unavailable: {e}"); false }
+                        let installed = if defer_for_inclusion {
+                            view.abort_checkpoint(ticket);
+                            tracing::info!(
+                                "deferring heartbeat checkpoint until pending block inclusion arrives"
+                            );
+                            false
+                        } else {
+                            match result {
+                                Ok(cp) => view.finish_checkpoint(
+                                    ticket,
+                                    cp.txids,
+                                    cp.mempool_sequence,
+                                    true,
+                                ),
+                                Err(e) => {
+                                    view.abort_checkpoint(ticket);
+                                    tracing::warn!("heartbeat checkpoint unavailable: {e}");
+                                    false
+                                }
+                            }
                         };
                         if installed {
                             // `view.members()` already reflects the post-fence
@@ -266,13 +288,19 @@ async fn subscribe(
                         } else if was_complete && !view.complete() {
                             state.heartbeat_store.set_coverage(
                                 Coverage::Partial {
-                                    reason: "checkpoint_failed".to_string(),
+                                    reason: if defer_for_inclusion {
+                                        "block_connected".to_string()
+                                    } else {
+                                        "checkpoint_failed".to_string()
+                                    },
                                 },
                             );
                         }
-                        tracing::info!(installed, members = view.members().len(), complete = view.complete(), "heartbeat shadow checkpoint");
+                        tracing::info!(installed, deferred = defer_for_inclusion, members = view.members().len(), complete = view.complete(), "heartbeat shadow checkpoint");
                         next_checkpoint = Instant::now() + if installed {
                             RECONCILE
+                        } else if defer_for_inclusion {
+                            RETRY
                         } else if capacity_hit {
                             CAPACITY_BACKOFF
                         } else if !inclusions.is_empty() {
@@ -292,9 +320,11 @@ async fn subscribe(
                             state.heartbeat_blocks.publish_inclusion_if_current(
                                 state, &job, &info,
                             );
-                            state.heartbeat_blocks.if_current(&job, || {
-                                view.apply_block(ticket, &info.hash, &info.txids)
-                            });
+                            if let Some(ticket) = ticket {
+                                state.heartbeat_blocks.if_current(&job, || {
+                                    view.apply_block(ticket, &info.hash, &info.txids)
+                                });
+                            }
                         }
                         if inclusions.is_empty() && !view.complete() {
                             next_checkpoint = Instant::now();
@@ -324,7 +354,12 @@ async fn subscribe(
         }
         if seen_frame && checks.is_empty() && Instant::now() >= next_checkpoint
         {
-            if let Some(ticket) = view.begin_checkpoint() {
+            if state.heartbeat_store.has_pending_inclusion(
+                now_unix_secs(),
+                POST_CONNECT_FALLBACK.as_secs(),
+            ) {
+                next_checkpoint = Instant::now() + RETRY;
+            } else if let Some(ticket) = view.begin_checkpoint() {
                 let state = Arc::clone(state);
                 checks.spawn(async move {
                     let result =

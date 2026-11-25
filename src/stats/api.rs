@@ -354,10 +354,35 @@ pub async fn get_block_detail(
         .map_err(|e| StatsError::Rpc(format!("DB pool: {e}")))?;
     let block = db::query_block_by_height(&conn, height)?;
     match block {
-        Some(b) => Ok(Json(
-            serde_json::to_value(b)
-                .map_err(|e| StatsError::Rpc(e.to_string()))?,
-        )),
+        Some(b) => {
+            let mut value = serde_json::to_value(b)
+                .map_err(|e| StatsError::Rpc(e.to_string()))?;
+            let landmarks: Vec<serde_json::Value> =
+                super::hall_of_fame_data::HALL_OF_FAME
+                    .iter()
+                    .filter(|e| e.block == Some(height))
+                    .map(|e| {
+                        serde_json::json!({
+                            "slug": e.slug,
+                            "title": e.title,
+                            "description": e.description,
+                            "category": e.category.label(),
+                            "color": e.category.color(),
+                            "date": e.date,
+                            "txid": e.txid,
+                        })
+                    })
+                    .collect();
+            if !landmarks.is_empty() {
+                if let Some(obj) = value.as_object_mut() {
+                    obj.insert(
+                        "landmarks".to_string(),
+                        serde_json::Value::Array(landmarks),
+                    );
+                }
+            }
+            Ok(Json(value))
+        }
         // A 200 carrying {"error": ...} is worse than either a 200 or a 404:
         // every caller has to inspect the body to learn it failed.
         None => Err(StatsError::NotFound("Block not found".into())),
@@ -487,7 +512,7 @@ pub async fn get_live(
 
     // Parallelize all RPC calls for faster response.
     // Each branch is wrapped to capture per-call latency for slow-request diagnostics.
-    let (br, mr, hr, fr) = tokio::join!(
+    let (br, mr, hr, fr, hfr) = tokio::join!(
         async {
             let s = Instant::now();
             let r = state.rpc.get_blockchain_info().await;
@@ -508,11 +533,17 @@ pub async fn get_live(
             let r = state.rpc.estimate_smart_fee(1).await;
             (r, s.elapsed())
         },
+        async {
+            let s = Instant::now();
+            let r = state.rpc.estimate_smart_fee(6).await;
+            (r, s.elapsed())
+        },
     );
     let (blockchain_res, t_blockchain) = br;
     let (mempool_res, t_mempool) = mr;
     let (hashrate_res, t_hashrate) = hr;
     let (fee_res, t_fee) = fr;
+    let (hour_fee_res, _t_hour_fee) = hfr;
 
     // Feed the latest aggregate mempool reading into Heartbeat v2 state before
     // bubbling up any RPC error so both fresh readings and outages propagate.
@@ -562,6 +593,11 @@ pub async fn get_live(
         (0.0, true)
     });
     stale |= f_stale;
+    let (hour_fee, hf_stale) = hour_fee_res.unwrap_or_else(|e| {
+        tracing::warn!("Failed to fetch 6-block fee estimate: {e}");
+        (0.0, true)
+    });
+    stale |= hf_stale;
 
     // Price cache: 60s TTL + per-key singleflight inside Cache.
     // Concurrent missers all wait on the same fetch, so only one HTTP
@@ -636,6 +672,7 @@ pub async fn get_live(
             "blockchain": blockchain,
             "mempool": mempool,
             "next_block_fee": next_block_fee,
+            "hour_fee": hour_fee,
             "network": {
                 "price_usd": price_usd,
                 "sats_per_dollar": sats_per_dollar,
@@ -885,6 +922,19 @@ pub async fn get_tx_detail(
             let confirmations = tx["confirmations"].as_u64().unwrap_or(0);
             let block_hash = tx["blockhash"].as_str().unwrap_or("");
             let block_height = tx["blockheight"].as_u64();
+            let block_time =
+                tx["blocktime"].as_u64().or_else(|| tx["time"].as_u64());
+
+            // Authoritative first-seen observation timestamp from our live mirror
+            // (zero-cost O(log n) in-memory lookup when unconfirmed).
+            let first_seen = match state.heartbeat_store.lookup_tx(&txid) {
+                super::heartbeat_sync::TxLookupStatus::Unconfirmed(m)
+                    if m.first_seen > 0 =>
+                {
+                    Some(m.first_seen)
+                }
+                _ => None,
+            };
 
             // Detect features from vin
             let is_coinbase = vin
@@ -947,6 +997,8 @@ pub async fn get_tx_detail(
                 "confirmations": confirmations,
                 "block_hash": block_hash,
                 "block_height": block_height,
+                "block_time": block_time,
+                "first_seen": first_seen,
                 "features": features,
             })))
         }
@@ -1496,4 +1548,340 @@ pub async fn get_heartbeat_tx_lookup(
     let normalized = txid.to_ascii_lowercase();
     let status = state.heartbeat_store.lookup_tx(&normalized);
     Ok(([(header::CACHE_CONTROL, "no-store")], Json(status)))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct HeartbeatBlockWindowParams {
+    pub radius: Option<u64>,
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct HeartbeatBlockWindowResponse {
+    pub target_height: u64,
+    pub target_hash: String,
+    pub tip_height: u64,
+    pub blocks: Vec<db::HeartbeatBlockWindowRow>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum HeartbeatBlockQuery {
+    Height(u64),
+    Hash(String),
+}
+
+/// Parse a decimal block height (1..=10 ASCII digits), accepting either plain
+/// digits or standard thousands-grouped digits (e.g. `840,000`) and rejecting
+/// malformed comma placement (e.g. `8,4,0000`, `,840`, `0,000`).
+fn parse_formatted_block_height(raw: &str) -> Option<u64> {
+    if raw.is_empty() {
+        return None;
+    }
+    let digits = if raw.contains(',') {
+        let mut parts = raw.split(',');
+        let first = parts.next()?;
+        if !(1..=3).contains(&first.len())
+            || !first.bytes().all(|b| b.is_ascii_digit())
+            || first.starts_with('0')
+        {
+            return None;
+        }
+        let mut out = String::with_capacity(raw.len());
+        out.push_str(first);
+        for group in parts {
+            if group.len() != 3 || !group.bytes().all(|b| b.is_ascii_digit()) {
+                return None;
+            }
+            out.push_str(group);
+        }
+        out
+    } else {
+        if !raw.bytes().all(|b| b.is_ascii_digit()) {
+            return None;
+        }
+        raw.to_string()
+    };
+    if !(1..=10).contains(&digits.len()) {
+        return None;
+    }
+    digits.parse::<u64>().ok()
+}
+
+/// Deep historical block windows/ranges (>= 6 confirmations below tip) are
+/// effectively immutable and safe to cache for an hour; near-tip or empty
+/// responses must remain `no-store`.
+fn heartbeat_history_cache_control(
+    blocks: &[db::HeartbeatBlockWindowRow],
+    tip_height: u64,
+) -> &'static str {
+    let max_returned = blocks.last().map(|b| b.height).unwrap_or(0);
+    if !blocks.is_empty() && tip_height >= 6 && max_returned <= tip_height - 6 {
+        "public, max-age=3600"
+    } else {
+        "no-store"
+    }
+}
+
+/// Parse a block lookup path parameter: trims whitespace, strips an optional
+/// leading `#` or case-insensitive `block:` prefix (UTF-8 safe), validates
+/// optional thousands separators, and classifies either a 1..=10-digit height
+/// or a 64-character hex block hash.
+fn parse_heartbeat_block_query(raw: &str) -> Option<HeartbeatBlockQuery> {
+    let mut q = raw.trim();
+    if let Some(rest) = q.strip_prefix('#') {
+        q = rest.trim();
+    } else if q
+        .get(..6)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("block:"))
+    {
+        q = q.get(6..)?.trim();
+        if let Some(rest) = q.strip_prefix('#') {
+            q = rest.trim();
+        }
+    }
+
+    if let Some(h) = parse_formatted_block_height(q) {
+        return Some(HeartbeatBlockQuery::Height(h));
+    }
+
+    if q.len() == 64 && q.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Some(HeartbeatBlockQuery::Hash(q.to_ascii_lowercase()));
+    }
+
+    None
+}
+
+/// GET /api/stats/heartbeat/block/{query} - centered historical block window
+/// for on-demand Heartbeat spike rendering, resolved by height or block hash.
+pub async fn get_heartbeat_block_window(
+    State(state): State<SharedStatsState>,
+    Path(raw_query): Path<String>,
+    Query(params): Query<HeartbeatBlockWindowParams>,
+) -> impl axum::response::IntoResponse {
+    use axum::http::StatusCode;
+    use axum::response::IntoResponse;
+
+    let log_q: String = raw_query.chars().take(72).collect();
+
+    let Some(parsed) = parse_heartbeat_block_query(&raw_query) else {
+        tracing::warn!(
+            query = ?log_q,
+            "Rejected malformed heartbeat block window query"
+        );
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "Expected a block height or 64-character hex block hash"
+            })),
+        )
+            .into_response();
+    };
+
+    let radius = params.radius.unwrap_or(20).clamp(5, 50);
+    let pool = state.db.clone();
+
+    let result = tokio::task::spawn_blocking(
+        move || -> Result<Option<HeartbeatBlockWindowResponse>, StatsError> {
+            let conn = pool
+                .get()
+                .map_err(|e| StatsError::Rpc(format!("DB pool: {e}")))?;
+
+            let target_height = match parsed {
+                HeartbeatBlockQuery::Height(h) => h,
+                HeartbeatBlockQuery::Hash(ref hash) => {
+                    match db::query_block_height_by_hash(&conn, hash)? {
+                        Some(h) => h,
+                        None => return Ok(None),
+                    }
+                }
+            };
+
+            let blocks =
+                db::query_heartbeat_block_window(&conn, target_height, radius)?;
+            let Some(target_row) =
+                blocks.iter().find(|b| b.height == target_height)
+            else {
+                return Ok(None);
+            };
+            let target_hash = target_row.hash.clone();
+            let tip_height = db::max_height(&conn)?.unwrap_or(target_height);
+
+            Ok(Some(HeartbeatBlockWindowResponse {
+                target_height,
+                target_hash,
+                tip_height,
+                blocks,
+            }))
+        },
+    )
+    .await;
+
+    match result {
+        Ok(Ok(Some(response))) => {
+            let cache_control = heartbeat_history_cache_control(
+                &response.blocks,
+                response.tip_height,
+            );
+            (
+                StatusCode::OK,
+                [(header::CACHE_CONTROL, cache_control)],
+                Json(response),
+            )
+                .into_response()
+        }
+        Ok(Ok(None)) => {
+            tracing::warn!(
+                query = ?log_q,
+                "Heartbeat block window target not found"
+            );
+            (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({ "error": "Block not found" })),
+            )
+                .into_response()
+        }
+        Ok(Err(err)) => {
+            tracing::error!(
+                query = ?log_q,
+                "Heartbeat block window lookup failed: {err}"
+            );
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": "Internal server error" })),
+            )
+                .into_response()
+        }
+        Err(err) => {
+            tracing::error!(
+                query = ?log_q,
+                "Heartbeat block window task failed: {err}"
+            );
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": "Internal server error" })),
+            )
+                .into_response()
+        }
+    }
+}
+
+/// Maximum number of blocks returned per page by `GET /api/stats/heartbeat/blocks`.
+const MAX_HEARTBEAT_BLOCK_RANGE: u64 = 500;
+
+#[derive(Debug, Deserialize)]
+pub struct HeartbeatBlockRangeParams {
+    pub from: u64,
+    pub to: u64,
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct HeartbeatBlockRangeResponse {
+    pub from_height: u64,
+    pub to_height: u64,
+    pub tip_height: u64,
+    pub blocks: Vec<db::HeartbeatBlockWindowRow>,
+}
+
+/// GET /api/stats/heartbeat/blocks?from=H1&to=H2 - lightweight historical block
+/// range page for infinite lazy-loading of Heartbeat EKG blocks.
+pub async fn get_heartbeat_block_range(
+    State(state): State<SharedStatsState>,
+    Query(params): Query<HeartbeatBlockRangeParams>,
+) -> impl axum::response::IntoResponse {
+    use axum::http::StatusCode;
+    use axum::response::IntoResponse;
+
+    if params.from > params.to {
+        tracing::warn!(
+            from = params.from,
+            to = params.to,
+            "Rejected reversed heartbeat block range query"
+        );
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "from height must be less than or equal to to height"
+            })),
+        )
+            .into_response();
+    }
+
+    if (params.to - params.from) >= MAX_HEARTBEAT_BLOCK_RANGE {
+        tracing::warn!(
+            from = params.from,
+            to = params.to,
+            max = MAX_HEARTBEAT_BLOCK_RANGE,
+            "Rejected over-wide heartbeat block range query"
+        );
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": format!(
+                    "Requested range exceeds maximum of {MAX_HEARTBEAT_BLOCK_RANGE} blocks per page"
+                )
+            })),
+        )
+            .into_response();
+    }
+
+    let pool = state.db.clone();
+    let from = params.from;
+    let to = params.to;
+
+    let result = tokio::task::spawn_blocking(
+        move || -> Result<HeartbeatBlockRangeResponse, StatsError> {
+            let conn = pool
+                .get()
+                .map_err(|e| StatsError::Rpc(format!("DB pool: {e}")))?;
+
+            let blocks = db::query_heartbeat_block_range(&conn, from, to)?;
+            let tip_height = db::max_height(&conn)?.unwrap_or(0);
+
+            Ok(HeartbeatBlockRangeResponse {
+                from_height: from,
+                to_height: to,
+                tip_height,
+                blocks,
+            })
+        },
+    )
+    .await;
+
+    match result {
+        Ok(Ok(response)) => {
+            let cache_control = heartbeat_history_cache_control(
+                &response.blocks,
+                response.tip_height,
+            );
+            (
+                StatusCode::OK,
+                [(header::CACHE_CONTROL, cache_control)],
+                Json(response),
+            )
+                .into_response()
+        }
+        Ok(Err(err)) => {
+            tracing::error!(
+                from = params.from,
+                to = params.to,
+                "Heartbeat block range query failed: {err}"
+            );
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": "Internal server error" })),
+            )
+                .into_response()
+        }
+        Err(err) => {
+            tracing::error!(
+                from = params.from,
+                to = params.to,
+                "Heartbeat block range task failed: {err}"
+            );
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": "Internal server error" })),
+            )
+                .into_response()
+        }
+    }
 }

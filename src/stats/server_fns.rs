@@ -297,11 +297,12 @@ pub async fn fetch_live_stats() -> Result<LiveStats, ServerFnError> {
     // Each returns `(value, is_stale)`; OR the staleness flags together
     // so the response surfaces a single `stale: true` if any RPC fell back
     // to its cached-on-error value.
-    let (blockchain_res, mempool_res, hashrate_res, fee_res) = tokio::join!(
+    let (blockchain_res, mempool_res, hashrate_res, fee_res, hour_fee_res) = tokio::join!(
         state.rpc.get_blockchain_info(),
         state.rpc.get_mempool_info(),
         state.rpc.get_network_hashps(),
         state.rpc.estimate_smart_fee(1),
+        state.rpc.estimate_smart_fee(6),
     );
 
     let mut stale = false;
@@ -389,6 +390,17 @@ pub async fn fetch_live_stats() -> Result<LiveStats, ServerFnError> {
             0.0
         }
     };
+    let hour_fee = match hour_fee_res {
+        Ok((f, s)) => {
+            stale |= s;
+            f
+        }
+        Err(e) => {
+            tracing::warn!("Failed to fetch 6-block fee estimate: {e}");
+            stale = true;
+            0.0
+        }
+    };
 
     // Price cache: 60s TTL + per-key singleflight inside Cache. The
     // 90s background refresh task writes independently. On fetch
@@ -443,6 +455,7 @@ pub async fn fetch_live_stats() -> Result<LiveStats, ServerFnError> {
             mempoolminfee: mempool.mempoolminfee,
         },
         next_block_fee,
+        hour_fee,
         network: LiveNetwork {
             price_usd,
             sats_per_dollar,

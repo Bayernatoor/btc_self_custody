@@ -60,6 +60,8 @@ probe 200 "/signaling/periods"     "$BASE/api/stats/signaling/periods?bit=2"
 probe 200 "/live"                  "$BASE/api/stats/live"
 probe 200 "/heartbeat/snapshot"    "$BASE/api/stats/heartbeat/snapshot"
 probe 200 "/heartbeat/tx absent"   "$BASE/api/stats/heartbeat/tx/0000000000000000000000000000000000000000000000000000000000000000"
+probe 200 "/heartbeat/block/{h}"   "$BASE/api/stats/heartbeat/block/840000?radius=5"
+probe 200 "/heartbeat/blocks"      "$BASE/api/stats/heartbeat/blocks?from=$((TIP-20))&to=$TIP"
 
 echo
 echo "== axum error paths =="
@@ -69,6 +71,10 @@ probe 400 "/tx bad txid"           "$BASE/api/stats/tx/nothex"
 probe 404 "/tx unknown txid"       "$BASE/api/stats/tx/$(printf '0%.0s' {1..64})"
 probe 400 "/heartbeat/v2 no cursor" "$BASE/api/stats/heartbeat/v2"
 probe 400 "/heartbeat/tx bad txid" "$BASE/api/stats/heartbeat/tx/not-a-txid"
+probe 400 "/heartbeat/block bad"   "$BASE/api/stats/heartbeat/block/not-a-block"
+probe 404 "/heartbeat/block miss"  "$BASE/api/stats/heartbeat/block/99999999"
+probe 400 "/heartbeat/blocks rev"  "$BASE/api/stats/heartbeat/blocks?from=$TIP&to=$((TIP-10))"
+probe 400 "/heartbeat/blocks wide" "$BASE/api/stats/heartbeat/blocks?from=0&to=500"
 # These three were the open questions this script was written to answer, and
 # they are now settled, so they are assertions rather than notes. A recorded
 # status nobody compares against anything is not a check.

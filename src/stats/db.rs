@@ -3797,6 +3797,113 @@ pub fn query_block_hash(
     .optional()
 }
 
+/// Compact per-block row returned by [`query_heartbeat_block_range`] and
+/// [`query_heartbeat_block_window`] for on-demand historical block spike
+/// rendering and infinite lazy-loading in Heartbeat.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct HeartbeatBlockWindowRow {
+    pub height: u64,
+    pub hash: String,
+    pub timestamp: u64,
+    pub tx_count: u64,
+    pub total_fees: u64,
+    pub size: u64,
+    pub weight: u64,
+    pub inter_block_seconds: Option<i64>,
+}
+
+/// Look up a block height by its 64-character hex hash (case-insensitive).
+/// Uses the existing `UNIQUE` index on `blocks.hash`.
+pub fn query_block_height_by_hash(
+    conn: &Connection,
+    hash: &str,
+) -> Result<Option<u64>, rusqlite::Error> {
+    let lower = hash.to_ascii_lowercase();
+    conn.query_row(
+        "SELECT height FROM blocks WHERE hash = ?1 LIMIT 1",
+        params![lower],
+        |row| row.get(0),
+    )
+    .optional()
+}
+
+/// Query an inclusive range `[from ..= to]` of compact block rows for Heartbeat
+/// historical spike rendering and infinite lazy-loading.
+///
+/// Fetches the immediate parent (`from - 1`) when `from > 0` so the first
+/// returned block carries its true parent-derived `inter_block_seconds` delta
+/// (preserving `0` and negative MTP header deltas rather than substituting
+/// `600`). The extra parent row is excluded from the returned vector.
+pub fn query_heartbeat_block_range(
+    conn: &Connection,
+    from: u64,
+    to: u64,
+) -> Result<Vec<HeartbeatBlockWindowRow>, rusqlite::Error> {
+    if from > to || from > i64::MAX as u64 {
+        return Ok(Vec::new());
+    }
+    let to = to.min(i64::MAX as u64);
+    let fetch_from = from.saturating_sub(1);
+
+    let mut stmt = conn.prepare_cached(
+        "SELECT height, hash, timestamp, tx_count, total_fees, size, weight
+         FROM blocks
+         WHERE height >= ?1 AND height <= ?2
+         ORDER BY height ASC",
+    )?;
+
+    let mut rows = stmt.query(params![fetch_from, to])?;
+    let mut result = Vec::new();
+    let mut prev: Option<(u64, u64)> = None;
+
+    while let Some(row) = rows.next()? {
+        let height: u64 = row.get(0)?;
+        let hash: String = row.get(1)?;
+        let timestamp: u64 = row.get(2)?;
+        let tx_count: u64 = row.get(3)?;
+        let total_fees: u64 = row.get(4)?;
+        let size: u64 = row.get(5)?;
+        let weight: u64 = row.get(6)?;
+
+        let inter_block_seconds = prev.and_then(|(prev_height, prev_ts)| {
+            if prev_height.checked_add(1) == Some(height) {
+                Some((timestamp as i64).saturating_sub(prev_ts as i64))
+            } else {
+                None
+            }
+        });
+
+        prev = Some((height, timestamp));
+
+        if height >= from {
+            result.push(HeartbeatBlockWindowRow {
+                height,
+                hash,
+                timestamp,
+                tx_count,
+                total_fees,
+                size,
+                weight,
+                inter_block_seconds,
+            });
+        }
+    }
+
+    Ok(result)
+}
+
+/// Query a centered window `[center_height - radius ..= center_height + radius]`
+/// of compact block rows for Heartbeat historical spike rendering.
+pub fn query_heartbeat_block_window(
+    conn: &Connection,
+    center_height: u64,
+    radius: u64,
+) -> Result<Vec<HeartbeatBlockWindowRow>, rusqlite::Error> {
+    let from = center_height.saturating_sub(radius);
+    let to = center_height.saturating_add(radius).min(i64::MAX as u64);
+    query_heartbeat_block_range(conn, from, to)
+}
+
 /// Delete a block at a specific height (for reorg correction).
 pub fn delete_block(conn: &Connection, height: u64) -> rusqlite::Result<usize> {
     conn.execute("DELETE FROM blocks WHERE height = ?1", params![height])
@@ -4906,8 +5013,14 @@ mod tests {
                 .chars()
                 .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
                 .collect();
-            // `error` is the endpoint's failure branch, not a block field.
-            if name.is_empty() || name == "error" || wanted.contains(&name) {
+            // `error` is the endpoint's failure branch; `landmarks` is attached
+            // by `api::get_block_detail` from `HALL_OF_FAME` (verified in
+            // `api_integration_tests::block_detail_returns_inserted_block`).
+            if name.is_empty()
+                || name == "error"
+                || name == "landmarks"
+                || wanted.contains(&name)
+            {
                 continue;
             }
             wanted.push(name);
@@ -6204,5 +6317,95 @@ mod tests {
              that statement, or add them to BLOCK_FACTS with a reason: \
              {stranded:?}"
         );
+    }
+
+    #[test]
+    fn test_query_block_height_by_hash() {
+        let conn = setup_db();
+        let hash_42 = format!("{:064x}", 0x42u64);
+        let hash_99 = format!("{:064x}", 0xdeadbeefu64);
+        conn.execute(
+            "INSERT INTO blocks (height, hash, timestamp, tx_count, size, weight, difficulty)
+             VALUES (?1, ?2, 1700000000, 10, 500, 2000, 1.0)",
+            params![42i64, hash_42],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO blocks (height, hash, timestamp, tx_count, size, weight, difficulty)
+             VALUES (?1, ?2, 1700000600, 20, 1000, 4000, 1.0)",
+            params![99i64, hash_99],
+        )
+        .unwrap();
+
+        assert_eq!(
+            query_block_height_by_hash(&conn, &hash_42).unwrap(),
+            Some(42)
+        );
+        assert_eq!(
+            query_block_height_by_hash(&conn, &hash_99.to_ascii_uppercase())
+                .unwrap(),
+            Some(99),
+            "lookup must normalize mixed/uppercase hex hashes"
+        );
+        assert_eq!(
+            query_block_height_by_hash(&conn, &format!("{:064x}", 0x1234u64))
+                .unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn test_query_heartbeat_block_window() {
+        let conn = setup_db();
+        // Genesis + blocks 1..=5 with genesis, normal, 0-second, and negative MTP deltas.
+        insert_test_block(&conn, 0, 1_231_006_505, 1_140, 1, 0);
+        insert_test_block(&conn, 1, 1_231_469_665, 860, 1, 0);
+        insert_test_block(&conn, 2, 1_231_469_665, 860, 2, 1_000); // 0s delta
+        insert_test_block(&conn, 3, 1_231_469_653, 1_200, 3, 2_500); // -12s MTP delta
+        insert_test_block(&conn, 4, 1_231_470_253, 4_000, 10, 5_000); // +600s delta
+        insert_test_block(&conn, 5, 1_231_470_853, 8_000, 25, 12_000); // +600s delta
+
+        // Genesis window: height 0 must have inter_block_seconds = None (never 600).
+        let genesis_win = query_heartbeat_block_window(&conn, 0, 3).unwrap();
+        assert_eq!(genesis_win.len(), 4);
+        assert_eq!(genesis_win[0].height, 0);
+        assert_eq!(genesis_win[0].inter_block_seconds, None);
+        assert_eq!(
+            genesis_win[1].inter_block_seconds,
+            Some(1_231_469_665 - 1_231_006_505)
+        );
+        assert_eq!(genesis_win[2].inter_block_seconds, Some(0));
+        assert_eq!(genesis_win[3].inter_block_seconds, Some(-12));
+
+        // Window with from > 0: fetches parent (from - 1 = 1) to compute exact
+        // inter_block_seconds for block 2, and excludes block 1 from output.
+        let mid_win = query_heartbeat_block_window(&conn, 3, 1).unwrap();
+        assert_eq!(
+            mid_win.iter().map(|r| r.height).collect::<Vec<_>>(),
+            vec![2, 3, 4]
+        );
+        assert_eq!(mid_win[0].inter_block_seconds, Some(0));
+        assert_eq!(mid_win[1].inter_block_seconds, Some(-12));
+        assert_eq!(mid_win[2].inter_block_seconds, Some(600));
+        assert_eq!(mid_win[1].hash, "hash_3");
+        assert_eq!(mid_win[1].tx_count, 3);
+        assert_eq!(mid_win[1].total_fees, 2_500);
+        assert_eq!(mid_win[1].size, 300);
+        assert_eq!(mid_win[1].weight, 1_200);
+
+        // Missing parent (gap between 5 and 20): height 20 must have None, height 21 gets exact delta.
+        insert_test_block(&conn, 20, 1_700_000_000, 4_000, 5, 500);
+        insert_test_block(&conn, 21, 1_700_000_321, 4_000, 6, 600);
+        let gap_win = query_heartbeat_block_window(&conn, 20, 1).unwrap();
+        assert_eq!(gap_win.len(), 2);
+        assert_eq!(gap_win[0].height, 20);
+        assert_eq!(gap_win[0].inter_block_seconds, None);
+        assert_eq!(gap_win[1].height, 21);
+        assert_eq!(gap_win[1].inter_block_seconds, Some(321));
+
+        // Direct range query: reversed range returns empty without error.
+        assert!(query_heartbeat_block_range(&conn, 5, 2).unwrap().is_empty());
+        let exact_range = query_heartbeat_block_range(&conn, 2, 4).unwrap();
+        assert_eq!(exact_range, mid_win);
     }
 }

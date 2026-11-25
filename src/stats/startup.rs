@@ -241,6 +241,11 @@ pub(crate) fn build_api_router(state: Arc<StatsState>) -> Router {
         .route("/heartbeat/snapshot", get(api::get_heartbeat_snapshot))
         .route("/heartbeat/v2", get(api::get_heartbeat_v2_sse))
         .route("/heartbeat/tx/{txid}", get(api::get_heartbeat_tx_lookup))
+        .route(
+            "/heartbeat/block/{query}",
+            get(api::get_heartbeat_block_window),
+        )
+        .route("/heartbeat/blocks", get(api::get_heartbeat_block_range))
         .route("/tx/{txid}", get(api::get_tx_detail))
         .with_state(state)
 }
@@ -532,6 +537,7 @@ pub fn spawn_background_tasks(
     // directions are capped per cycle so a large first-time backlog cannot
     // hold a long write lock or exhaust the pool.
     {
+        let pending_state = Arc::clone(&state);
         let state = Arc::clone(&state);
         tokio::spawn(async move {
             // Below this drift we don't bother with the verbose fetch: it absorbs
@@ -657,6 +663,74 @@ pub fn spawn_background_tasks(
                     ),
                 }
                 tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+            }
+        });
+
+        // Lightweight pending-detail repair loop: if ZMQ `rawtx` beat
+        // `sequence A` or hit a transient `getmempoolentry` burst cap, a small
+        // handful of members can stay `fee = None` while DB drift is below the
+        // 1,000-tx verbose backfill threshold. Poll `getmempoolentry` for up to
+        // 32 stranded members (>5s old) every 10s so "pending" bricks (including
+        // 0-sat TRUC/package txs) resolve to their real fee band in place.
+        tokio::spawn(async move {
+            let mut retry_after: std::collections::HashMap<String, u64> =
+                std::collections::HashMap::new();
+            tokio::time::sleep(std::time::Duration::from_secs(12)).await;
+            loop {
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0);
+                retry_after.retain(|_, until| *until > now);
+
+                let store = Arc::clone(&pending_state.heartbeat_store);
+                let excluded: std::collections::HashSet<String> =
+                    retry_after.keys().cloned().collect();
+                let to_fetch = tokio::task::spawn_blocking(move || {
+                    store.unenriched_txids(32, 5, now, &excluded)
+                })
+                .await
+                .unwrap_or_default();
+
+                if !to_fetch.is_empty() {
+                    let mut entries = Vec::with_capacity(to_fetch.len());
+                    for txid in to_fetch {
+                        match pending_state.rpc.get_mempool_entry(&txid).await {
+                            Ok(entry) if entry.vsize == 0 => {
+                                retry_after.insert(txid, now + 120);
+                            }
+                            Ok(entry) => {
+                                entries.push(TxMetadataHydration {
+                                    txid,
+                                    fee: Some(entry.fee),
+                                    vsize: Some(entry.vsize),
+                                    value: None,
+                                    flags: 0,
+                                    op_return_text: None,
+                                    first_seen: None,
+                                });
+                            }
+                            Err(_) => {
+                                retry_after.insert(txid, now + 120);
+                            }
+                        }
+                    }
+                    if !entries.is_empty() {
+                        let store = Arc::clone(&pending_state.heartbeat_store);
+                        let hydrated = tokio::task::spawn_blocking(move || {
+                            store.hydrate_details(&entries)
+                        })
+                        .await
+                        .unwrap_or(0);
+                        if hydrated > 0 {
+                            tracing::debug!(
+                                hydrated,
+                                "Pending-detail repair: resolved stranded mempool fee metadata"
+                            );
+                        }
+                    }
+                }
+                tokio::time::sleep(std::time::Duration::from_secs(10)).await;
             }
         });
     }
