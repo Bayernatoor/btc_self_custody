@@ -16,21 +16,27 @@
 //! - Constants: `RETARGET_PERIOD` (2016 blocks), `BRADYCARDIA_THRESHOLD`
 //!   (0.7x target rate), `TACHYCARDIA_THRESHOLD` (1.3x target rate).
 
+use leptos::portal::Portal;
 use leptos::prelude::*;
 use leptos_meta::*;
 
 #[cfg(feature = "hydrate")]
 use wasm_bindgen::prelude::*;
 
+use crate::stats::hall_of_fame_data::HALL_OF_FAME;
 use crate::stats::heartbeat_client::{
-    fee_band_for_rate, format_fee_rate, hb_v2_focus_block_height,
-    hb_v2_focus_tx, hb_v2_set_pinned_tx, primary_notable_label, PinnedTxStatus,
+    fee_band_for_rate, format_fee_rate, hb_v2_exit_history_mode,
+    hb_v2_focus_block_height, hb_v2_focus_pending_slot, hb_v2_focus_tx,
+    hb_v2_is_pending_slot_offscreen, hb_v2_set_pinned_tx,
+    primary_notable_label, HistoryModeInfo, PendingBlockBanner, PinnedTxStatus,
     PinnedTxView,
 };
 #[cfg(feature = "hydrate")]
 use crate::stats::heartbeat_client::{
-    parse_tx_param_from_search, HeartbeatClient, HeartbeatClientSignals,
+    parse_initial_search_param, HeartbeatClient, HeartbeatClientSignals,
+    InitialSearchParam,
 };
+use crate::stats::types::HofCategory;
 
 // ---------------------------------------------------------------------------
 // JS interop: heartbeat.js functions
@@ -48,6 +54,9 @@ extern "C" {
     #[wasm_bindgen(js_name = updateHeartbeatLive)]
     fn update_heartbeat_live(json: &str);
 
+    #[wasm_bindgen(js_name = setHeartbeatLandmarks)]
+    fn set_heartbeat_landmarks(json: &str);
+
     #[wasm_bindgen(js_name = destroyHeartbeat)]
     fn destroy_heartbeat();
 
@@ -58,9 +67,6 @@ extern "C" {
     // Phase 3: Rhythm strip
     #[wasm_bindgen(js_name = renderRhythmStrip)]
     fn render_rhythm_strip(canvas_id: &str, blocks_json: &str);
-
-    #[wasm_bindgen(js_name = getOrganismStatus)]
-    fn get_organism_status() -> String;
 
     // Capture
     #[wasm_bindgen(js_name = heartbeatDownloadCapture)]
@@ -115,6 +121,8 @@ fn push_heartbeat_blocks(_: &str, _: bool) {}
 #[cfg(not(feature = "hydrate"))]
 fn update_heartbeat_live(_: &str) {}
 #[cfg(not(feature = "hydrate"))]
+fn set_heartbeat_landmarks(_: &str) {}
+#[cfg(not(feature = "hydrate"))]
 fn destroy_heartbeat() {}
 #[cfg(not(feature = "hydrate"))]
 fn get_heartbeat_vitals() -> String {
@@ -122,10 +130,6 @@ fn get_heartbeat_vitals() -> String {
 }
 #[cfg(not(feature = "hydrate"))]
 fn render_rhythm_strip(_: &str, _: &str) {}
-#[cfg(not(feature = "hydrate"))]
-fn get_organism_status() -> String {
-    "{}".to_string()
-}
 #[cfg(not(feature = "hydrate"))]
 #[allow(dead_code)] // used only by the commented-out Capture Moment button (kept for later)
 fn heartbeat_download_capture(_: &str) {}
@@ -188,11 +192,27 @@ pub fn HeartbeatPage() -> impl IntoView {
     #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
     let (coverage_note, set_coverage_note) = signal(Option::<String>::None);
     let (pinned_tx, set_pinned_tx) = signal(Option::<PinnedTxView>::None);
+    #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
+    let (pending_block, set_pending_block) =
+        signal(Option::<PendingBlockBanner>::None);
+    #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
+    let (history_mode, set_history_mode) =
+        signal(Option::<HistoryModeInfo>::None);
+    let (recent_block_pairs, set_recent_block_pairs) =
+        signal(Vec::<(u64, u64)>::new());
     let (search_query, set_search_query) = signal(String::new());
     let (search_feedback, set_search_feedback) =
         signal(Option::<(bool, String)>::None);
     #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
     let (copied_txid, set_copied_txid) = signal(false);
+    #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
+    let (copied_history_link, set_copied_history_link) = signal(false);
+    #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
+    let (copied_tx_link, set_copied_tx_link) = signal(false);
+    let (show_landmarks, set_show_landmarks) = signal(false);
+    let (landmark_cat, set_landmark_cat) = signal(Option::<HofCategory>::None);
+    let (landmark_filter, set_landmark_filter) = signal(String::new());
+    let landmark_total = heartbeat_landmarks().len();
 
     #[cfg(feature = "hydrate")]
     let hb_client = StoredValue::new_local(Option::<HeartbeatClient>::None);
@@ -223,11 +243,6 @@ pub fn HeartbeatPage() -> impl IntoView {
     let (immune_label, set_immune_label) = signal("Waiting...".to_string());
     let (immune_color, set_immune_color) = signal("#00e676".to_string());
 
-    // Organism status
-    let (org_condition, set_org_condition) = signal("Initializing".to_string());
-    let (org_desc, set_org_desc) = signal("Waiting for data...".to_string());
-    let (org_color, set_org_color) = signal("#00e676".to_string());
-
     // Period start timestamp (first block in current retarget period)
     let (period_start_ts, set_period_start_ts) = signal(0u64);
 
@@ -243,13 +258,14 @@ pub fn HeartbeatPage() -> impl IntoView {
             .unwrap_or(0)
     });
 
-    // Fetch blocks for the initial timeline (current retarget period = 2016).
+    // Fetch blocks for the initial timeline (current retarget period = 2016 plus 1
+    // parent block so all 2,016 initial blocks carry exact parent-derived intervals).
     // DB-only (fetch_recent_blocks derives the tip from db::max_height, no node
     // RPC), and NOT gated on cached_live, so the historical EKG renders
     // immediately on load even when the home node is unreachable. The live parts
     // (SSE txs, vitals, STALE indicator) fill in separately once/if the node is up.
     let initial_blocks = LocalResource::new(move || async move {
-        crate::stats::server_fns::fetch_recent_blocks(RETARGET_PERIOD)
+        crate::stats::server_fns::fetch_recent_blocks(RETARGET_PERIOD + 1)
             .await
             .unwrap_or_default()
     });
@@ -302,6 +318,7 @@ pub fn HeartbeatPage() -> impl IntoView {
             // of DB state, and the historical EKG simply starts empty and fills
             // from the snapshot + delta stream.
             init_heartbeat("heartbeat-canvas");
+            set_heartbeat_landmarks(&landmarks_to_json());
             initialized.set(true);
             // Under hydrate, keep the loading overlay up briefly until the
             // first v2 snapshot frames the mempool (with a 2.5s fallback if the
@@ -342,8 +359,24 @@ pub fn HeartbeatPage() -> impl IntoView {
                     }
                 }
 
-                // Build block events with inter-block time (replay=true for compressed history)
-                let json = blocks_to_json(&blocks);
+                // Seed recent 25 block timestamps for Rust-computed 20-block average cadence
+                let tail_start = blocks.len().saturating_sub(25);
+                let seeded_pairs: Vec<(u64, u64)> = blocks[tail_start..]
+                    .iter()
+                    .map(|b| (b.height, b.timestamp))
+                    .collect();
+                set_recent_block_pairs.set(seeded_pairs);
+
+                // Build block events with exact parent-derived signed inter-block times
+                let json = if blocks.len() > RETARGET_PERIOD as usize {
+                    let start = blocks.len() - RETARGET_PERIOD as usize;
+                    blocks_to_json_with_parent(
+                        &blocks[start..],
+                        Some(&blocks[start - 1]),
+                    )
+                } else {
+                    blocks_to_json(&blocks)
+                };
                 push_heartbeat_blocks(&json, true);
 
                 // Store last height: use the latest from LiveStats (not the last replayed block)
@@ -353,24 +386,32 @@ pub fn HeartbeatPage() -> impl IntoView {
                 last_height.set(std::cmp::max(live_height, replay_height));
 
                 // Render rhythm strip with last 144 blocks (24hr)
-                let strip_blocks = if blocks.len() > 144 {
-                    &blocks[blocks.len() - 144..]
+                let strip_json = if blocks.len() > 144 {
+                    let start = blocks.len() - 144;
+                    blocks_to_json_with_parent(
+                        &blocks[start..],
+                        Some(&blocks[start - 1]),
+                    )
                 } else {
-                    &blocks
+                    blocks_to_json(&blocks)
                 };
-                let strip_json = blocks_to_json(strip_blocks);
                 render_rhythm_strip("rhythm-strip-canvas", &strip_json);
             }
 
             #[cfg(feature = "hydrate")]
             {
-                let initial_tx_param = leptos::prelude::window()
+                let initial_search_param = leptos::prelude::window()
                     .location()
                     .search()
                     .ok()
-                    .and_then(|s| parse_tx_param_from_search(&s));
-                if let Some(ref q) = initial_tx_param {
-                    set_search_query.set(q.clone());
+                    .and_then(|s| parse_initial_search_param(&s));
+                if let Some(ref param) = initial_search_param {
+                    match param {
+                        InitialSearchParam::Tx(q)
+                        | InitialSearchParam::Block(q) => {
+                            set_search_query.set(q.clone());
+                        }
+                    }
                 }
                 let client = HeartbeatClient::new(HeartbeatClientSignals {
                     set_loading,
@@ -382,15 +423,32 @@ pub fn HeartbeatPage() -> impl IntoView {
                     set_sse_height,
                     sse_height,
                     set_sse_ts,
+                    set_pending_block,
+                    set_history_mode,
                 });
                 hb_client.set_value(Some(client.clone()));
-                client.start(initial_tx_param);
+                client.start(initial_search_param);
             }
         }
     });
 
-    // Helper: refresh vital signs from JS state
+    // Helper: refresh vital signs from LiveStats (Rust) + JS canvas vitals
     let refresh_vitals = move || {
+        // Blood Pressure: computed directly in Rust from Bitcoin Core's
+        // estimatesmartfee(1) (next block) and estimatesmartfee(6) (~1 hour),
+        // with graceful fallback to mempoolminfee when fee history is absent.
+        if let Some(live) = cached_live.get_untracked() {
+            let (display, label, color) = compute_blood_pressure(
+                live.next_block_fee,
+                live.hour_fee,
+                live.mempool.mempoolminfee,
+                live.mempool_available,
+            );
+            set_bp_display.set(display);
+            set_bp_label.set(label);
+            set_bp_color.set(color.to_string());
+        }
+
         let vitals_json = get_heartbeat_vitals();
         // Parse the JSON manually (no serde dependency needed)
         if let Some(v) = parse_vitals_json(&vitals_json) {
@@ -423,38 +481,6 @@ pub fn HeartbeatPage() -> impl IntoView {
                 }
             }
 
-            // Blood Pressure: compute diastolic directly from LiveStats (JS value unreliable)
-            let raw_minfee = cached_live
-                .get_untracked()
-                .map(|s| s.mempool.mempoolminfee)
-                .unwrap_or(0.0);
-            // BTC/kB to sat/vB: raw * 1e8 / 1000
-            // f64 stores 0.00000100 as ~9.99e-7, losing precision.
-            // Round to nearest 0.1 sat/vB since relay fees are always clean multiples.
-            let raw_sat_vb = raw_minfee * 1e8 / 1000.0;
-            let diastolic = (raw_sat_vb * 10.0 + 0.5).floor() / 10.0;
-            let diastolic = if diastolic < 0.1 && raw_minfee > 0.0 {
-                0.1
-            } else {
-                diastolic
-            };
-            // Use 2 decimals if diastolic is < 0.1, otherwise 1
-            let dia_fmt = if diastolic < 0.1 && diastolic > 0.0 {
-                format!("{:.2}", diastolic)
-            } else {
-                format!("{:.1}", diastolic)
-            };
-            set_bp_display.set(format!("{:.1} / {}", v.bp_systolic, dia_fmt));
-            let bp_context = if (v.bp_systolic + diastolic) / 2.0 < 5.0 {
-                format!("{} \u{00b7} Low fee environment", v.bp_label)
-            } else if (v.bp_systolic + diastolic) / 2.0 < 20.0 {
-                format!("{} \u{00b7} Moderate fees", v.bp_label)
-            } else {
-                format!("{} \u{00b7} High fee pressure", v.bp_label)
-            };
-            set_bp_label.set(bp_context);
-            set_bp_color.set(v.bp_color);
-
             // Temperature: mempool vMB and tx count come reactively from
             // `mempool_summary` (`format_mempool_summary`); only the derived
             // temperature subtitle and colour come from JS vitals, and only
@@ -481,14 +507,18 @@ pub fn HeartbeatPage() -> impl IntoView {
             ));
             set_immune_color.set(v.immune_color);
         }
-
-        let status_json = get_organism_status();
-        if let Some(s) = parse_status_json(&status_json) {
-            set_org_condition.set(s.condition);
-            set_org_desc.set(s.description);
-            set_org_color.set(s.color);
-        }
     };
+
+    // Keep recent block timestamps in sync as new blocks arrive (or reorg).
+    Effect::new(move || {
+        let h = sse_height.get();
+        let t = sse_ts.get();
+        if h > 0 && t > 0 {
+            set_recent_block_pairs.update(|pairs| {
+                record_recent_block_pair(pairs, h, t);
+            });
+        }
+    });
 
     // Forward live metrics to JS for color + vital signs computation.
     // Block detection is handled entirely by SSE (heartbeat.js connects
@@ -498,6 +528,16 @@ pub fn HeartbeatPage() -> impl IntoView {
         let Some(live) = cached_live.get() else {
             return;
         };
+
+        if live.blockchain.blocks > 0 && live.blockchain.time > 0 {
+            let live_h = live.blockchain.blocks;
+            let live_t = live.blockchain.time;
+            set_recent_block_pairs.update(|pairs| {
+                if pairs.last().is_none_or(|&(last_h, _)| live_h > last_h) {
+                    record_recent_block_pair(pairs, live_h, live_t);
+                }
+            });
+        }
 
         // Skip when every live RPC call failed (server returns zeroed defaults).
         // Retaining the previous JS state keeps non-mempool vitals showing
@@ -518,7 +558,7 @@ pub fn HeartbeatPage() -> impl IntoView {
             format!(
                 r#""mempool_mb":{:.1},"mempool_min_fee":{},"#,
                 live.mempool.bytes as f64 / 1_000_000.0,
-                (live.mempool.mempoolminfee * 1e8 / 100.0).round() / 10.0, // BTC/kB to sat/vB, rounded to 1dp
+                btc_per_kvb_to_sat_per_vb(live.mempool.mempoolminfee),
             )
         } else {
             String::new()
@@ -619,25 +659,28 @@ pub fn HeartbeatPage() -> impl IntoView {
         let handle = leptos::prelude::set_interval_with_handle(
             move || {
                 set_tick.update(|t| *t += 1);
-                // Poll the freshest block from the SSE/ZMQ timeline. Monotonic:
-                // only advance, never regress, so a lagging source can't flicker
-                // the header backwards.
-                let latest = get_heartbeat_latest_block();
-                let h = extract_json_f64(&latest, "height") as u64;
-                let t = extract_json_f64(&latest, "timestamp") as u64;
-                if h > sse_height.get_untracked() {
-                    set_sse_height.set(h);
-                    // Stamp the block's timestamp CLAMPED to our wall clock at
-                    // arrival. Block timestamps are the miner's clock and often run
-                    // seconds-to-minutes ahead of real time; using the raw value
-                    // would freeze the "Ns ago" timer at 0 (saturating_sub) until
-                    // wall-clock catches up. Clamping at arrival makes it count from
-                    // 0, while a genuinely old tip (loaded from history) keeps its
-                    // real age since t < now there. Tied to the height bump so it's
-                    // stamped once per block, not re-clamped every tick.
-                    let now = chrono::Utc::now().timestamp() as u64;
-                    if t > 0 {
-                        set_sse_ts.set(t.min(now));
+                // Poll the freshest block from the SSE/ZMQ timeline while in live
+                // mode. Monotonic: only advance, never regress, so a lagging source
+                // cannot flicker the header backwards (reorg retraction goes through
+                // HeartbeatClient::handle_delta directly).
+                if history_mode.get_untracked().is_none() {
+                    let latest = get_heartbeat_latest_block();
+                    let h = extract_json_f64(&latest, "height") as u64;
+                    let t = extract_json_f64(&latest, "timestamp") as u64;
+                    if h > sse_height.get_untracked() {
+                        set_sse_height.set(h);
+                        // Stamp the block's timestamp CLAMPED to our wall clock at
+                        // arrival. Block timestamps are the miner's clock and often run
+                        // seconds-to-minutes ahead of real time; using the raw value
+                        // would freeze the "Ns ago" timer at 0 (saturating_sub) until
+                        // wall-clock catches up. Clamping at arrival makes it count from
+                        // 0, while a genuinely old tip (loaded from history) keeps its
+                        // real age since t < now there. Tied to the height bump so it's
+                        // stamped once per block, not re-clamped every tick.
+                        let now = chrono::Utc::now().timestamp() as u64;
+                        if t > 0 {
+                            set_sse_ts.set(t.min(now));
+                        }
                     }
                 }
                 // Only promote "live" to "stale" from the JS stall detector so
@@ -656,28 +699,98 @@ pub fn HeartbeatPage() -> impl IntoView {
         });
     }
 
-    let time_since = Signal::derive(move || {
+    // Clamp future-stamped miner header timestamps to our first observation time
+    // per height so the "Last block: Ns ago" arrival timer never freezes at 0s
+    // when a miner's clock is ahead of wall time (A14).
+    let (live_tip_anchor, set_live_tip_anchor) = signal((0u64, 0u64));
+    Effect::new(move |_| {
+        if let Some(live) = cached_live.get() {
+            let h = live.blockchain.blocks;
+            let t = live.blockchain.time;
+            if h > 0 && t > 0 {
+                let (prev_h, _) = live_tip_anchor.get_untracked();
+                if h != prev_h {
+                    let now = chrono::Utc::now().timestamp().max(0) as u64;
+                    set_live_tip_anchor.set((h, t.min(now)));
+                }
+            }
+        }
+    });
+
+    let elapsed_since_last_block = Signal::derive(move || {
         let _ = tick.get(); // re-run every tick
-                            // Use the timestamp from whichever source reports the newer block, so
-                            // the "last block" timer follows the SSE/ZMQ stream during node hiccups.
+                            // Prefer our arrival-clamped SSE timestamp whenever SSE height >= RPC height
+                            // (equal RPC/SSE heights must not revert to an unclamped future miner header).
         let live = cached_live.get();
         let live_h = live.as_ref().map(|s| s.blockchain.blocks).unwrap_or(0);
         let live_t = live.as_ref().map(|s| s.blockchain.time).unwrap_or(0);
-        let ts = if sse_height.get() > live_h {
-            sse_ts.get()
+        let (anchor_h, anchor_t) = live_tip_anchor.get();
+        let effective_live_t = if anchor_h == live_h && anchor_t > 0 {
+            anchor_t
         } else {
             live_t
         };
-        if ts == 0 {
-            return "waiting...".to_string();
-        }
-        let now = chrono::Utc::now().timestamp() as u64;
-        let elapsed = now.saturating_sub(ts);
-        if elapsed < 60 {
-            format!("{}s ago", elapsed)
+        let s_h = sse_height.get();
+        let s_t = sse_ts.get();
+        let ts = if s_h >= live_h && s_t > 0 {
+            s_t
         } else {
-            format!("{}m {}s ago", elapsed / 60, elapsed % 60)
+            effective_live_t
+        };
+        if ts == 0 {
+            return None;
         }
+        let now = chrono::Utc::now().timestamp().max(0) as u64;
+        Some(now.saturating_sub(ts))
+    });
+
+    let time_since =
+        Signal::derive(move || match elapsed_since_last_block.get() {
+            None => "waiting...".to_string(),
+            Some(elapsed) if elapsed < 60 => format!("{}s ago", elapsed),
+            Some(elapsed) => format!("{}m {}s ago", elapsed / 60, elapsed % 60),
+        });
+
+    let pending_block_age = Signal::derive(move || {
+        let _ = tick.get();
+        let pb = pending_block.get()?;
+        let now = chrono::Utc::now().timestamp().max(0) as u64;
+        Some(now.saturating_sub(pb.received_at_client))
+    });
+
+    let avg_block_secs = Signal::derive(move || {
+        compute_recent_avg_block_secs(&recent_block_pairs.get())
+    });
+
+    let network_pulse = Signal::derive(move || {
+        let live = cached_live.get();
+        let (
+            mempool_available,
+            mempool_tx_count,
+            mempool_vbytes,
+            next_block_fee,
+            mempool_min_fee,
+        ) = match live.as_ref() {
+            Some(l) => (
+                l.mempool_available,
+                l.mempool.size,
+                l.mempool.bytes,
+                l.next_block_fee,
+                btc_per_kvb_to_sat_per_vb(l.mempool.mempoolminfee),
+            ),
+            None => (false, 0, 0, 0.0, 0.0),
+        };
+        compute_network_pulse(
+            node_stale.get(),
+            mempool_available,
+            mempool_tx_count,
+            mempool_vbytes,
+            next_block_fee,
+            mempool_min_fee,
+            elapsed_since_last_block.get().unwrap_or(0),
+            avg_block_secs.get(),
+            pending_block_age.get(),
+        )
     });
 
     let fee_display = Signal::derive(move || {
@@ -777,15 +890,18 @@ pub fn HeartbeatPage() -> impl IntoView {
                     </div>
                 </div>
 
-                // Prominent TXID search row (always visible on mobile & desktop, including fullscreen)
+                // Unified TXID / Block search row (always visible on mobile & desktop, including fullscreen)
                 <div class="flex flex-wrap items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 border-b border-white/5 bg-[#0a1929]/45">
-                    <div class="relative flex-1 min-w-[190px] flex items-center">
+                    <div class="relative flex-1 min-w-0 flex items-center">
                         <input
                             id="heartbeat-tx-search"
                             type="text"
-                            placeholder="Search txid (full or 8+ char prefix)..."
-                            aria-label="Search transaction ID"
-                            class="w-full pl-3 pr-8 py-1.5 rounded-lg bg-white/5 border border-white/10 text-xs sm:text-sm font-mono text-white/90 placeholder-white/35 focus:border-[#00e676]/60 focus:bg-white/[0.07] focus:outline-none transition-colors"
+                            autocomplete="off"
+                            autocapitalize="off"
+                            spellcheck="false"
+                            placeholder="Search txid, #height, or block hash..."
+                            aria-label="Search transaction ID, block height, or block hash"
+                            class="w-full pl-3 pr-8 py-1.5 rounded-lg bg-white/5 border border-white/10 text-base sm:text-sm font-mono text-white/90 placeholder-white/35 focus:border-[#00e676]/60 focus:bg-white/[0.07] focus:outline-none transition-colors"
                             prop:value=move || search_query.get()
                             on:input=move |ev| {
                                 set_search_query.set(event_target_value(&ev));
@@ -801,7 +917,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                                         let q = search_query.get_untracked();
                                         let client = hb_client.try_with_value(|c| c.clone()).flatten();
                                         if let Some(c) = client {
-                                            c.search_tx(&q);
+                                            c.search(&q);
                                         }
                                     }
                                 } else if ev.key() == "Escape" {
@@ -834,7 +950,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                                 let q = search_query.get_untracked();
                                 let client = hb_client.try_with_value(|c| c.clone()).flatten();
                                 if let Some(c) = client {
-                                    c.search_tx(&q);
+                                    c.search(&q);
                                 }
                             }
                         }
@@ -860,6 +976,63 @@ pub fn HeartbeatPage() -> impl IntoView {
                     </Show>
                 </div>
 
+                // Verified historic landmark quick-jump strip (featured highlights + full Archives picker)
+                <div class="flex items-center gap-1.5 px-3 sm:px-4 py-1.5 border-b border-white/10 bg-[#091625]/70 overflow-x-auto [scrollbar-width:none]">
+                    <span class="text-[11px] font-mono font-semibold text-white/65 uppercase tracking-wider shrink-0">"Landmark Blocks:"</span>
+                    {[
+                        ("Genesis", 0u64, "#0", "Genesis block (Jan 3, 2009)"),
+                        ("Pizza", 57_043, "#57,043", "Bitcoin Pizza Day block (May 22, 2010)"),
+                        ("Highest Fee", 409_008, "#409,008", "All-time highest fee block (291.53 BTC, Apr 26, 2016)"),
+                        ("SegWit", 481_824, "#481,824", "SegWit activation block (Aug 24, 2017)"),
+                        ("Taproot", 709_632, "#709,632", "Taproot activation block (Nov 14, 2021)"),
+                        ("Largest", 836_964, "#836,964", "Largest block by raw size (3.99 MB, Mar 30, 2024)"),
+                        ("4th Halving", 840_000, "#840,000", "4th Halving & Runes launch (37.63 BTC fees, Apr 20, 2024)"),
+                    ]
+                    .into_iter()
+                    .map(|(name, height, tag, tip)| {
+                        let q_str = format!("#{height}");
+                        view! {
+                            <button
+                                type="button"
+                                title=tip
+                                class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/[0.07] hover:bg-[#f7931a]/20 border border-white/20 hover:border-[#f7931a]/60 text-[11px] font-mono text-white/90 hover:text-white whitespace-nowrap shrink-0 cursor-pointer transition-colors"
+                                on:click=move |_| {
+                                    set_search_query.set(q_str.clone());
+                                    set_search_feedback.set(None);
+                                    #[cfg(feature = "hydrate")]
+                                    {
+                                        let client = hb_client.try_with_value(|c| c.clone()).flatten();
+                                        if let Some(c) = client {
+                                            c.search(&q_str);
+                                        }
+                                    }
+                                }
+                            >
+                                <span>{name}</span>
+                                <span class="text-[#f7931a]/85">{tag}</span>
+                            </button>
+                        }
+                    })
+                    .collect_view()}
+                    <button
+                        type="button"
+                        id="heartbeat-landmarks-more-btn"
+                        aria-haspopup="dialog"
+                        title="Browse all curated historic blocks from The Archives"
+                        class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#f7931a]/15 hover:bg-[#f7931a]/25 border border-[#f7931a]/45 hover:border-[#f7931a]/75 text-[11px] font-mono font-semibold text-[#f7931a] whitespace-nowrap shrink-0 cursor-pointer transition-colors"
+                        on:click=move |_| {
+                            set_landmark_cat.set(None);
+                            set_landmark_filter.set(String::new());
+                            set_show_landmarks.set(true);
+                        }
+                    >
+                        <span>{format!("More ({landmark_total})")}</span>
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6"/>
+                        </svg>
+                    </button>
+                </div>
+
                 // Canvas with overlays
                 // The canvas flexes to fill all card space left over after the
                 // status/search/control/info bars: on both mobile and desktop the card
@@ -868,8 +1041,165 @@ pub fn HeartbeatPage() -> impl IntoView {
                 <div id="heartbeat-canvas-wrap" class="relative flex-1 min-h-0 sm:min-h-[250px]">
                     <canvas
                         id="heartbeat-canvas"
-                        class="w-full h-full"
+                        class="block absolute inset-0 w-full h-full"
                     ></canvas>
+
+                    // Pending-Block Cue Banner (shown only after 2s grace period in live mode)
+                    <Show when=move || {
+                        history_mode.get().is_none()
+                            && pending_block.get().is_some()
+                            && pending_block_age.get().is_some_and(|age| age >= 2)
+                    }>
+                        {move || {
+                            let Some(pb) = pending_block.get() else {
+                                return view! { <div></div> }.into_any();
+                            };
+                            let hash_for_check = pb.hash.clone();
+                            let hash_for_click = pb.hash.clone();
+                            view! {
+                                <div
+                                    id="heartbeat-pending-block-banner"
+                                    class="absolute top-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#0a1929]/95 border border-[#38bdf8]/40 shadow-lg backdrop-blur-md text-xs font-mono text-[#bae6fd] whitespace-nowrap max-w-[calc(100%-1.5rem)]"
+                                >
+                                    <span class="relative flex h-2 w-2 shrink-0">
+                                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#38bdf8] opacity-75"></span>
+                                        <span class="relative inline-flex rounded-full h-2 w-2 bg-[#38bdf8]"></span>
+                                    </span>
+                                    <span class="truncate">
+                                        {move || {
+                                            let age = pending_block_age.get().unwrap_or(0);
+                                            format!("Block received \u{00b7} fetching details ({age}s)")
+                                        }}
+                                    </span>
+                                    <Show when=move || {
+                                        let _ = tick.get();
+                                        hb_v2_is_pending_slot_offscreen(&hash_for_check)
+                                    }>
+                                        {
+                                            let focus_hash = hash_for_click.clone();
+                                            view! {
+                                                <button
+                                                    type="button"
+                                                    class="px-2 py-0.5 rounded-md bg-[#38bdf8]/15 hover:bg-[#38bdf8]/30 border border-[#38bdf8]/45 text-[11px] font-semibold text-[#38bdf8] cursor-pointer transition-colors shrink-0"
+                                                    on:click=move |_| {
+                                                        #[cfg(feature = "hydrate")]
+                                                        {
+                                                            let client = hb_client.try_with_value(|c| c.clone()).flatten();
+                                                            if let Some(c) = client {
+                                                                c.focus_pending_slot(&focus_hash);
+                                                                return;
+                                                            }
+                                                        }
+                                                        let _ = hb_v2_focus_pending_slot(&focus_hash);
+                                                    }
+                                                >
+                                                    "View slot"
+                                                </button>
+                                            }
+                                        }
+                                    </Show>
+                                </div>
+                            }.into_any()
+                        }}
+                    </Show>
+
+                    // Historical View Banner (when inspecting a historical block window)
+                    <Show when=move || history_mode.get().is_some()>
+                        {move || {
+                            let Some(hm) = history_mode.get() else {
+                                return view! { <div></div> }.into_any();
+                            };
+                            let target_height = hm.target_height;
+                            let landmark_match = heartbeat_landmarks()
+                                .into_iter()
+                                .find(|lm| lm.height == target_height);
+                            let range_label = format!(
+                                "Block #{} (#{}\u{2013}#{})",
+                                super::helpers::format_number(hm.target_height),
+                                super::helpers::format_number(hm.from_height),
+                                super::helpers::format_number(hm.to_height),
+                            );
+                            view! {
+                                <div
+                                    id="heartbeat-history-mode-banner"
+                                    class="absolute top-2 left-2 right-2 sm:top-3 sm:left-3 sm:right-auto z-20 flex flex-col gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-[#0a1929]/95 border border-[#f7931a]/45 shadow-xl backdrop-blur-md text-[11px] sm:text-xs font-mono text-white/90 sm:max-w-[min(38rem,calc(100%-1.5rem))]"
+                                >
+                                    <div class="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider bg-[#f7931a]/20 border border-[#f7931a]/50 text-[#f7931a]">
+                                            "HISTORICAL VIEW"
+                                        </span>
+                                        <span class="text-white/85 font-semibold tabular-nums">
+                                            {range_label}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            class="px-2 py-0.5 rounded-md bg-white/10 hover:bg-white/20 border border-white/15 text-[11px] text-white/85 cursor-pointer transition-colors"
+                                            on:click=move |_| show_block_detail_js(target_height)
+                                        >
+                                            "Block details"
+                                        </button>
+                                        <button
+                                            type="button"
+                                            class="px-2 py-0.5 rounded-md bg-white/5 hover:bg-white/15 border border-white/15 text-[11px] text-white/75 cursor-pointer transition-colors"
+                                            on:click=move |_| {
+                                                #[cfg(feature = "hydrate")]
+                                                {
+                                                    if let Some(win) = leptos::web_sys::window() {
+                                                        let origin = win
+                                                            .location()
+                                                            .origin()
+                                                            .unwrap_or_else(|_| "https://www.wehodlbtc.com".to_string());
+                                                        let url = format!("{origin}/observatory/heartbeat?block={target_height}");
+                                                        let _ = win.navigator().clipboard().write_text(&url);
+                                                        set_copied_history_link.set(true);
+                                                        leptos::prelude::set_timeout(
+                                                            move || set_copied_history_link.set(false),
+                                                            std::time::Duration::from_millis(1500),
+                                                        );
+                                                    }
+                                                }
+                                            }
+                                        >
+                                            {move || if copied_history_link.get() { "Link copied" } else { "Copy link" }}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            class="px-2.5 py-0.5 rounded-md bg-[#00e676]/20 hover:bg-[#00e676]/30 border border-[#00e676]/55 text-[11px] font-semibold text-[#00e676] cursor-pointer transition-colors"
+                                            on:click=move |_| {
+                                                #[cfg(feature = "hydrate")]
+                                                {
+                                                    let client = hb_client.try_with_value(|c| c.clone()).flatten();
+                                                    if let Some(c) = client {
+                                                        c.exit_history_mode();
+                                                        return;
+                                                    }
+                                                }
+                                                hb_v2_exit_history_mode();
+                                            }
+                                        >
+                                            "Return to LIVE"
+                                        </button>
+                                    </div>
+                                    {landmark_match.map(|lm| {
+                                        let lm_color = lm.category.color();
+                                        view! {
+                                            <div class="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-2 pt-1 border-t border-white/10 font-sans text-[11px] sm:text-xs">
+                                                <span
+                                                    class="font-mono font-semibold shrink-0"
+                                                    style=format!("color: {lm_color}")
+                                                >
+                                                    {format!("\u{2605} {} ({})", lm.title, lm.date)}
+                                                </span>
+                                                <span class="text-white/75 line-clamp-2 sm:line-clamp-1">
+                                                    {lm.description}
+                                                </span>
+                                            </div>
+                                        }
+                                    })}
+                                </div>
+                            }.into_any()
+                        }}
+                    </Show>
 
                     // In-place live Pinned Transaction Detail Panel (visible in fullscreen too)
                     <Show when=move || pinned_tx.get().is_some()>
@@ -882,6 +1212,8 @@ pub fn HeartbeatPage() -> impl IntoView {
                                 let txid_short = short_txid(&txid_full);
                                 #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
                                 let txid_copy = txid_full.clone();
+                                #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
+                                let txid_share = txid_full.clone();
                                 let txid_locate = txid_full.clone();
                                 let mempool_url = format!("https://mempool.space/tx/{txid_full}");
 
@@ -919,15 +1251,15 @@ pub fn HeartbeatPage() -> impl IntoView {
                                 view! {
                                     <div
                                         id="heartbeat-pinned-tx-panel"
-                                        class="absolute top-3 right-3 z-20 w-[calc(100%-1.5rem)] max-w-sm bg-[#0a1929]/95 border border-white/15 rounded-xl shadow-2xl backdrop-blur-md text-xs font-mono text-white/85 overflow-hidden max-h-[calc(100%-1.5rem)] overflow-y-auto"
+                                        class="absolute inset-x-2 top-2 sm:inset-x-auto sm:top-3 sm:right-3 lg:top-4 lg:right-4 z-20 w-auto sm:w-[360px] lg:w-[430px] 2xl:w-[460px] bg-[#0a1929]/95 border border-white/15 rounded-xl shadow-2xl backdrop-blur-md text-xs lg:text-sm font-mono text-white/85 overflow-hidden max-h-[calc(100%-1rem)] sm:max-h-[calc(100%-1.5rem)] overflow-y-auto"
                                     >
                                         // Header: status badge + close button
-                                        <div class="flex items-start justify-between gap-2 px-3.5 py-2.5 border-b border-white/10">
-                                            <div class="flex flex-wrap items-center gap-1.5 min-w-0">
+                                        <div class="flex items-start justify-between gap-2 px-3.5 py-2.5 lg:px-4 lg:py-3 border-b border-white/10">
+                                            <div class="flex flex-wrap items-center gap-1.5 lg:gap-2 min-w-0">
                                                 {match status_for_header {
                                                     PinnedTxStatus::Unconfirmed => view! {
-                                                        <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider bg-[#00e676]/15 border border-[#00e676]/40 text-[#00e676]">
-                                                            <span class="w-1.5 h-1.5 rounded-full bg-[#00e676]"></span>
+                                                        <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 lg:py-1 rounded-full text-[10px] lg:text-xs font-bold tracking-wider bg-[#00e676]/15 border border-[#00e676]/40 text-[#00e676]">
+                                                            <span class="w-1.5 h-1.5 lg:w-2 lg:h-2 rounded-full bg-[#00e676]"></span>
                                                             "IN MEMPOOL"
                                                         </span>
                                                     }.into_any(),
@@ -941,21 +1273,35 @@ pub fn HeartbeatPage() -> impl IntoView {
                                                             "CONFIRMED".to_string()
                                                         };
                                                         view! {
-                                                            <div class="flex flex-wrap items-center gap-1.5">
-                                                                <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider bg-[#f7931a]/15 border border-[#f7931a]/40 text-[#f7931a]">
-                                                                    <span class="w-1.5 h-1.5 rounded-full bg-[#00e676]"></span>
+                                                            <div class="flex flex-wrap items-center gap-1.5 lg:gap-2">
+                                                                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 lg:py-1 rounded-full text-[10px] lg:text-xs font-bold tracking-wider bg-[#f7931a]/15 border border-[#f7931a]/40 text-[#f7931a]">
+                                                                    <span class="w-1.5 h-1.5 lg:w-2 lg:h-2 rounded-full bg-[#00e676]"></span>
                                                                     {badge_text}
                                                                 </span>
                                                                 {(block_height > 0).then(|| view! {
                                                                     <button
                                                                         type="button"
-                                                                        class="px-2 py-0.5 rounded bg-[#f7931a]/15 hover:bg-[#f7931a]/25 border border-[#f7931a]/40 text-[10px] font-semibold text-[#f7931a] cursor-pointer transition-colors"
+                                                                        class="px-2 py-0.5 lg:px-2.5 lg:py-1 rounded bg-[#f7931a]/15 hover:bg-[#f7931a]/25 border border-[#f7931a]/40 text-[10px] lg:text-xs font-semibold text-[#f7931a] cursor-pointer transition-colors"
                                                                         on:click=move |_| {
+                                                                            #[cfg(feature = "hydrate")]
+                                                                            {
+                                                                                let client = hb_client.try_with_value(|c| c.clone()).flatten();
+                                                                                if let Some(c) = client {
+                                                                                    c.view_block_height(block_height);
+                                                                                    return;
+                                                                                }
+                                                                            }
                                                                             let _ = hb_v2_focus_block_height(block_height);
-                                                                            show_block_detail_js(block_height);
                                                                         }
                                                                     >
                                                                         "View block"
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        class="px-2 py-0.5 lg:px-2.5 lg:py-1 rounded bg-white/5 hover:bg-white/15 border border-white/15 text-[10px] lg:text-xs font-semibold text-white/75 cursor-pointer transition-colors"
+                                                                        on:click=move |_| show_block_detail_js(block_height)
+                                                                    >
+                                                                        "Details"
                                                                     </button>
                                                                 })}
                                                             </div>
@@ -963,10 +1309,10 @@ pub fn HeartbeatPage() -> impl IntoView {
                                                     }
                                                     PinnedTxStatus::Removed => view! {
                                                         <div class="flex flex-col gap-0.5">
-                                                            <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider bg-[#f44336]/15 border border-[#f44336]/35 text-[#ff8a80] w-fit">
+                                                            <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 lg:py-1 rounded-full text-[10px] lg:text-xs font-bold tracking-wider bg-[#f44336]/15 border border-[#f44336]/35 text-[#ff8a80] w-fit">
                                                                 "REMOVED FROM MEMPOOL"
                                                             </span>
-                                                            <span class="text-[10px] text-white/45">"Replaced or evicted"</span>
+                                                            <span class="text-[10px] lg:text-xs text-white/45">"Replaced or evicted"</span>
                                                         </div>
                                                     }.into_any(),
                                                 }}
@@ -975,7 +1321,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                                                 type="button"
                                                 aria-label="Close transaction panel"
                                                 title="Close"
-                                                class="w-6 h-6 shrink-0 rounded-md bg-white/5 hover:bg-white/15 text-white/60 hover:text-white flex items-center justify-center text-sm cursor-pointer transition-colors"
+                                                class="w-6 h-6 lg:w-7 lg:h-7 shrink-0 rounded-md bg-white/5 hover:bg-white/15 text-white/60 hover:text-white flex items-center justify-center text-sm lg:text-base cursor-pointer transition-colors"
                                                 on:click=move |_| {
                                                     set_copied_txid.set(false);
                                                     #[cfg(feature = "hydrate")]
@@ -995,15 +1341,15 @@ pub fn HeartbeatPage() -> impl IntoView {
                                         </div>
 
                                         // Body
-                                        <div class="px-3.5 py-2.5 space-y-2.5">
+                                        <div class="px-3.5 py-2.5 lg:px-4 lg:py-3.5 space-y-2.5 lg:space-y-3">
                                             // TXID + Copy
-                                            <div class="flex items-center justify-between gap-2 bg-white/[0.04] border border-white/10 rounded-lg px-2.5 py-1.5">
-                                                <span class="text-[11px] text-white/80 truncate" title=txid_full.clone()>
+                                            <div class="flex items-center justify-between gap-2 bg-white/[0.04] border border-white/10 rounded-lg px-2.5 py-1.5 lg:px-3 lg:py-2">
+                                                <span class="text-[11px] lg:text-xs 2xl:text-sm text-white/85 truncate" title=txid_full.clone()>
                                                     {txid_short}
                                                 </span>
                                                 <button
                                                     type="button"
-                                                    class="px-2 py-0.5 rounded bg-white/10 hover:bg-white/20 text-[10px] text-white/80 cursor-pointer transition-colors shrink-0"
+                                                    class="px-2 py-0.5 lg:px-2.5 lg:py-1 rounded bg-white/10 hover:bg-white/20 text-[10px] lg:text-xs text-white/85 cursor-pointer transition-colors shrink-0"
                                                     on:click=move |_| {
                                                         #[cfg(feature = "hydrate")]
                                                         {
@@ -1024,32 +1370,32 @@ pub fn HeartbeatPage() -> impl IntoView {
                                             </div>
 
                                             // Key metrics
-                                            <div class="grid grid-cols-2 gap-x-3 gap-y-2 text-[11px]">
+                                            <div class="grid grid-cols-2 gap-x-3 gap-y-2 lg:gap-x-4 lg:gap-y-2.5 text-[11px] lg:text-sm 2xl:text-[15px]">
                                                 <div>
-                                                    <div class="text-[10px] text-white/40 uppercase">"Fee Paid"</div>
-                                                    <div class="text-white/90 font-semibold tabular-nums">{fee_paid_text}</div>
+                                                    <div class="text-[10px] lg:text-[11px] 2xl:text-xs text-white/45 uppercase">"Fee Paid"</div>
+                                                    <div class="text-white/95 font-semibold tabular-nums">{fee_paid_text}</div>
                                                 </div>
                                                 <div>
-                                                    <div class="text-[10px] text-white/40 uppercase">"Size"</div>
-                                                    <div class="text-white/90 font-semibold tabular-nums">{size_text}</div>
+                                                    <div class="text-[10px] lg:text-[11px] 2xl:text-xs text-white/45 uppercase">"Size"</div>
+                                                    <div class="text-white/95 font-semibold tabular-nums">{size_text}</div>
                                                 </div>
                                                 <div class="col-span-2">
-                                                    <div class="text-[10px] text-white/40 uppercase">"Fee Rate"</div>
-                                                    <div class="flex items-center gap-1.5 text-white/90 font-semibold tabular-nums">
+                                                    <div class="text-[10px] lg:text-[11px] 2xl:text-xs text-white/45 uppercase">"Fee Rate"</div>
+                                                    <div class="flex items-center gap-1.5 lg:gap-2 text-white/95 font-semibold tabular-nums">
                                                         <span
-                                                            class="w-2 h-2 rounded-full shrink-0"
+                                                            class="w-2 h-2 lg:w-2.5 lg:h-2.5 rounded-full shrink-0"
                                                             style=format!("background-color: {band_color}")
                                                         ></span>
                                                         <span>{fee_rate_text}</span>
                                                     </div>
                                                 </div>
                                                 <div>
-                                                    <div class="text-[10px] text-white/40 uppercase">"Output Value"</div>
-                                                    <div class="text-white/90 font-semibold tabular-nums">{value_text}</div>
+                                                    <div class="text-[10px] lg:text-[11px] 2xl:text-xs text-white/45 uppercase">"Output Value"</div>
+                                                    <div class="text-white/95 font-semibold tabular-nums">{value_text}</div>
                                                 </div>
                                                 <div>
-                                                    <div class="text-[10px] text-white/40 uppercase">"First Observed"</div>
-                                                    <div class="text-white/75">{first_seen_text}</div>
+                                                    <div class="text-[10px] lg:text-[11px] 2xl:text-xs text-white/45 uppercase">"First Observed"</div>
+                                                    <div class="text-white/80">{first_seen_text}</div>
                                                 </div>
                                             </div>
 
@@ -1057,7 +1403,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                                             {notable.map(|(label, color)| view! {
                                                 <div class="flex items-center gap-2 pt-0.5">
                                                     <span
-                                                        class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide border"
+                                                        class="inline-flex items-center px-2.5 py-0.5 lg:py-1 rounded-full text-[10px] lg:text-xs font-bold tracking-wide border"
                                                         style=format!("color: {color}; border-color: {color}66; background-color: {color}1a")
                                                     >
                                                         {label}
@@ -1065,9 +1411,9 @@ pub fn HeartbeatPage() -> impl IntoView {
                                                 </div>
                                             })}
                                             {op_return.map(|msg| view! {
-                                                <div class="rounded-lg bg-white/[0.04] border border-[#ffa500]/30 px-2.5 py-2 space-y-0.5">
-                                                    <div class="text-[10px] text-[#ffa500] uppercase font-semibold">"OP_RETURN Message"</div>
-                                                    <p class="text-[11px] text-white/80 break-words whitespace-pre-wrap">{msg}</p>
+                                                <div class="rounded-lg bg-white/[0.04] border border-[#ffa500]/30 px-2.5 py-2 lg:px-3 lg:py-2.5 space-y-1">
+                                                    <div class="text-[10px] lg:text-xs text-[#ffa500] uppercase font-semibold">"OP_RETURN Message"</div>
+                                                    <p class="text-[11px] lg:text-xs 2xl:text-sm text-white/85 break-words whitespace-pre-wrap">{msg}</p>
                                                 </div>
                                             })}
 
@@ -1086,24 +1432,24 @@ pub fn HeartbeatPage() -> impl IntoView {
                                                     .map(|w| format!("{} WU", super::helpers::format_number(w)))
                                                     .unwrap_or_else(|| "--".to_string());
                                                 view! {
-                                                    <div class="grid grid-cols-3 gap-2 pt-2 border-t border-white/10 text-[11px]">
+                                                    <div class="grid grid-cols-3 gap-2 lg:gap-3 pt-2 lg:pt-2.5 border-t border-white/10 text-[11px] lg:text-sm">
                                                         <div>
-                                                            <div class="text-[10px] text-white/40 uppercase">"Inputs"</div>
-                                                            <div class="text-white/85 tabular-nums">{inputs_str}</div>
+                                                            <div class="text-[10px] lg:text-[11px] text-white/45 uppercase">"Inputs"</div>
+                                                            <div class="text-white/90 tabular-nums">{inputs_str}</div>
                                                         </div>
                                                         <div>
-                                                            <div class="text-[10px] text-white/40 uppercase">"Outputs"</div>
-                                                            <div class="text-white/85 tabular-nums">{outputs_str}</div>
+                                                            <div class="text-[10px] lg:text-[11px] text-white/45 uppercase">"Outputs"</div>
+                                                            <div class="text-white/90 tabular-nums">{outputs_str}</div>
                                                         </div>
                                                         <div>
-                                                            <div class="text-[10px] text-white/40 uppercase">"Weight"</div>
-                                                            <div class="text-white/85 tabular-nums">{weight_str}</div>
+                                                            <div class="text-[10px] lg:text-[11px] text-white/45 uppercase">"Weight"</div>
+                                                            <div class="text-white/90 tabular-nums">{weight_str}</div>
                                                         </div>
                                                     </div>
                                                 }.into_any()
                                             } else if deep_loading {
                                                 view! {
-                                                    <div class="pt-1.5 border-t border-white/10 text-[10px] text-white/40">
+                                                    <div class="pt-1.5 border-t border-white/10 text-[10px] lg:text-xs text-white/45">
                                                         "Loading inputs, outputs, weight..."
                                                     </div>
                                                 }.into_any()
@@ -1113,13 +1459,13 @@ pub fn HeartbeatPage() -> impl IntoView {
                                         </div>
 
                                         // Footer actions
-                                        <div class="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2 border-t border-white/10 bg-white/[0.02]">
+                                        <div class="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2 lg:px-4 lg:py-2.5 border-t border-white/10 bg-white/[0.02]">
                                             <div class="flex items-center gap-2">
                                                 {match status_for_footer {
                                                     PinnedTxStatus::Unconfirmed => view! {
                                                         <button
                                                             type="button"
-                                                            class="px-2.5 py-1 rounded-md bg-[#00e676]/15 hover:bg-[#00e676]/25 border border-[#00e676]/40 text-[11px] font-semibold text-[#00e676] cursor-pointer transition-colors"
+                                                            class="px-2.5 py-1 lg:px-3 lg:py-1.5 rounded-md bg-[#00e676]/15 hover:bg-[#00e676]/25 border border-[#00e676]/40 text-[11px] lg:text-xs 2xl:text-sm font-semibold text-[#00e676] cursor-pointer transition-colors"
                                                             on:click=move |_| {
                                                                 let focused = hb_v2_focus_tx(&txid_locate);
                                                                 if !focused {
@@ -1136,23 +1482,61 @@ pub fn HeartbeatPage() -> impl IntoView {
                                                     PinnedTxStatus::Confirmed { block_height, .. } if block_height > 0 => view! {
                                                         <button
                                                             type="button"
-                                                            class="px-2.5 py-1 rounded-md bg-[#f7931a]/15 hover:bg-[#f7931a]/25 border border-[#f7931a]/40 text-[11px] font-semibold text-[#f7931a] cursor-pointer transition-colors"
+                                                            class="px-2.5 py-1 lg:px-3 lg:py-1.5 rounded-md bg-[#f7931a]/15 hover:bg-[#f7931a]/25 border border-[#f7931a]/40 text-[11px] lg:text-xs 2xl:text-sm font-semibold text-[#f7931a] cursor-pointer transition-colors"
                                                             on:click=move |_| {
+                                                                #[cfg(feature = "hydrate")]
+                                                                {
+                                                                    let client = hb_client.try_with_value(|c| c.clone()).flatten();
+                                                                    if let Some(c) = client {
+                                                                        c.view_block_height(block_height);
+                                                                        return;
+                                                                    }
+                                                                }
                                                                 let _ = hb_v2_focus_block_height(block_height);
-                                                                show_block_detail_js(block_height);
                                                             }
                                                         >
                                                             "View block"
                                                         </button>
+                                                        <button
+                                                            type="button"
+                                                            class="px-2.5 py-1 lg:px-3 lg:py-1.5 rounded-md bg-white/5 hover:bg-white/15 border border-white/15 text-[11px] lg:text-xs 2xl:text-sm font-semibold text-white/75 cursor-pointer transition-colors"
+                                                            on:click=move |_| show_block_detail_js(block_height)
+                                                        >
+                                                            "Details"
+                                                        </button>
                                                     }.into_any(),
                                                     _ => view! { <span></span> }.into_any(),
                                                 }}
+                                                <button
+                                                    type="button"
+                                                    class="px-2.5 py-1 lg:px-3 lg:py-1.5 rounded-md bg-white/5 hover:bg-white/15 border border-white/15 text-[11px] lg:text-xs 2xl:text-sm font-semibold text-white/75 cursor-pointer transition-colors"
+                                                    on:click=move |_| {
+                                                        #[cfg(feature = "hydrate")]
+                                                        {
+                                                            if let Some(win) = leptos::web_sys::window() {
+                                                                let origin = win
+                                                                    .location()
+                                                                    .origin()
+                                                                    .unwrap_or_else(|_| "https://www.wehodlbtc.com".to_string());
+                                                                let url = format!("{origin}/observatory/heartbeat?tx={txid_share}");
+                                                                let _ = win.navigator().clipboard().write_text(&url);
+                                                                set_copied_tx_link.set(true);
+                                                                leptos::prelude::set_timeout(
+                                                                    move || set_copied_tx_link.set(false),
+                                                                    std::time::Duration::from_millis(1500),
+                                                                );
+                                                            }
+                                                        }
+                                                    }
+                                                >
+                                                    {move || if copied_tx_link.get() { "Link copied" } else { "Copy link" }}
+                                                </button>
                                             </div>
                                             <a
                                                 href=mempool_url
                                                 target="_blank"
                                                 rel="noopener noreferrer"
-                                                class="text-[11px] text-white/50 hover:text-[#f7931a] transition-colors"
+                                                class="text-[11px] lg:text-xs 2xl:text-sm text-white/55 hover:text-[#f7931a] transition-colors"
                                             >
                                                 "mempool.space ->"
                                             </a>
@@ -1195,7 +1579,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                                 set_show_hint.set(false);
                             }
                         >
-                            <div class="max-w-sm mx-4 bg-[#0a1a2e] border border-white/15 rounded-xl p-5 sm:p-6 shadow-2xl space-y-4 text-center">
+                            <div class="max-w-md w-full mx-4 bg-[#0a1a2e] border border-white/15 rounded-xl p-5 sm:p-6 shadow-2xl space-y-4 text-center">
                                 <p class="text-white/90 text-sm sm:text-base leading-relaxed">
                                     "Each "
                                     <span class="text-[#f7931a] font-semibold">"spike"</span>
@@ -1203,11 +1587,43 @@ pub fn HeartbeatPage() -> impl IntoView {
                                     <span class="text-[#f7931a] font-semibold">"brick"</span>
                                     " is a transaction."
                                 </p>
-                                <div class="text-white/50 text-xs sm:text-sm space-y-1.5">
+                                <div class="text-white/55 text-xs sm:text-sm space-y-1.5">
                                     <p>"Drag to scroll through history"</p>
                                     <p>"Scroll wheel or pinch to zoom"</p>
                                     <p>"Click a spike for block details"</p>
                                     <p>"Click a brick for transaction info"</p>
+                                </div>
+                                <div class="hidden sm:block pt-3 border-t border-white/10 text-left space-y-2">
+                                    <div class="text-[10px] font-mono uppercase tracking-wider text-white/35 text-center">"Keyboard shortcuts"</div>
+                                    <div class="grid grid-cols-2 gap-x-6 gap-y-2 text-[11px] font-mono text-white/60">
+                                        <div class="flex items-center justify-between gap-2 whitespace-nowrap">
+                                            <span>"Pause / play"</span>
+                                            <kbd class="px-1.5 py-0.5 rounded bg-white/10 border border-white/10 text-[10px] text-white/85">"Space"</kbd>
+                                        </div>
+                                        <div class="flex items-center justify-between gap-2 whitespace-nowrap">
+                                            <span>"Follow LIVE"</span>
+                                            <kbd class="px-1.5 py-0.5 rounded bg-white/10 border border-white/10 text-[10px] text-white/85">"L"</kbd>
+                                        </div>
+                                        <div class="flex items-center justify-between gap-2 whitespace-nowrap">
+                                            <span>"Step blocks"</span>
+                                            <span class="inline-flex items-center gap-1">
+                                                <kbd class="px-1.5 py-0.5 rounded bg-white/10 border border-white/10 text-[10px] text-white/85">"\u{2190}"</kbd>
+                                                <kbd class="px-1.5 py-0.5 rounded bg-white/10 border border-white/10 text-[10px] text-white/85">"\u{2192}"</kbd>
+                                            </span>
+                                        </div>
+                                        <div class="flex items-center justify-between gap-2 whitespace-nowrap">
+                                            <span>"Fit view"</span>
+                                            <kbd class="px-1.5 py-0.5 rounded bg-white/10 border border-white/10 text-[10px] text-white/85">"F"</kbd>
+                                        </div>
+                                        <div class="flex items-center justify-between gap-2 whitespace-nowrap">
+                                            <span>"Search"</span>
+                                            <kbd class="px-1.5 py-0.5 rounded bg-white/10 border border-white/10 text-[10px] text-white/85">"/"</kbd>
+                                        </div>
+                                        <div class="flex items-center justify-between gap-2 whitespace-nowrap">
+                                            <span>"Dismiss"</span>
+                                            <kbd class="px-1.5 py-0.5 rounded bg-white/10 border border-white/10 text-[10px] text-white/85">"Esc"</kbd>
+                                        </div>
+                                    </div>
                                 </div>
                                 <p class="text-white/30 text-[10px] sm:text-xs pt-2 border-t border-white/10">"Tap anywhere to dismiss"</p>
                             </div>
@@ -1216,78 +1632,103 @@ pub fn HeartbeatPage() -> impl IntoView {
 
                 </div>
 
-                // Control bar (HTML, outside canvas): one centered cluster, zoom,
-                // then playback, then the LIVE follow-pill + Fit at the right end.
-                <div class="flex items-center justify-center px-3 py-2 border-t border-white/5">
-                    <div class="flex items-center gap-1 rounded-lg bg-[#0a1929]/70 border border-white/10 px-1.5 py-1 backdrop-blur-sm">
-                        // ── Zoom ──
-                        <button aria-label="Zoom out" onclick="handleControlClick('zoomOut')"
-                            class="group relative w-8 h-8 rounded-md bg-white/5 text-white/70 hover:bg-white/15 hover:text-white transition-all cursor-pointer flex items-center justify-center text-sm">
-                            "\u{2212}"
-                            <span class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded bg-[#0a1929] border border-white/10 text-[10px] text-white/80 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-75 z-10">"Zoom out"</span>
-                        </button>
-                        <span id="heartbeat-zoom-label" class="hidden sm:inline text-[10px] text-white/40 font-mono w-9 text-center select-none">"1.9x"</span>
-                        <button aria-label="Zoom in" onclick="handleControlClick('zoomIn')"
-                            class="group relative w-8 h-8 rounded-md bg-white/5 text-white/70 hover:bg-white/15 hover:text-white transition-all cursor-pointer flex items-center justify-center text-sm">
-                            "+"
-                            <span class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded bg-[#0a1929] border border-white/10 text-[10px] text-white/80 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-75 z-10">"Zoom in"</span>
-                        </button>
+                // Control dock (HTML, outside canvas): sleek grouped SVG instrumentation
+                // bar with Zoom, Block step + Pause/Play, LIVE pill, Fit, Sound, and Help.
+                <div class="flex items-center justify-center px-2 sm:px-4 py-2 border-t border-white/[0.06] bg-[#0a1929]/55">
+                    <div class="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2 max-w-full overflow-visible rounded-xl bg-[#071320]/90 border border-white/10 px-2 sm:px-2.5 py-1.5 shadow-lg backdrop-blur-md">
+                        // ── Zoom cluster ──
+                        <div class="flex items-center gap-0.5 rounded-lg bg-white/[0.04] border border-white/[0.06] p-0.5">
+                            <button aria-label="Zoom out" onclick="handleControlClick('zoomOut')"
+                                class="group relative w-7 h-7 sm:w-8 sm:h-8 shrink-0 rounded-md text-white/65 hover:bg-white/10 hover:text-white transition-all cursor-pointer flex items-center justify-center">
+                                <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14"/>
+                                </svg>
+                                <span class="hidden sm:block pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded-md bg-[#071320] border border-white/15 text-[10px] font-mono text-white/85 whitespace-nowrap shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-75 z-20">"Zoom out (-)"</span>
+                            </button>
+                            <span id="heartbeat-zoom-label" class="hidden sm:inline text-[11px] text-white/55 font-mono tabular-nums w-10 text-center select-none">"1.6x"</span>
+                            <button aria-label="Zoom in" onclick="handleControlClick('zoomIn')"
+                                class="group relative w-7 h-7 sm:w-8 sm:h-8 shrink-0 rounded-md text-white/65 hover:bg-white/10 hover:text-white transition-all cursor-pointer flex items-center justify-center">
+                                <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14"/>
+                                </svg>
+                                <span class="hidden sm:block pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded-md bg-[#071320] border border-white/15 text-[10px] font-mono text-white/85 whitespace-nowrap shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-75 z-20">"Zoom in (+)"</span>
+                            </button>
+                        </div>
 
-                        <div class="w-px h-5 bg-white/10 mx-1"></div>
+                        // ── Playback & block step cluster ──
+                        <div class="flex items-center gap-0.5 rounded-lg bg-white/[0.04] border border-white/[0.06] p-0.5">
+                            <button aria-label="Previous block" onclick="handleControlClick('prev')"
+                                class="group relative w-7 h-7 sm:w-8 sm:h-8 shrink-0 rounded-md text-white/65 hover:bg-white/10 hover:text-white transition-all cursor-pointer flex items-center justify-center">
+                                <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M6 6h2v12H6V6zm3.5 6l8.5 6V6l-8.5 6z"/>
+                                </svg>
+                                <span class="hidden sm:block pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded-md bg-[#071320] border border-white/15 text-[10px] font-mono text-white/85 whitespace-nowrap shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-75 z-20">"Previous block (\u{2190})"</span>
+                            </button>
+                            <button id="heartbeat-btn-pause" aria-label="Pause or play" aria-pressed="false" onclick="handleControlClick('pause')"
+                                class="group relative w-7 h-7 sm:w-8 sm:h-8 shrink-0 rounded-md bg-[#f7931a]/15 text-[#f7931a] hover:bg-[#f7931a]/25 transition-all cursor-pointer flex items-center justify-center">
+                                <svg id="heartbeat-pause-svg" class="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M7 5h3.5v14H7V5zm6.5 0H17v14h-3.5V5z"/>
+                                </svg>
+                                <svg id="heartbeat-play-svg" class="w-3.5 h-3.5 sm:w-4 sm:h-4 hidden" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M8 5.14v13.72L19 12 8 5.14z"/>
+                                </svg>
+                                <span class="hidden sm:block pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded-md bg-[#071320] border border-white/15 text-[10px] font-mono text-white/85 whitespace-nowrap shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-75 z-20">"Pause / play (Space)"</span>
+                            </button>
+                            <button aria-label="Next block" onclick="handleControlClick('next')"
+                                class="group relative w-7 h-7 sm:w-8 sm:h-8 shrink-0 rounded-md text-white/65 hover:bg-white/10 hover:text-white transition-all cursor-pointer flex items-center justify-center">
+                                <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M16 6h2v12h-2V6zM6 18l8.5-6L6 6v12z"/>
+                                </svg>
+                                <span class="hidden sm:block pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded-md bg-[#071320] border border-white/15 text-[10px] font-mono text-white/85 whitespace-nowrap shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-75 z-20">"Next block (\u{2192})"</span>
+                            </button>
+                        </div>
 
-                        // ── Playback ──
-                        <button aria-label="Previous block" onclick="handleControlClick('prev')"
-                            class="group relative w-8 h-8 rounded-md bg-white/5 text-white/70 hover:bg-white/15 hover:text-white transition-all cursor-pointer flex items-center justify-center text-sm">
-                            "\u{23EE}"
-                            <span class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded bg-[#0a1929] border border-white/10 text-[10px] text-white/80 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-75 z-10">"Previous block"</span>
-                        </button>
-                        <button id="heartbeat-btn-pause" aria-label="Pause or play" onclick="handleControlClick('pause')"
-                            class="group relative w-8 h-8 rounded-md bg-[#f7931a]/20 text-[#f7931a] hover:bg-[#f7931a]/30 transition-all cursor-pointer flex items-center justify-center text-sm">
-                            <span id="heartbeat-btn-pause-icon">"\u{23F8}"</span>
-                            <span class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded bg-[#0a1929] border border-white/10 text-[10px] text-white/80 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-75 z-10">"Pause / play"</span>
-                        </button>
+                        // ── Primary LIVE pill + Fit ──
+                        <div class="flex items-center gap-1">
+                            <button id="heartbeat-btn-live" aria-label="Follow the live head" onclick="handleControlClick('live')"
+                                class="group relative flex items-center gap-1.5 h-8 sm:h-9 px-2.5 sm:px-3.5 shrink-0 rounded-lg border text-[11px] sm:text-xs font-mono font-bold tracking-wider cursor-pointer transition-all shadow-sm"
+                                style="color:#00e676;background:rgba(0,230,118,0.12);border-color:rgba(0,230,118,0.4)">
+                                <span id="heartbeat-live-dot" class="w-2 h-2 rounded-full" style="background:#00e676"></span>
+                                "LIVE"
+                                <span class="hidden sm:block pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded-md bg-[#071320] border border-white/15 text-[10px] font-mono font-normal tracking-normal text-white/85 whitespace-nowrap shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-75 z-20">"Follow live head (L)"</span>
+                            </button>
+                            <button aria-label="Fit whole mempool" onclick="handleControlClick('fit')"
+                                class="group relative w-8 h-8 sm:w-9 sm:h-9 shrink-0 rounded-lg bg-white/[0.04] border border-white/[0.06] text-white/65 hover:bg-white/10 hover:text-white transition-all cursor-pointer flex items-center justify-center">
+                                <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 8V5a1 1 0 0 1 1-1h3m8 0h3a1 1 0 0 1 1 1v3m0 8v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/>
+                                </svg>
+                                <span class="hidden sm:block pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded-md bg-[#071320] border border-white/15 text-[10px] font-mono text-white/85 whitespace-nowrap shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-75 z-20">"Fit view (F)"</span>
+                            </button>
+                        </div>
 
-                        <div class="w-px h-5 bg-white/10 mx-1"></div>
-
-                        // ── View: LIVE follow-pill + Fit (right end) ──
-                        <button id="heartbeat-btn-live" aria-label="Follow the live head" onclick="handleControlClick('live')"
-                            class="group relative flex items-center gap-1.5 h-8 px-2.5 rounded-md border text-[11px] font-mono font-semibold tracking-wider cursor-pointer transition-all"
-                            style="color:#00e676;background:rgba(0,230,118,0.12);border-color:rgba(0,230,118,0.4)">
-                            <span id="heartbeat-live-dot" class="w-1.5 h-1.5 rounded-full" style="background:#00e676"></span>
-                            "LIVE"
-                            <span class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded bg-[#0a1929] border border-white/10 text-[10px] text-white/80 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-75 z-10">"Follow the live head"</span>
-                        </button>
-                        <button aria-label="Fit whole mempool" onclick="handleControlClick('fit')"
-                            class="group relative w-8 h-8 rounded-md bg-white/5 text-white/70 hover:bg-white/15 hover:text-white transition-all cursor-pointer flex items-center justify-center text-sm">
-                            "\u{26F6}"
-                            <span class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded bg-[#0a1929] border border-white/10 text-[10px] text-white/80 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-75 z-10">"Fit whole mempool"</span>
-                        </button>
-
-                        <div class="w-px h-5 bg-white/10 mx-1"></div>
-
-                        // ── Block sound: a monitor beep when a block is mined ──
-                        // Ships in the off state; initSoundButton() repaints the icon
-                        // from localStorage on load. The click is also what unlocks the
-                        // AudioContext, which the autoplay policy requires.
-                        <button
-                            id="heartbeat-btn-sound"
-                            aria-label="Sound on a new block"
-                            aria-pressed="false"
-                            title="Block sound off"
-                            onclick="handleControlClick('sound')"
-                            class="group relative w-8 h-8 rounded-md bg-white/5 text-white/70 hover:bg-white/15 hover:text-white transition-all cursor-pointer flex items-center justify-center text-sm"
-                        >
-                            <span id="heartbeat-btn-sound-icon">"\u{1F507}"</span>
-                            <span class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded bg-[#0a1929] border border-white/10 text-[10px] text-white/80 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-75 z-10">"Sound on a new block"</span>
-                        </button>
-
-                        // ── Help: reopen the intro hint ──
-                        <button aria-label="How to read this" title="How to read this"
-                            on:click=move |_| set_show_hint.set(true)
-                            class="group relative w-8 h-8 rounded-md bg-white/5 text-white/70 hover:bg-white/15 hover:text-white transition-all cursor-pointer flex items-center justify-center text-sm font-serif italic">
-                            "i"
-                            <span class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded bg-[#0a1929] border border-white/10 text-[10px] text-white/80 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-75 z-10">"How to read this"</span>
-                        </button>
+                        // ── Utility cluster: Sound & Help ──
+                        <div class="flex items-center gap-0.5 rounded-lg bg-white/[0.04] border border-white/[0.06] p-0.5">
+                            <button
+                                id="heartbeat-btn-sound"
+                                aria-label="Sound on a new block"
+                                aria-pressed="false"
+                                title="Block sound off (M)"
+                                onclick="handleControlClick('sound')"
+                                class="group relative w-7 h-7 sm:w-8 sm:h-8 shrink-0 rounded-md text-white/65 hover:bg-white/10 hover:text-white transition-all cursor-pointer flex items-center justify-center"
+                            >
+                                <svg id="heartbeat-sound-off-svg" class="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M11 5L6 9H3v6h3l5 4V5zM22 9l-6 6m0-6l6 6"/>
+                                </svg>
+                                <svg id="heartbeat-sound-on-svg" class="w-3.5 h-3.5 sm:w-4 sm:h-4 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M11 5L6 9H3v6h3l5 4V5zm4.5 3.5a5 5 0 0 1 0 7m2.8-9.8a9 9 0 0 1 0 12.6"/>
+                                </svg>
+                                <span class="hidden sm:block pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded-md bg-[#071320] border border-white/15 text-[10px] font-mono text-white/85 whitespace-nowrap shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-75 z-20">"Block sound (M)"</span>
+                            </button>
+                            <button aria-label="How to read this and keyboard shortcuts" title="Guide & shortcuts"
+                                on:click=move |_| set_show_hint.set(true)
+                                class="group relative w-7 h-7 sm:w-8 sm:h-8 shrink-0 rounded-md text-white/65 hover:bg-white/10 hover:text-white transition-all cursor-pointer flex items-center justify-center">
+                                <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                                    <circle cx="12" cy="12" r="9"/>
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 11v5m0-8h.01"/>
+                                </svg>
+                                <span class="hidden sm:block pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded-md bg-[#071320] border border-white/15 text-[10px] font-mono text-white/85 whitespace-nowrap shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-75 z-20">"Guide & shortcuts"</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -1319,7 +1760,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                     unit=" sat/vB"
                     status=bp_label
                     color=bp_color
-                    tip="Fee pressure. Systolic (left) = next block fee rate. Diastolic (right) = mempool minimum fee. Higher numbers mean it costs more to transact."
+                    tip="Fee pressure from Bitcoin Core estimatesmartfee. Systolic (left) = next-block target (~10 min). Diastolic (right) = 6-block target (~1 hour). Higher numbers mean it costs more to transact."
                 />
 
                 // Temperature (mempool)
@@ -1369,49 +1810,96 @@ pub fn HeartbeatPage() -> impl IntoView {
                 </div>
             </div>
 
-            // ── Phase 4: Organism Status ──────────────────────
-            <div class="bg-[#0d2137]/60 border border-white/5 rounded-xl px-5 py-4"
-                 data-tip="Overall network health derived from block timing, fee pressure, mempool congestion, and hashrate. Bitcoin as a living organism: this is its diagnosis."
+            // ── Phase 4: Network Pulse (Rust-computed live telemetry) ──
+            <div class="relative overflow-hidden bg-[#0d2137]/80 border border-white/10 rounded-xl flex"
+                 data-tip="Live network diagnostic computed directly from block arrival intervals, mempool weight, fee rates, and node responsiveness."
                  tabindex="0"
             >
-                <div class="flex items-baseline gap-2">
-                    <span class="text-xs text-white/50 font-mono uppercase tracking-wider">"Organism Status:"</span>
-                    <span
-                        class="text-sm font-mono font-semibold"
-                        style=move || format!("color: {}", org_color.get())
-                    >
-                        {org_condition}
-                    </span>
+                // Live-colored left diagnostic rail
+                <div
+                    class="w-1 shrink-0"
+                    style=move || format!("background-color: {}", network_pulse.get().color)
+                ></div>
+                <div class="flex-1 min-w-0 px-3.5 sm:px-5 py-3.5 sm:py-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 lg:gap-6">
+                    <div class="min-w-0 space-y-1.5">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span
+                                class="w-2 h-2 rounded-full shrink-0"
+                                style=move || {
+                                    let c = network_pulse.get().color;
+                                    format!("background-color: {c}; box-shadow: 0 0 8px {c}88;")
+                                }
+                            ></span>
+                            <span class="text-[10px] sm:text-[11px] text-white/50 font-mono font-semibold uppercase tracking-widest shrink-0">
+                                "Network Pulse"
+                            </span>
+                            <span
+                                class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs sm:text-[13px] font-mono font-semibold border leading-tight"
+                                style=move || {
+                                    let c = network_pulse.get().color;
+                                    format!("color: {c}; background-color: {c}1a; border-color: {c}55;")
+                                }
+                            >
+                                {move || network_pulse.get().headline}
+                            </span>
+                        </div>
+                        <p class="text-xs sm:text-sm text-white/75 leading-relaxed">
+                            {move || network_pulse.get().summary}
+                        </p>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2 lg:shrink-0 lg:w-[390px]">
+                        <div class="rounded-lg bg-[#071320]/70 border border-white/[0.08] px-2.5 sm:px-3 py-2 flex flex-col gap-0.5 text-center sm:text-left min-w-0">
+                            <span class="text-[9px] sm:text-[10px] font-mono uppercase tracking-wider text-white/45 truncate">
+                                "Depth"
+                            </span>
+                            <span class="text-xs sm:text-sm font-mono font-semibold text-white/90 tabular-nums truncate">
+                                {move || network_pulse.get().depth_pill}
+                            </span>
+                        </div>
+                        <div class="rounded-lg bg-[#071320]/70 border border-white/[0.08] px-2.5 sm:px-3 py-2 flex flex-col gap-0.5 text-center sm:text-left min-w-0">
+                            <span class="text-[9px] sm:text-[10px] font-mono uppercase tracking-wider text-white/45 truncate">
+                                "20-Blk Avg"
+                            </span>
+                            <span class="text-xs sm:text-sm font-mono font-semibold text-white/90 tabular-nums truncate">
+                                {move || network_pulse.get().cadence_pill}
+                            </span>
+                        </div>
+                        <div class="rounded-lg bg-[#071320]/70 border border-white/[0.08] px-2.5 sm:px-3 py-2 flex flex-col gap-0.5 text-center sm:text-left min-w-0">
+                            <span class="text-[9px] sm:text-[10px] font-mono uppercase tracking-wider text-white/45 truncate">
+                                "Next Block"
+                            </span>
+                            <span class="text-xs sm:text-sm font-mono font-semibold text-white/90 tabular-nums truncate">
+                                {move || network_pulse.get().fee_pill}
+                            </span>
+                        </div>
+                    </div>
                 </div>
-                <p class="text-sm text-white/40 italic mt-1 font-mono">
-                    {org_desc}
-                </p>
             </div>
 
             // ── The Lookout Feed ──────────────────────────────
             <div id="whale-feed-panel" class="bg-[#0d2137] border border-[#ffd700]/20 rounded-2xl overflow-hidden hidden">
                 // Header: stacks label above buttons on mobile, inline on sm+
-                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-4 py-2.5 border-b border-[#ffd700]/10">
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-3.5 sm:px-4 py-2.5 border-b border-[#ffd700]/10">
                     <div class="flex items-center gap-2 shrink-0">
                         <span class="w-2 h-2 rounded-full bg-[#ffd700] animate-pulse"></span>
-                        <span class="text-xs font-mono text-[#ffd700]/80 uppercase tracking-wider">"The Lookout"</span>
+                        <span class="text-xs font-mono text-[#ffd700]/85 uppercase tracking-wider">"The Lookout"</span>
                     </div>
-                    // Horizontal-scroll row on mobile; wraps inline on sm+
-                    <div class="flex items-center gap-1 overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0 sm:flex-wrap sm:justify-end">
-                        <button onclick="window._filterNotable('all')" id="whale-filter-all" title="Show all notable transactions" class="px-2 py-0.5 rounded text-[10px] font-mono whitespace-nowrap shrink-0 bg-white/10 text-white/60 hover:bg-white/20 transition-colors border border-white/[0.08]">"All"</button>
-                        <button onclick="window._filterNotable('whale')" id="whale-filter-whale" title="Whales: total output value over $1,000,000 USD. May include exchange self-sends where no value actually changed hands." class="px-2 py-0.5 rounded text-[10px] font-mono whitespace-nowrap shrink-0 bg-transparent border border-white/[0.08] text-[#ffd700]/50 hover:bg-[#ffd700]/10 transition-colors">"Whales"</button>
-                        <button onclick="window._filterNotable('round_number')" id="whale-filter-round_number" title="Round-number transfers: exact 1, 10, 100, or 1000 BTC output amounts. Often human-initiated vs exchange automation." class="px-2 py-0.5 rounded text-[10px] font-mono whitespace-nowrap shrink-0 bg-transparent border border-white/[0.08] text-[#90ee90]/60 hover:bg-[#90ee90]/10 transition-colors">"Round #"</button>
-                        <button onclick="window._filterNotable('inscription')" id="whale-filter-inscription" title="Large inscriptions: witness data over 100KB (Ordinals, BRC-20, images, JSON)" class="px-2 py-0.5 rounded text-[10px] font-mono whitespace-nowrap shrink-0 bg-transparent border border-white/[0.08] text-[#ff00c8]/50 hover:bg-[#ff00c8]/10 transition-colors">"Inscr."</button>
-                        <button onclick="window._filterNotable('consolidation')" id="whale-filter-consolidation" title="Consolidations: 50+ inputs merged into 3 or fewer outputs (exchange cold wallet sweeps, UTXO cleanup)" class="px-2 py-0.5 rounded text-[10px] font-mono whitespace-nowrap shrink-0 bg-transparent border border-white/[0.08] text-[#a855f7]/50 hover:bg-[#a855f7]/10 transition-colors">"Consol."</button>
-                        <button onclick="window._filterNotable('fan_out')" id="whale-filter-fan_out" title="Fan-outs: 3 or fewer inputs sprayed to 100+ outputs (exchange batch payouts, mining rewards, airdrops)" class="px-2 py-0.5 rounded text-[10px] font-mono whitespace-nowrap shrink-0 bg-transparent border border-white/[0.08] text-[#00d2ff]/50 hover:bg-[#00d2ff]/10 transition-colors">"Fan-out"</button>
-                        <button onclick="window._filterNotable('fee')" id="whale-filter-fee" title="Fee outliers: fee rate over 2000 sat/vB or absolute fee over 0.1 BTC" class="px-2 py-0.5 rounded text-[10px] font-mono whitespace-nowrap shrink-0 bg-transparent border border-white/[0.08] text-[#ff4444]/50 hover:bg-[#ff4444]/10 transition-colors">"Fees"</button>
-                        <button onclick="window._filterNotable('op_return')" id="whale-filter-op_return" title="OP_RETURN messages: transactions embedding readable ASCII text on-chain" class="px-2 py-0.5 rounded text-[10px] font-mono whitespace-nowrap shrink-0 bg-transparent border border-white/[0.08] text-[#ffa500]/60 hover:bg-[#ffa500]/10 transition-colors">"Messages"</button>
+                    // Wrapped chips on all viewports so every filter is tappable with zero horizontal scrollbar
+                    <div class="flex flex-wrap items-center gap-1 sm:justify-end">
+                        <button onclick="window._filterNotable('all')" id="whale-filter-all" title="Show all notable transactions" class="px-2 py-0.5 rounded text-[10px] font-mono whitespace-nowrap shrink-0 bg-white/10 text-white/80 hover:bg-white/20 transition-colors border border-white/[0.12]">"All"</button>
+                        <button onclick="window._filterNotable('whale')" id="whale-filter-whale" title="Whales: total output value over $1,000,000 USD. May include exchange self-sends where no value actually changed hands." class="px-2 py-0.5 rounded text-[10px] font-mono whitespace-nowrap shrink-0 bg-transparent border border-white/[0.12] text-[#ffd700]/75 hover:bg-[#ffd700]/10 transition-colors">"Whales"</button>
+                        <button onclick="window._filterNotable('round_number')" id="whale-filter-round_number" title="Round-number transfers: exact 1, 10, 100, or 1000 BTC output amounts. Often human-initiated vs exchange automation." class="px-2 py-0.5 rounded text-[10px] font-mono whitespace-nowrap shrink-0 bg-transparent border border-white/[0.12] text-[#90ee90]/80 hover:bg-[#90ee90]/10 transition-colors">"Round #"</button>
+                        <button onclick="window._filterNotable('inscription')" id="whale-filter-inscription" title="Large inscriptions: witness data over 100KB (Ordinals, BRC-20, images, JSON)" class="px-2 py-0.5 rounded text-[10px] font-mono whitespace-nowrap shrink-0 bg-transparent border border-white/[0.12] text-[#ff00c8]/75 hover:bg-[#ff00c8]/10 transition-colors">"Inscr."</button>
+                        <button onclick="window._filterNotable('consolidation')" id="whale-filter-consolidation" title="Consolidations: 50+ inputs merged into 3 or fewer outputs (exchange cold wallet sweeps, UTXO cleanup)" class="px-2 py-0.5 rounded text-[10px] font-mono whitespace-nowrap shrink-0 bg-transparent border border-white/[0.12] text-[#a855f7]/80 hover:bg-[#a855f7]/10 transition-colors">"Consol."</button>
+                        <button onclick="window._filterNotable('fan_out')" id="whale-filter-fan_out" title="Fan-outs: 3 or fewer inputs sprayed to 100+ outputs (exchange batch payouts, mining rewards, airdrops)" class="px-2 py-0.5 rounded text-[10px] font-mono whitespace-nowrap shrink-0 bg-transparent border border-white/[0.12] text-[#00d2ff]/80 hover:bg-[#00d2ff]/10 transition-colors">"Fan-out"</button>
+                        <button onclick="window._filterNotable('fee')" id="whale-filter-fee" title="Fee outliers: fee rate over 2000 sat/vB or absolute fee over 0.1 BTC" class="px-2 py-0.5 rounded text-[10px] font-mono whitespace-nowrap shrink-0 bg-transparent border border-white/[0.12] text-[#ff4444]/80 hover:bg-[#ff4444]/10 transition-colors">"Fees"</button>
+                        <button onclick="window._filterNotable('op_return')" id="whale-filter-op_return" title="OP_RETURN messages: transactions embedding readable ASCII text on-chain" class="px-2 py-0.5 rounded text-[10px] font-mono whitespace-nowrap shrink-0 bg-transparent border border-white/[0.12] text-[#ffa500]/80 hover:bg-[#ffa500]/10 transition-colors">"Messages"</button>
                     </div>
                 </div>
-                <div id="whale-feed-list" class="max-h-[240px] overflow-y-auto">
-                    <div data-placeholder="1" class="px-4 py-3 text-xs text-white/20 font-mono italic text-center">"Listening for notable transactions..."</div>
+                <div id="whale-feed-list" class="max-h-[240px] overflow-y-auto overflow-x-hidden">
+                    <div data-placeholder="1" class="px-4 py-3 text-xs text-white/30 font-mono italic text-center">"Listening for notable transactions..."</div>
                 </div>
-                <div class="px-3 py-1.5 border-t border-white/5 text-[10px] font-mono text-white/30 text-center">
+                <div class="px-3 py-1.5 border-t border-white/5 text-[11px] font-mono text-white/45 text-center">
                     <a href="/observatory/lookout" class="hover:text-[#f7931a] transition-colors">"Visit The Lookout for history and stats \u{2192}"</a>
                 </div>
             </div>
@@ -1431,80 +1919,294 @@ pub fn HeartbeatPage() -> impl IntoView {
                 </button>
             </div> */
 
-            // Legends: Transaction Fee Bands + Network Stress
-            <div class="space-y-5">
+            // Legends: Transaction Fee Bands + EKG Wait Interval
+            <div class="bg-[#0d2137]/60 border border-white/10 rounded-xl p-4 sm:p-5 grid grid-cols-1 lg:grid-cols-2 gap-5 lg:gap-6">
                 // Fixed Fee Rate Legend
-                <div class="space-y-2">
-                    <div class="text-center">
-                        <span class="text-xs text-white/50 font-mono uppercase tracking-wider">"Transaction Fee Bands (sat/vB)"</span>
+                <div class="space-y-2.5">
+                    <div class="text-center lg:text-left">
+                        <span class="text-[11px] sm:text-xs text-white/75 font-mono font-semibold uppercase tracking-wider">"Transaction Fee Bands (sat/vB)"</span>
                     </div>
-                    <div class="flex flex-wrap justify-center gap-x-5 gap-y-2 text-xs text-white/50 font-mono">
-                        <div class="flex items-center gap-1.5">
-                            <span class="w-2.5 h-2.5 rounded-sm bg-[#64748b]"></span>
+                    <div class="flex flex-wrap justify-center lg:justify-start gap-1.5 sm:gap-2 text-[11px] sm:text-xs text-white/85 font-mono">
+                        <div class="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-white/[0.04] border border-white/10 whitespace-nowrap">
+                            <span class="w-2.5 h-2.5 rounded-sm bg-[#64748b] shrink-0"></span>
                             "Pending"
                         </div>
-                        <div class="flex items-center gap-1.5">
-                            <span class="w-2.5 h-2.5 rounded-sm bg-[#2563eb]"></span>
+                        <div class="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-white/[0.04] border border-white/10 whitespace-nowrap">
+                            <span class="w-2.5 h-2.5 rounded-sm bg-[#2563eb] shrink-0"></span>
                             "< 1"
                         </div>
-                        <div class="flex items-center gap-1.5">
-                            <span class="w-2.5 h-2.5 rounded-sm bg-[#38bdf8]"></span>
-                            "1-2"
+                        <div class="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-white/[0.04] border border-white/10 whitespace-nowrap">
+                            <span class="w-2.5 h-2.5 rounded-sm bg-[#38bdf8] shrink-0"></span>
+                            "1\u{2013}2"
                         </div>
-                        <div class="flex items-center gap-1.5">
-                            <span class="w-2.5 h-2.5 rounded-sm bg-[#00e676]"></span>
-                            "2-5"
+                        <div class="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-white/[0.04] border border-white/10 whitespace-nowrap">
+                            <span class="w-2.5 h-2.5 rounded-sm bg-[#00e676] shrink-0"></span>
+                            "2\u{2013}5"
                         </div>
-                        <div class="flex items-center gap-1.5">
-                            <span class="w-2.5 h-2.5 rounded-sm bg-[#f7931a]"></span>
-                            "5-15"
+                        <div class="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-white/[0.04] border border-white/10 whitespace-nowrap">
+                            <span class="w-2.5 h-2.5 rounded-sm bg-[#f7931a] shrink-0"></span>
+                            "5\u{2013}15"
                         </div>
-                        <div class="flex items-center gap-1.5">
-                            <span class="w-2.5 h-2.5 rounded-sm bg-[#ff5722]"></span>
-                            "15-50"
+                        <div class="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-white/[0.04] border border-white/10 whitespace-nowrap">
+                            <span class="w-2.5 h-2.5 rounded-sm bg-[#ff5722] shrink-0"></span>
+                            "15\u{2013}50"
                         </div>
-                        <div class="flex items-center gap-1.5">
-                            <span class="w-2.5 h-2.5 rounded-sm bg-[#f44336]"></span>
+                        <div class="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-white/[0.04] border border-white/10 whitespace-nowrap">
+                            <span class="w-2.5 h-2.5 rounded-sm bg-[#f44336] shrink-0"></span>
                             "50+"
                         </div>
                     </div>
-                    <p class="text-center text-[11px] text-white/40 max-w-lg mx-auto">
+                    <p class="text-center lg:text-left text-[11px] sm:text-xs text-white/60 leading-relaxed">
                         "Larger outlined bricks highlight notable transactions (whales, inscriptions, messages, fee outliers)."
                     </p>
                 </div>
 
-                // Network Stress Legend
-                <div class="space-y-2">
-                    <div class="text-center">
-                        <span class="text-xs text-white/50 font-mono uppercase tracking-wider">"Network Stress"</span>
+                // EKG Wait Interval Legend (continuous 7-stop progressive wait ramp)
+                <div class="space-y-2.5 pt-4 border-t border-white/10 lg:pt-0 lg:border-t-0 lg:border-l lg:pl-6">
+                    <div class="text-center lg:text-left">
+                        <span class="text-[11px] sm:text-xs text-white/75 font-mono font-semibold uppercase tracking-wider">"EKG Wait Interval"</span>
                     </div>
-                    <div class="flex flex-wrap justify-center gap-x-5 gap-y-2 text-xs text-white/50">
-                        <div class="flex items-center gap-1.5">
-                            <span class="w-2.5 h-2.5 rounded-full bg-[#00e676]"></span>
-                            "Healthy"
-                        </div>
-                        <div class="flex items-center gap-1.5">
-                            <span class="w-2.5 h-2.5 rounded-full bg-[#42a5f5]"></span>
-                            "Steady"
-                        </div>
-                        <div class="flex items-center gap-1.5">
-                            <span class="w-2.5 h-2.5 rounded-full bg-[#f7931a]"></span>
-                            "Elevated"
-                        </div>
-                        <div class="flex items-center gap-1.5">
-                            <span class="w-2.5 h-2.5 rounded-full bg-[#ff5722]"></span>
-                            "Stressed"
-                        </div>
-                        <div class="flex items-center gap-1.5">
-                            <span class="w-2.5 h-2.5 rounded-full bg-[#f44336]"></span>
-                            "Critical"
+                    <div class="space-y-1.5">
+                        <div
+                            class="h-2.5 w-full rounded-full border border-white/10"
+                            style="background: linear-gradient(to right, #00e676 0%, #38bdf8 17%, #facc15 33%, #f97316 50%, #ff4500 67%, #dc2626 83%, #c026d3 100%)"
+                        ></div>
+                        <div class="grid grid-cols-7 gap-0.5 text-center text-[10px] sm:text-[11px] font-mono text-white/80 tabular-nums">
+                            <span class="text-[#00e676]">"0\u{2013}5m"</span>
+                            <span class="text-[#38bdf8]">"10m"</span>
+                            <span class="text-[#facc15]">"20m"</span>
+                            <span class="text-[#f97316]">"30m"</span>
+                            <span class="text-[#ff6a33]">"45m"</span>
+                            <span class="text-[#f87171]">"60m"</span>
+                            <span class="text-[#e879f9]">"90m+"</span>
                         </div>
                     </div>
-                    <p class="text-center text-[11px] text-white/40 max-w-md mx-auto">
-                        "Color is derived from time since last block, fee pressure, and mempool congestion. It affects the flatline, waveform, and live indicator."
+                    <p class="text-center lg:text-left text-[11px] sm:text-xs text-white/60 leading-relaxed">
+                        "Flatline and spike color shifts continuously along this 7-stop wait ramp as minutes pass between blocks, keeping long droughts visually distinct."
                     </p>
                 </div>
             </div>
+
+            // Historic Landmarks browser modal (portaled to <body> so ObservatoryPage's
+            // forwards-filled fade animation stacking context cannot trap it under the navbar)
+            <Portal>
+                <Show when=move || show_landmarks.get()>
+                    <div
+                        id="heartbeat-landmarks-modal"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label="Landmark Blocks"
+                        class="fixed inset-0 flex items-end sm:items-center justify-center sm:p-4"
+                        style="z-index: 10004"
+                    >
+                        // Backdrop
+                        <div
+                            class="absolute inset-0 bg-black/70 backdrop-blur-sm"
+                            on:click=move |_| set_show_landmarks.set(false)
+                        ></div>
+
+                        // Modal surface
+                        <div class="relative w-full sm:max-w-2xl max-h-[85vh] sm:max-h-[80vh] flex flex-col bg-[#0a1929] border border-white/15 rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden">
+                            // Header + filter + category tabs
+                            <div class="px-4 sm:px-5 pt-4 pb-3 border-b border-white/10 bg-[#071320]/90 space-y-3 shrink-0">
+                                <div class="flex items-start justify-between gap-3">
+                                    <div class="min-w-0">
+                                        <h2 class="text-sm sm:text-base font-semibold text-white">
+                                            "Landmark Blocks"
+                                        </h2>
+                                        <p class="text-[11px] sm:text-xs text-white/55 mt-0.5">
+                                            "Jump the Heartbeat EKG to any curated block from The Archives."
+                                        </p>
+                                    </div>
+                                    <button
+                                        id="heartbeat-landmarks-close"
+                                        type="button"
+                                        aria-label="Close landmark blocks browser"
+                                        class="w-7 h-7 rounded-lg bg-white/5 hover:bg-white/15 border border-white/10 text-white/65 hover:text-white flex items-center justify-center cursor-pointer transition-colors shrink-0"
+                                        on:click=move |_| set_show_landmarks.set(false)
+                                    >
+                                        "\u{2715}"
+                                    </button>
+                                </div>
+
+                                // Instant text filter
+                                <div class="relative">
+                                    <input
+                                        type="text"
+                                        id="heartbeat-landmarks-filter"
+                                        placeholder="Filter by event, year, category, or block height..."
+                                        class="w-full pl-3 pr-8 py-1.5 rounded-lg bg-[#0d2137] border border-white/15 text-xs sm:text-sm font-mono text-white placeholder-white/40 focus:outline-none focus:border-[#f7931a]/60"
+                                        prop:value=move || landmark_filter.get()
+                                        on:input=move |ev| set_landmark_filter.set(event_target_value(&ev))
+                                        on:keydown=move |ev| {
+                                            if ev.key() == "Escape" {
+                                                set_show_landmarks.set(false);
+                                            }
+                                        }
+                                    />
+                                    <Show when=move || !landmark_filter.get().is_empty()>
+                                        <button
+                                            type="button"
+                                            aria-label="Clear filter"
+                                            class="absolute right-2 top-1/2 -translate-y-1/2 text-white/45 hover:text-white text-xs cursor-pointer px-1"
+                                            on:click=move |_| set_landmark_filter.set(String::new())
+                                        >
+                                            "\u{2715}"
+                                        </button>
+                                    </Show>
+                                </div>
+
+                                // Category filter pills
+                                <div class="flex flex-wrap items-center gap-1.5">
+                                    {move || {
+                                        let all = heartbeat_landmarks();
+                                        let active_cat = landmark_cat.get();
+                                        let cats: [(Option<HofCategory>, &str, &str); 6] = [
+                                            (None, "All", "#f7931a"),
+                                            (Some(HofCategory::Milestones), HofCategory::Milestones.label(), HofCategory::Milestones.color()),
+                                            (Some(HofCategory::Records), HofCategory::Records.label(), HofCategory::Records.color()),
+                                            (Some(HofCategory::Protocol), HofCategory::Protocol.label(), HofCategory::Protocol.color()),
+                                            (Some(HofCategory::Attacks), HofCategory::Attacks.label(), HofCategory::Attacks.color()),
+                                            (Some(HofCategory::Oddities), HofCategory::Oddities.label(), HofCategory::Oddities.color()),
+                                        ];
+                                        cats.into_iter().map(|(cat_opt, label, color)| {
+                                            let count = all.iter().filter(|item| cat_opt.is_none_or(|c| item.category == c)).count();
+                                            let is_active = active_cat == cat_opt;
+                                            let style_str = if is_active {
+                                                format!("color: {color}; background-color: {color}22; border-color: {color}66;")
+                                            } else {
+                                                String::new()
+                                            };
+                                            let cls = if is_active {
+                                                "inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-mono font-semibold border cursor-pointer transition-colors"
+                                            } else {
+                                                "inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-mono text-white/70 hover:text-white bg-white/[0.04] hover:bg-white/10 border border-white/10 cursor-pointer transition-colors"
+                                            };
+                                            view! {
+                                                <button
+                                                    type="button"
+                                                    class=cls
+                                                    style=style_str
+                                                    on:click=move |_| set_landmark_cat.set(cat_opt)
+                                                >
+                                                    <span>{label}</span>
+                                                    <span class="opacity-65 tabular-nums">{format!("({count})")}</span>
+                                                </button>
+                                            }
+                                        }).collect_view()
+                                    }}
+                                </div>
+                            </div>
+
+                            // Scrollable landmark cards
+                            <div class="flex-1 overflow-y-auto p-3.5 sm:p-4">
+                                {move || {
+                                    let cat = landmark_cat.get();
+                                    let q = landmark_filter.get();
+                                    let items: Vec<HeartbeatLandmark> = heartbeat_landmarks()
+                                        .into_iter()
+                                        .filter(|item| landmark_matches(item, cat, &q))
+                                        .collect();
+
+                                    if items.is_empty() {
+                                        view! {
+                                            <div class="py-10 text-center space-y-2">
+                                                <p class="text-xs sm:text-sm text-white/55 font-mono">
+                                                    "No landmark blocks match that filter."
+                                                </p>
+                                                <button
+                                                    type="button"
+                                                    class="px-3 py-1 rounded-lg bg-white/10 hover:bg-white/15 border border-white/15 text-xs font-mono text-white/80 cursor-pointer transition-colors"
+                                                    on:click=move |_| {
+                                                        set_landmark_cat.set(None);
+                                                        set_landmark_filter.set(String::new());
+                                                    }
+                                                >
+                                                    "Reset filter"
+                                                </button>
+                                            </div>
+                                        }.into_any()
+                                    } else {
+                                        view! {
+                                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                                {items.into_iter().map(|item| {
+                                                    let height = item.height;
+                                                    let q_str = format!("#{height}");
+                                                    let height_tag = format!("#{}", super::helpers::format_number(height));
+                                                    let cat_color = item.category.color();
+                                                    let cat_label = item.category.label();
+                                                    view! {
+                                                        <button
+                                                            type="button"
+                                                            class="group text-left p-3 rounded-xl bg-white/[0.04] hover:bg-[#f7931a]/12 border border-white/10 hover:border-[#f7931a]/50 transition-all cursor-pointer flex flex-col gap-1.5"
+                                                            on:click=move |_| {
+                                                                set_show_landmarks.set(false);
+                                                                set_search_query.set(q_str.clone());
+                                                                set_search_feedback.set(None);
+                                                                #[cfg(feature = "hydrate")]
+                                                                {
+                                                                    let client = hb_client.try_with_value(|c| c.clone()).flatten();
+                                                                    if let Some(c) = client {
+                                                                        c.search(&q_str);
+                                                                    }
+                                                                }
+                                                            }
+                                                        >
+                                                            <div class="flex items-center justify-between gap-2 text-[10px] font-mono">
+                                                                <span
+                                                                    class="inline-flex items-center gap-1.5 uppercase tracking-wider font-semibold"
+                                                                    style=format!("color: {cat_color}")
+                                                                >
+                                                                    <span
+                                                                        class="w-1.5 h-1.5 rounded-full shrink-0"
+                                                                        style=format!("background-color: {cat_color}")
+                                                                    ></span>
+                                                                    {cat_label}
+                                                                </span>
+                                                                <span class="text-white/45 tabular-nums">{item.date}</span>
+                                                            </div>
+                                                            <div class="flex items-start justify-between gap-2">
+                                                                <span class="text-xs sm:text-[13px] font-semibold text-white/95 group-hover:text-white leading-snug">
+                                                                    {item.title}
+                                                                </span>
+                                                                <span class="px-1.5 py-0.5 rounded bg-[#f7931a]/15 border border-[#f7931a]/35 text-[10px] sm:text-[11px] font-mono font-semibold text-[#f7931a] tabular-nums shrink-0">
+                                                                    {height_tag}
+                                                                </span>
+                                                            </div>
+                                                            <p class="text-[11px] text-white/60 leading-relaxed line-clamp-2">
+                                                                {item.description}
+                                                            </p>
+                                                        </button>
+                                                    }
+                                                }).collect_view()}
+                                            </div>
+                                        }.into_any()
+                                    }
+                                }}
+                            </div>
+
+                            // Footer
+                            <div class="px-4 sm:px-5 py-2.5 border-t border-white/10 bg-[#071320]/90 flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono shrink-0">
+                                <span class="text-white/50 tabular-nums">
+                                    {move || {
+                                        let cat = landmark_cat.get();
+                                        let q = landmark_filter.get();
+                                        let all = heartbeat_landmarks();
+                                        let shown = all.iter().filter(|i| landmark_matches(i, cat, &q)).count();
+                                        format!("Showing {shown} of {} curated blocks", all.len())
+                                    }}
+                                </span>
+                                <a
+                                    href="/observatory/archives"
+                                    class="text-[#f7931a]/85 hover:text-[#f7931a] transition-colors"
+                                >
+                                    "Browse full stories in The Archives \u{2192}"
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </Show>
+            </Portal>
         </div>
     }
 }
@@ -1530,9 +2232,9 @@ fn VitalTile(
             tabindex=if tip.is_some() { "0" } else { "-1" }
         >
             <span class="text-xs text-white/50 font-mono uppercase tracking-wider">{label}</span>
-            <div class="flex items-baseline gap-1">
+            <div class="flex flex-wrap items-baseline gap-x-1 gap-y-0">
                 <span
-                    class="text-xl sm:text-3xl font-mono font-bold tabular-nums"
+                    class="text-lg sm:text-3xl font-mono font-bold tabular-nums"
                     style=move || format!("color: {}", color.get())
                 >
                     {value}
@@ -1619,41 +2321,427 @@ fn format_mempool_summary(
 }
 
 /// Serialize blocks to JSON for the JS animation engine.
-/// Computes inter-block time from consecutive block timestamps.
+/// Computes exact signed inter-block intervals from consecutive parent timestamps,
+/// emitting `null` when no immediate parent block is available (never fabricating 600s).
 fn blocks_to_json(blocks: &[crate::stats::types::BlockSummary]) -> String {
+    blocks_to_json_with_parent(blocks, None)
+}
+
+/// Serialize blocks to JSON, optionally using an immediately preceding `parent` block
+/// to compute the exact signed `inter_block_seconds` for `blocks[0]`.
+fn blocks_to_json_with_parent(
+    blocks: &[crate::stats::types::BlockSummary],
+    parent: Option<&crate::stats::types::BlockSummary>,
+) -> String {
     use std::fmt::Write;
     let mut buf = String::from("[");
     for (i, b) in blocks.iter().enumerate() {
-        let prev_ts = if i > 0 {
-            blocks[i - 1].timestamp
-        } else {
-            b.timestamp.saturating_sub(600)
-        };
-        let inter = b.timestamp.saturating_sub(prev_ts);
+        let prev = if i > 0 { Some(&blocks[i - 1]) } else { parent };
+        let inter: Option<i64> = prev.and_then(|p| {
+            (p.height.checked_add(1) == Some(b.height))
+                .then(|| b.timestamp as i64 - p.timestamp as i64)
+        });
         if i > 0 {
             buf.push(',');
         }
+        let hash_json =
+            serde_json::to_string(&b.hash).unwrap_or_else(|_| "\"\"".into());
         let _ = write!(
             buf,
-            r#"{{"height":{},"timestamp":{},"tx_count":{},"total_fees":{},"size":{},"weight":{},"inter_block_seconds":{}}}"#,
+            r#"{{"height":{},"hash":{},"timestamp":{},"tx_count":{},"total_fees":{},"size":{},"weight":{},"inter_block_seconds":"#,
             b.height,
+            hash_json,
             b.timestamp,
             b.tx_count,
             b.total_fees,
             b.size,
             b.weight,
-            inter
         );
+        match inter {
+            Some(secs) => {
+                let _ = write!(buf, "{secs}}}");
+            }
+            None => {
+                buf.push_str("null}");
+            }
+        }
     }
     buf.push(']');
     buf
 }
 
+/// Record a `(height, timestamp)` pair in ascending height order (retracting any
+/// orphaned entries at or above `height` on reorg) and keep the newest 25 entries.
+fn record_recent_block_pair(
+    pairs: &mut Vec<(u64, u64)>,
+    height: u64,
+    timestamp: u64,
+) {
+    pairs.retain(|&(h, _)| h < height);
+    pairs.push((height, timestamp));
+    if pairs.len() > 25 {
+        let drop_n = pairs.len() - 25;
+        pairs.drain(..drop_n);
+    }
+}
+
+/// Compute average inter-block interval in seconds over the most recent up to 20
+/// consecutive block pairs `(height, timestamp)`.
+fn compute_recent_avg_block_secs(pairs: &[(u64, u64)]) -> Option<f64> {
+    if pairs.len() < 2 {
+        return None;
+    }
+    let mut total_secs: i64 = 0;
+    let mut count: u64 = 0;
+    for win in pairs.windows(2).rev() {
+        let (h0, t0) = win[0];
+        let (h1, t1) = win[1];
+        if h0.checked_add(1) == Some(h1) {
+            total_secs += t1 as i64 - t0 as i64;
+            count += 1;
+            if count == 20 {
+                break;
+            }
+        }
+    }
+    if count == 0 || total_secs <= 0 {
+        None
+    } else {
+        Some(total_secs as f64 / count as f64)
+    }
+}
+
+/// Rust-computed live Network Pulse diagnostic card view model.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct HeartbeatLandmark {
+    title: &'static str,
+    description: &'static str,
+    category: HofCategory,
+    date: &'static str,
+    height: u64,
+}
+
+/// Curated historic blocks derived directly from `HALL_OF_FAME` (the single
+/// source of truth shared with The Archives and The Almanac), deduplicated by
+/// block height so each famous block appears once under its primary entry.
+fn heartbeat_landmarks() -> Vec<HeartbeatLandmark> {
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    for entry in HALL_OF_FAME {
+        if let Some(height) = entry.block {
+            if seen.insert(height) {
+                out.push(HeartbeatLandmark {
+                    title: entry.title,
+                    description: entry.description,
+                    category: entry.category,
+                    date: entry.date,
+                    height,
+                });
+            }
+        }
+    }
+    out
+}
+
+fn landmarks_to_json() -> String {
+    let mut map = serde_json::Map::new();
+    for item in heartbeat_landmarks() {
+        map.insert(
+            item.height.to_string(),
+            serde_json::json!({
+                "title": item.title,
+                "description": item.description,
+                "category": item.category.label(),
+                "color": item.category.color(),
+                "date": item.date,
+            }),
+        );
+    }
+    serde_json::Value::Object(map).to_string()
+}
+
+/// Case-insensitive filter across category, title, description, date, and block
+/// height (matching both `409008` and `#409,008`).
+fn landmark_matches(
+    item: &HeartbeatLandmark,
+    category: Option<HofCategory>,
+    query: &str,
+) -> bool {
+    if let Some(cat) = category {
+        if item.category != cat {
+            return false;
+        }
+    }
+    let q = query.trim().to_ascii_lowercase();
+    if q.is_empty() {
+        return true;
+    }
+    let digits_q = q.trim_start_matches('#').replace(',', "");
+    let height_raw = item.height.to_string();
+    let height_fmt = super::helpers::format_number(item.height);
+    item.title.to_ascii_lowercase().contains(&q)
+        || item.description.to_ascii_lowercase().contains(&q)
+        || item.date.to_ascii_lowercase().contains(&q)
+        || item.category.label().to_ascii_lowercase().contains(&q)
+        || (!digits_q.is_empty() && height_raw.contains(&digits_q))
+        || height_fmt.contains(&q)
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct NetworkPulse {
+    headline: &'static str,
+    color: &'static str,
+    summary: String,
+    depth_pill: String,
+    cadence_pill: String,
+    fee_pill: String,
+}
+
+/// Convert Bitcoin Core's `mempoolminfee` (BTC/kvB) into sat/vB, rounded to
+/// 0.1 sat/vB with a 0.1 sat/vB floor for any positive non-zero reading.
+fn btc_per_kvb_to_sat_per_vb(raw: f64) -> f64 {
+    if !raw.is_finite() || raw <= 0.0 {
+        return 0.0;
+    }
+    let rounded = ((raw * 1e8 / 1000.0) * 10.0).round() / 10.0;
+    if rounded < 0.1 {
+        0.1
+    } else {
+        rounded
+    }
+}
+
+/// Compute a factual, authoritative Network Pulse diagnosis directly in Rust
+/// from live node, mempool, fee, block-wait, and recent-cadence telemetry.
+#[allow(clippy::too_many_arguments)]
+fn compute_network_pulse(
+    node_stale: bool,
+    mempool_available: bool,
+    mempool_tx_count: u64,
+    mempool_vbytes: u64,
+    next_block_fee: f64,
+    mempool_min_fee: f64,
+    elapsed_secs: u64,
+    avg_block_secs: Option<f64>,
+    pending_block_age: Option<u64>,
+) -> NetworkPulse {
+    let mempool_vmb = mempool_vbytes as f64 / 1_000_000.0;
+    let clean_next_fee = if next_block_fee.is_finite() && next_block_fee > 0.0 {
+        next_block_fee
+    } else {
+        0.0
+    };
+    let clean_min_fee = if mempool_min_fee.is_finite() && mempool_min_fee > 0.0
+    {
+        mempool_min_fee
+    } else {
+        0.0
+    };
+    let clean_avg = avg_block_secs.filter(|a| a.is_finite() && *a > 0.0);
+
+    let depth_pill = if !mempool_available {
+        "--".to_string()
+    } else if mempool_vbytes == 0 {
+        "0 blks".to_string()
+    } else if mempool_vmb < 1.0 {
+        "<1 blk".to_string()
+    } else {
+        let blks = mempool_vmb.round() as u64;
+        if blks == 1 {
+            "~1 blk".to_string()
+        } else {
+            format!("~{} blks", super::helpers::format_number(blks))
+        }
+    };
+
+    let cadence_pill = match clean_avg {
+        Some(avg) => format!("{:.1}m / blk", avg / 60.0),
+        None => "--.-m / blk".to_string(),
+    };
+
+    let fee_pill = if clean_next_fee > 0.0 {
+        if clean_next_fee < 1.0 {
+            format!("~{clean_next_fee:.2} sat/vB")
+        } else {
+            format!("~{clean_next_fee:.1} sat/vB")
+        }
+    } else if mempool_available && mempool_tx_count == 0 {
+        "~0.0 sat/vB".to_string()
+    } else {
+        "-- sat/vB".to_string()
+    };
+
+    let (headline, color) = if node_stale {
+        ("Node Stale", "#f7931a")
+    } else if pending_block_age.is_some_and(|age| age >= 2) {
+        ("Block Received", "#38bdf8")
+    } else if !mempool_available {
+        if elapsed_secs >= 2700 {
+            ("Extended Drought", "#dc2626")
+        } else if elapsed_secs >= 1500 {
+            ("Long Wait", "#f97316")
+        } else {
+            ("Awaiting telemetry", "#94a3b8")
+        }
+    } else if clean_next_fee >= 30.0 {
+        ("High Fees", "#dc2626")
+    } else if mempool_vmb >= 100.0 || clean_next_fee >= 15.0 {
+        ("Congested", "#f97316")
+    } else if elapsed_secs >= 2700 {
+        ("Extended Drought", "#c026d3")
+    } else if elapsed_secs >= 1500 {
+        ("Long Wait", "#f97316")
+    } else if mempool_vmb >= 20.0 && clean_next_fee < 5.0 {
+        ("Backlog Building", "#38bdf8")
+    } else if clean_avg.is_some_and(|avg| avg < 420.0) {
+        ("Rapid Blocks", "#00e676")
+    } else if clean_avg.is_some_and(|avg| avg > 840.0) {
+        ("Slow Cadence", "#f7931a")
+    } else if mempool_vmb < 5.0 && clean_next_fee <= 2.0 {
+        ("Quiet", "#00e676")
+    } else {
+        ("Steady", "#00e676")
+    };
+
+    let tx_str = super::helpers::format_number(mempool_tx_count);
+    let wait_mins = elapsed_secs / 60;
+
+    let summary = if node_stale {
+        "Node telemetry is delayed; showing the last confirmed readings until the node responds."
+            .to_string()
+    } else if let Some(age) = pending_block_age.filter(|&a| a >= 2) {
+        format!(
+            "New block observed {age}s ago; fetching full block measurements and transaction list from the node."
+        )
+    } else if !mempool_available && elapsed_secs == 0 && clean_avg.is_none() {
+        "Awaiting live node telemetry.".to_string()
+    } else {
+        match headline {
+            "Awaiting telemetry" => {
+                "Mempool telemetry is temporarily unavailable; displaying the latest confirmed chain state."
+                    .to_string()
+            }
+            "High Fees" => {
+                if clean_min_fee >= 2.0 {
+                    format!(
+                        "Heavy fee competition for next-block space ({clean_next_fee:.1} sat/vB) with {tx_str} transactions queued across {mempool_vmb:.1} vMB and an eviction floor at {clean_min_fee:.1} sat/vB."
+                    )
+                } else {
+                    format!(
+                        "Heavy fee competition for next-block space ({clean_next_fee:.1} sat/vB) with {tx_str} transactions queued across {mempool_vmb:.1} vMB."
+                    )
+                }
+            }
+            "Congested" => {
+                if clean_min_fee >= 2.0 {
+                    format!(
+                        "Sustained demand is filling the mempool ({mempool_vmb:.1} vMB across {tx_str} transactions), pushing the eviction floor to {clean_min_fee:.1} sat/vB."
+                    )
+                } else {
+                    format!(
+                        "Sustained demand is filling the mempool ({mempool_vmb:.1} vMB across {tx_str} transactions), keeping confirmation fees elevated."
+                    )
+                }
+            }
+            "Extended Drought" => format!(
+                "No block mined in {wait_mins} minutes; transactions continue to queue while miners search for the next valid hash."
+            ),
+            "Long Wait" => format!(
+                "{wait_mins} minutes since the last block, within normal Poisson variance as pending transactions accumulate."
+            ),
+            "Backlog Building" => format!(
+                "Low-fee transactions ({tx_str} across {mempool_vmb:.1} vMB) are queuing behind the tip, while priority fee rates stay calm."
+            ),
+            "Rapid Blocks" => {
+                "Blocks are arriving faster than the 10-minute target, clearing fee-paying demand quickly."
+                    .to_string()
+            }
+            "Slow Cadence" => {
+                "Recent block intervals are running slower than the 10-minute target, giving the mempool more time to build between blocks."
+                    .to_string()
+            }
+            "Quiet" => format!(
+                "Light mempool activity ({tx_str} transactions across {mempool_vmb:.1} vMB) with minimal fee competition for upcoming blocks."
+            ),
+            _ => format!(
+                "Block cadence and mempool demand are balanced, with {tx_str} unconfirmed transactions queued across {mempool_vmb:.1} vMB."
+            ),
+        }
+    };
+
+    NetworkPulse {
+        headline,
+        color,
+        summary,
+        depth_pill,
+        cadence_pill,
+        fee_pill,
+    }
+}
+
+/// Format a single fee rate (sat/vB) for the Blood Pressure tile.
+fn format_bp_fee(rate: f64) -> String {
+    if !rate.is_finite() || rate <= 0.0 {
+        "--".to_string()
+    } else if rate < 0.1 {
+        format!("{rate:.2}")
+    } else {
+        format!("{rate:.1}")
+    }
+}
+
+/// Compute the Blood Pressure vital tile purely in Rust from Bitcoin Core's
+/// `estimatesmartfee(1)` (next block, systolic) and `estimatesmartfee(6)`
+/// (~1 hour, diastolic), falling back to `mempoolminfee` only when `hour_fee`
+/// is unavailable (for example on regtest or a freshly-started node).
+fn compute_blood_pressure(
+    next_block_fee: f64,
+    hour_fee: f64,
+    mempool_min_fee_btc_kvb: f64,
+    mempool_available: bool,
+) -> (String, String, &'static str) {
+    let systolic = if next_block_fee.is_finite() && next_block_fee > 0.0 {
+        next_block_fee
+    } else {
+        0.0
+    };
+    let diastolic = if hour_fee.is_finite() && hour_fee > 0.0 {
+        hour_fee
+    } else if mempool_available {
+        btc_per_kvb_to_sat_per_vb(mempool_min_fee_btc_kvb)
+    } else {
+        0.0
+    };
+
+    if systolic == 0.0 && diastolic == 0.0 {
+        return (
+            "-- / --".to_string(),
+            "Awaiting fees".to_string(),
+            "#94a3b8",
+        );
+    }
+
+    let display =
+        format!("{} / {}", format_bp_fee(systolic), format_bp_fee(diastolic));
+    let bp_avg = if systolic > 0.0 && diastolic > 0.0 {
+        (systolic + diastolic) / 2.0
+    } else {
+        systolic.max(diastolic)
+    };
+    let (label, color) = if bp_avg < 10.0 {
+        ("Normal \u{00b7} Low fee pressure", "#00e676")
+    } else if bp_avg < 30.0 {
+        ("Elevated \u{00b7} Moderate fee pressure", "#f7931a")
+    } else if bp_avg < 80.0 {
+        ("High \u{00b7} High fee pressure", "#ff5722")
+    } else {
+        ("Critical \u{00b7} Extreme fee pressure", "#f44336")
+    };
+    (display, label.to_string(), color)
+}
+
 /// Minimal JSON parsing for vital signs (avoids serde dependency).
 struct Vitals {
-    bp_systolic: f64,
-    bp_label: String,
-    bp_color: String,
     temp_c: f64,
     temp_label: String,
     temp_color: String,
@@ -1691,9 +2779,6 @@ fn parse_vitals_json(json: &str) -> Option<Vitals> {
         return None;
     }
     Some(Vitals {
-        bp_systolic: extract_json_f64(json, "bp_systolic"),
-        bp_label: extract_json_str(json, "bp_label"),
-        bp_color: extract_json_str(json, "bp_color"),
         temp_c: extract_json_f64(json, "temp_c"),
         temp_label: extract_json_str(json, "temp_label"),
         temp_color: extract_json_str(json, "temp_color"),
@@ -1703,18 +2788,15 @@ fn parse_vitals_json(json: &str) -> Option<Vitals> {
     })
 }
 
-struct OrganismStatus {
-    condition: String,
-    description: String,
-    color: String,
-}
-
 fn short_txid(txid: &str) -> String {
     if txid.len() > 24 {
-        format!("{}...{}", &txid[..12], &txid[txid.len() - 8..])
-    } else {
-        txid.to_string()
+        if let (Some(prefix), Some(suffix)) =
+            (txid.get(..12), txid.get(txid.len() - 8..))
+        {
+            return format!("{prefix}...{suffix}");
+        }
     }
+    txid.to_string()
 }
 
 fn format_first_seen(ts: u64) -> String {
@@ -1831,22 +2913,15 @@ fn status_for(
     }
 }
 
-fn parse_status_json(json: &str) -> Option<OrganismStatus> {
-    if json.len() < 3 {
-        return None;
-    }
-    Some(OrganismStatus {
-        condition: extract_json_str(json, "condition"),
-        description: extract_json_str(json, "description"),
-        color: extract_json_str(json, "color"),
-    })
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{format_mempool_summary, status_for, MempoolDisplay};
+    use super::{
+        blocks_to_json, blocks_to_json_with_parent, compute_network_pulse,
+        compute_recent_avg_block_secs, format_mempool_summary,
+        record_recent_block_pair, status_for, MempoolDisplay,
+    };
     use crate::stats::types::{
-        LiveBlockchain, LiveMempool, LiveNetwork, LiveStats,
+        BlockSummary, LiveBlockchain, LiveMempool, LiveNetwork, LiveStats,
     };
 
     fn sample_live_stats(
@@ -2163,5 +3238,349 @@ mod tests {
                 && code.contains("mempool_summary.get().tile_tx_label"),
             "both bottom bar and Temperature tile must derive from the shared mempool_summary"
         );
+    }
+
+    fn sample_block(height: u64, hash: &str, timestamp: u64) -> BlockSummary {
+        BlockSummary {
+            height,
+            hash: hash.to_string(),
+            timestamp,
+            tx_count: 2_500,
+            size: 1_500_000,
+            weight: 3_990_000,
+            total_fees: 25_000_000,
+            ..BlockSummary::default()
+        }
+    }
+
+    #[test]
+    fn blocks_to_json_includes_hash_and_exact_signed_inter_block_seconds() {
+        let b0 = sample_block(100, "0000aaaa", 1_700_000_600);
+        let b1 = sample_block(101, "0000bbbb", 1_700_000_900); // +300s
+        let b2 = sample_block(102, "0000cccc", 1_700_000_900); // 0s
+        let b3 = sample_block(103, "0000dddd", 1_700_000_850); // -50s (MTP-valid negative delta)
+        let b4 = sample_block(105, "0000eeee", 1_700_001_500); // non-consecutive gap -> null
+
+        let json = blocks_to_json(&[b0.clone(), b1, b2, b3, b4]);
+        let parsed: Vec<serde_json::Value> =
+            serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.len(), 5);
+
+        assert_eq!(parsed[0]["hash"].as_str(), Some("0000aaaa"));
+        assert!(
+            parsed[0]["inter_block_seconds"].is_null(),
+            "first block with no parent must emit null, never fabricated 600"
+        );
+        assert_eq!(parsed[1]["hash"].as_str(), Some("0000bbbb"));
+        assert_eq!(parsed[1]["inter_block_seconds"].as_i64(), Some(300));
+        assert_eq!(parsed[2]["inter_block_seconds"].as_i64(), Some(0));
+        assert_eq!(parsed[3]["inter_block_seconds"].as_i64(), Some(-50));
+        assert!(parsed[4]["inter_block_seconds"].is_null());
+
+        // Passing an immediate parent populates index 0 accurately.
+        let parent = sample_block(99, "00009999", 1_700_000_180);
+        let with_parent = blocks_to_json_with_parent(&[b0], Some(&parent));
+        let parsed_parent: Vec<serde_json::Value> =
+            serde_json::from_str(&with_parent).unwrap();
+        assert_eq!(parsed_parent[0]["inter_block_seconds"].as_i64(), Some(420));
+    }
+
+    #[test]
+    fn recent_block_pairs_and_average_handle_cadence_and_reorg() {
+        let mut pairs = Vec::new();
+        for i in 0..25u64 {
+            record_recent_block_pair(
+                &mut pairs,
+                840_000 + i,
+                1_700_000_000 + i * 600,
+            );
+        }
+        assert_eq!(pairs.len(), 25);
+        assert_eq!(compute_recent_avg_block_secs(&pairs), Some(600.0));
+
+        // Reorg drops heights >= retracted height cleanly.
+        record_recent_block_pair(
+            &mut pairs,
+            840_023,
+            1_700_000_000 + 23 * 600 + 120,
+        );
+        assert_eq!(
+            pairs.last(),
+            Some(&(840_023, 1_700_000_000 + 23 * 600 + 120))
+        );
+
+        assert_eq!(compute_recent_avg_block_secs(&[]), None);
+        assert_eq!(
+            compute_recent_avg_block_secs(&[(840_000, 1_700_000_000)]),
+            None
+        );
+    }
+
+    #[test]
+    fn network_pulse_diagnoses_stale_pending_drought_fees_backlog_quiet_and_unavailable(
+    ) {
+        // 1. Node Stale outranks everything.
+        let stale = compute_network_pulse(
+            true,
+            true,
+            50_000,
+            150_000_000,
+            80.0,
+            10.0,
+            3_600,
+            Some(600.0),
+            Some(10),
+        );
+        assert_eq!(stale.headline, "Node Stale");
+        assert_eq!(stale.color, "#f7931a");
+
+        // 2. Pending block >= 2s grace period triggers Block Received; < 2s does not.
+        let pending = compute_network_pulse(
+            false,
+            true,
+            12_000,
+            8_000_000,
+            2.0,
+            1.0,
+            5,
+            Some(600.0),
+            Some(4),
+        );
+        assert_eq!(pending.headline, "Block Received");
+        assert_eq!(pending.color, "#38bdf8");
+        assert!(pending.summary.contains("4s ago"));
+
+        let sub_grace = compute_network_pulse(
+            false,
+            true,
+            12_000,
+            8_000_000,
+            2.0,
+            1.0,
+            1,
+            Some(600.0),
+            Some(1),
+        );
+        assert_ne!(sub_grace.headline, "Block Received");
+
+        // 3. 50-minute drought with low fees -> Extended Drought.
+        let drought = compute_network_pulse(
+            false,
+            true,
+            15_000,
+            12_000_000,
+            2.0,
+            1.0,
+            3_000,
+            Some(612.0),
+            None,
+        );
+        assert_eq!(drought.headline, "Extended Drought");
+        assert!(drought.summary.contains("50 minutes"));
+        assert_eq!(drought.depth_pill, "~12 blks");
+        assert_eq!(drought.cadence_pill, "10.2m / blk");
+        assert_eq!(drought.fee_pill, "~2.0 sat/vB");
+
+        // 4. High fees (>= 30 sat/vB).
+        let high_fees = compute_network_pulse(
+            false,
+            true,
+            40_000,
+            45_000_000,
+            42.5,
+            5.0,
+            300,
+            Some(600.0),
+            None,
+        );
+        assert_eq!(high_fees.headline, "High Fees");
+        assert!(high_fees.summary.contains("42.5 sat/vB"));
+
+        // 5. Large low-fee backlog (>= 20 vMB, next fee < 5).
+        let backlog = compute_network_pulse(
+            false,
+            true,
+            65_000,
+            35_000_000,
+            2.5,
+            1.0,
+            400,
+            Some(600.0),
+            None,
+        );
+        assert_eq!(backlog.headline, "Backlog Building");
+        assert_eq!(backlog.depth_pill, "~35 blks");
+
+        // 6. Quiet mempool (< 5 vMB, next fee <= 2).
+        let quiet = compute_network_pulse(
+            false,
+            true,
+            2_100,
+            1_800_000,
+            1.5,
+            1.0,
+            240,
+            Some(580.0),
+            None,
+        );
+        assert_eq!(quiet.headline, "Quiet");
+        assert_eq!(quiet.depth_pill, "~2 blks");
+
+        // 7. Unavailable mempool must NEVER show green Steady or Quiet.
+        let unavail = compute_network_pulse(
+            false,
+            false,
+            0,
+            0,
+            0.0,
+            0.0,
+            180,
+            Some(600.0),
+            None,
+        );
+        assert_eq!(unavail.headline, "Awaiting telemetry");
+        assert_eq!(unavail.color, "#94a3b8");
+        assert_eq!(unavail.depth_pill, "--");
+        assert_eq!(unavail.fee_pill, "-- sat/vB");
+        assert!(unavail
+            .summary
+            .contains("Mempool telemetry is temporarily unavailable"));
+        assert!(!unavail.summary.contains("0 unconfirmed"));
+
+        // 8. SSR / first-paint (no live stats yet) -> neutral Awaiting telemetry.
+        let first_paint =
+            compute_network_pulse(false, false, 0, 0, 0.0, 0.0, 0, None, None);
+        assert_eq!(first_paint.headline, "Awaiting telemetry");
+        assert_eq!(first_paint.color, "#94a3b8");
+        assert_eq!(first_paint.summary, "Awaiting live node telemetry.");
+
+        // 9. Block-timestamp drought/long-wait still surface while mempool is unavailable.
+        let unavail_drought = compute_network_pulse(
+            false,
+            false,
+            0,
+            0,
+            0.0,
+            0.0,
+            2_700,
+            Some(600.0),
+            None,
+        );
+        assert_eq!(unavail_drought.headline, "Extended Drought");
+        assert_eq!(unavail_drought.color, "#dc2626");
+
+        let unavail_wait = compute_network_pulse(
+            false,
+            false,
+            0,
+            0,
+            0.0,
+            0.0,
+            1_500,
+            Some(600.0),
+            None,
+        );
+        assert_eq!(unavail_wait.headline, "Long Wait");
+        assert_eq!(unavail_wait.color, "#f97316");
+    }
+
+    #[test]
+    fn btc_per_kvb_to_sat_per_vb_converts_and_floors_consistently() {
+        assert_eq!(super::btc_per_kvb_to_sat_per_vb(0.0), 0.0);
+        assert_eq!(super::btc_per_kvb_to_sat_per_vb(-0.00001), 0.0);
+        assert_eq!(super::btc_per_kvb_to_sat_per_vb(f64::NAN), 0.0);
+        assert_eq!(super::btc_per_kvb_to_sat_per_vb(0.0000001), 0.1);
+        assert_eq!(super::btc_per_kvb_to_sat_per_vb(0.000001), 0.1);
+        assert_eq!(super::btc_per_kvb_to_sat_per_vb(0.00001), 1.0);
+        assert_eq!(super::btc_per_kvb_to_sat_per_vb(0.0000256), 2.6);
+    }
+
+    #[test]
+    fn blood_pressure_uses_next_block_and_one_hour_targets_with_fallbacks() {
+        // Calm mainnet: 1.01 sat/vB next block & 1.01 sat/vB ~1h
+        let (disp, label, color) =
+            super::compute_blood_pressure(1.01, 1.01, 0.000001, true);
+        assert_eq!(disp, "1.0 / 1.0");
+        assert_eq!(label, "Normal \u{00b7} Low fee pressure");
+        assert_eq!(color, "#00e676");
+
+        // Elevated fee market: next block spikes while 6-block sits lower
+        let (disp, label, color) =
+            super::compute_blood_pressure(28.4, 12.6, 0.000001, true);
+        assert_eq!(disp, "28.4 / 12.6");
+        assert_eq!(label, "Elevated \u{00b7} Moderate fee pressure");
+        assert_eq!(color, "#f7931a");
+
+        // High fee pressure
+        let (disp, label, color) =
+            super::compute_blood_pressure(75.0, 45.0, 0.00002, true);
+        assert_eq!(disp, "75.0 / 45.0");
+        assert_eq!(label, "High \u{00b7} High fee pressure");
+        assert_eq!(color, "#ff5722");
+
+        // Critical fee pressure
+        let (disp, label, color) =
+            super::compute_blood_pressure(140.0, 95.0, 0.00015, true);
+        assert_eq!(disp, "140.0 / 95.0");
+        assert_eq!(label, "Critical \u{00b7} Extreme fee pressure");
+        assert_eq!(color, "#f44336");
+
+        // Regtest / fresh node with no estimatesmartfee(6): falls back to mempoolminfee
+        let (disp, label, color) =
+            super::compute_blood_pressure(0.0, 0.0, 0.000001, true);
+        assert_eq!(disp, "-- / 0.1");
+        assert_eq!(label, "Normal \u{00b7} Low fee pressure");
+        assert_eq!(color, "#00e676");
+
+        // Both fee estimates & mempool unavailable
+        let (disp, label, color) =
+            super::compute_blood_pressure(0.0, 0.0, 0.0, false);
+        assert_eq!(disp, "-- / --");
+        assert_eq!(label, "Awaiting fees");
+        assert_eq!(color, "#94a3b8");
+    }
+
+    #[test]
+    fn heartbeat_landmarks_dedupes_hall_of_fame_and_filters_cleanly() {
+        let all = super::heartbeat_landmarks();
+        assert!(all.len() >= 30, "expected >= 30 curated block landmarks");
+
+        // Block heights are strictly unique (no duplicate #0 / #840,000 rows).
+        let unique_heights: std::collections::HashSet<u64> =
+            all.iter().map(|i| i.height).collect();
+        assert_eq!(unique_heights.len(), all.len());
+
+        // Covers every Hall of Fame category.
+        for cat in [
+            super::HofCategory::Milestones,
+            super::HofCategory::Records,
+            super::HofCategory::Protocol,
+            super::HofCategory::Attacks,
+            super::HofCategory::Oddities,
+        ] {
+            assert!(
+                all.iter().any(|i| i.category == cat),
+                "missing category {cat:?}"
+            );
+        }
+
+        // Matches by height (with or without #/commas), year, title, and category.
+        let highest_fee = all
+            .iter()
+            .find(|i| i.height == 409_008)
+            .expect("highest fee block present");
+        assert!(super::landmark_matches(highest_fee, None, "#409,008"));
+        assert!(super::landmark_matches(highest_fee, None, "409008"));
+        assert!(super::landmark_matches(highest_fee, None, "2016"));
+        assert!(super::landmark_matches(
+            highest_fee,
+            Some(super::HofCategory::Records),
+            "highest fee"
+        ));
+        assert!(!super::landmark_matches(
+            highest_fee,
+            Some(super::HofCategory::Attacks),
+            ""
+        ));
     }
 }

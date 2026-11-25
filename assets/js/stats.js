@@ -981,6 +981,85 @@
                 var body = document.getElementById('block-detail-body');
                 body.textContent = '';
 
+                // -- Landmark Block Callout (from HALL_OF_FAME when applicable) --
+                if (Array.isArray(b.landmarks) && b.landmarks.length > 0) {
+                    for (var li = 0; li < b.landmarks.length; li++) {
+                        var lm = b.landmarks[li];
+                        var lmColor = lm.color || '#f7931a';
+                        var card = document.createElement('div');
+                        card.style.cssText = 'margin-bottom:10px;padding:10px 12px;border-radius:10px;background:rgba(247,147,26,0.08);border:1px solid ' + lmColor + '55;';
+
+                        var topRow = document.createElement('div');
+                        topRow.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px;font-family:monospace;font-size:10px;';
+                        var catBadge = document.createElement('span');
+                        catBadge.style.cssText = 'color:' + lmColor + ';font-weight:700;text-transform:uppercase;letter-spacing:0.06em;';
+                        catBadge.textContent = '\u2605 ' + (lm.category || 'Landmark');
+                        var dateSpan = document.createElement('span');
+                        dateSpan.style.cssText = 'color:rgba(255,255,255,0.45);';
+                        dateSpan.textContent = lm.date || '';
+                        topRow.appendChild(catBadge);
+                        topRow.appendChild(dateSpan);
+                        card.appendChild(topRow);
+
+                        var lmTitle = document.createElement('div');
+                        lmTitle.style.cssText = 'font-weight:600;font-size:13px;color:#ffffff;margin-bottom:4px;';
+                        lmTitle.textContent = lm.title || '';
+                        card.appendChild(lmTitle);
+
+                        var lmDesc = document.createElement('p');
+                        lmDesc.style.cssText = 'margin:0;font-size:12px;line-height:1.5;color:rgba(255,255,255,0.78);';
+                        lmDesc.textContent = lm.description || '';
+                        card.appendChild(lmDesc);
+
+                        var lmActions = document.createElement('div');
+                        lmActions.style.cssText = 'display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:8px;font-size:11px;font-family:monospace;';
+                        if (lm.txid) {
+                            var txBtn = document.createElement('button');
+                            txBtn.type = 'button';
+                            txBtn.style.cssText = 'padding:3px 8px;border-radius:6px;background:rgba(247,147,26,0.18);border:1px solid rgba(247,147,26,0.45);color:#f7931a;cursor:pointer;font-size:11px;font-family:monospace;';
+                            txBtn.textContent = 'Inspect featured transaction \u2192';
+                            (function(featuredTxid) {
+                                txBtn.addEventListener('click', function() {
+                                    if (typeof window.closeBlockDetail === 'function') window.closeBlockDetail();
+                                    if (typeof window.showTxDetail === 'function') window.showTxDetail(featuredTxid);
+                                });
+                            })(lm.txid);
+                            lmActions.appendChild(txBtn);
+                        }
+                        var archLink = document.createElement('a');
+                        archLink.href = '/observatory/archives';
+                        archLink.style.cssText = 'color:rgba(247,147,26,0.85);text-decoration:none;';
+                        archLink.textContent = 'Read in The Archives \u2192';
+                        lmActions.appendChild(archLink);
+                        card.appendChild(lmActions);
+
+                        body.appendChild(card);
+                    }
+                }
+
+                // -- Automatic Milestone Context Badges (retarget / fee > subsidy) --
+                var badges = [];
+                if (b.height > 0 && b.height % 2016 === 0) {
+                    badges.push('Difficulty Retarget Block (Epoch #' + (b.height / 2016) + ')');
+                }
+                if (b.total_fees != null && subsidySats > 0 && b.total_fees > subsidySats) {
+                    badges.push('Fees exceeded block subsidy');
+                }
+                if (b.size != null && b.size > 2200000) {
+                    badges.push('Witness Mega-Block (' + fmtSize(b.size) + ')');
+                }
+                if (badges.length > 0) {
+                    var badgeWrap = document.createElement('div');
+                    badgeWrap.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;';
+                    for (var bi = 0; bi < badges.length; bi++) {
+                        var pill = document.createElement('span');
+                        pill.style.cssText = 'padding:2px 8px;border-radius:999px;background:rgba(56,189,248,0.12);border:1px solid rgba(56,189,248,0.35);color:#38bdf8;font-size:10px;font-family:monospace;';
+                        pill.textContent = badges[bi];
+                        badgeWrap.appendChild(pill);
+                    }
+                    body.appendChild(badgeWrap);
+                }
+
                 // -- Block --
                 body.appendChild(bdSection('Block'));
                 body.appendChild(bdRow('Time', b.timestamp ? new Date(b.timestamp * 1000).toLocaleString() : '\u2014'));
@@ -996,7 +1075,7 @@
                 body.appendChild(bdDivider());
                 body.appendChild(bdSection('Reward & Fees'));
                 body.appendChild(bdRow('Block Reward', rewardBtc));
-                body.appendChild(bdRow('  Subsidy', subsidyBtc));
+                body.appendChild(bdRow('  Subsidy (Era ' + (halvings + 1) + ')', subsidyBtc));
                 body.appendChild(bdRow('  Fees', feesBtc));
                 body.appendChild(bdRow('Median Fee', b.median_fee ? b.median_fee.toLocaleString() + ' sats' : '\u2014'));
                 body.appendChild(bdRow('Median fee rate', b.median_fee_rate ? b.median_fee_rate.toFixed(1) + ' sat/vB' : '\u2014'));
@@ -1054,6 +1133,16 @@
                     sigContent.style.display = open ? 'none' : 'block';
                     sigArrow.style.transform = open ? '' : 'rotate(90deg)';
                 });
+
+                // -- Heartbeat EKG Anatomy (teaches how this block's numbers shape its spike) --
+                body.appendChild(bdDivider());
+                body.appendChild(bdSection('Heartbeat EKG Anatomy'));
+                body.appendChild(bdRow('P Wave (Tx Volume)', b.tx_count != null ? b.tx_count.toLocaleString() + ' transactions' : '\u2014'));
+                body.appendChild(bdRow('R Peak (Total Fees)', b.total_fees != null ? (b.total_fees / 1e8).toFixed(4) + ' BTC' : '\u2014'));
+                body.appendChild(bdRow(
+                    'T Wave (Fullness)',
+                    weightUtil + (b.size != null && b.size > 2200000 ? ' \u00b7 mega-block boost' : '')
+                ));
 
                 // -- External link --
                 body.appendChild(bdDivider());
@@ -1114,6 +1203,32 @@
         titleEl.textContent = 'Transaction';
         titleEl.className = 'text-white font-medium';
 
+        var fmtFirstSeen = function(ts) {
+            if (!ts || !isFinite(ts) || ts <= 0) return null;
+            var d = new Date(ts * 1000);
+            var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            var hh = String(d.getHours()).padStart(2, '0');
+            var mm = String(d.getMinutes()).padStart(2, '0');
+            var ss = String(d.getSeconds()).padStart(2, '0');
+            var ageSec = Math.max(0, Math.floor(Date.now() / 1000 - ts));
+            var ageStr;
+            if (ageSec < 60) ageStr = ageSec + 's ago';
+            else if (ageSec < 3600) ageStr = Math.floor(ageSec / 60) + 'm ' + (ageSec % 60) + 's ago';
+            else if (ageSec < 86400) ageStr = Math.floor(ageSec / 3600) + 'h ' + Math.floor((ageSec % 3600) / 60) + 'm ago';
+            else ageStr = Math.floor(ageSec / 86400) + 'd ' + Math.floor((ageSec % 86400) / 3600) + 'h ago';
+            var now = new Date();
+            var sameDay = d.getFullYear() === now.getFullYear()
+                && d.getMonth() === now.getMonth()
+                && d.getDate() === now.getDate()
+                && ageSec < 18 * 3600;
+            var clock = sameDay
+                ? (hh + ':' + mm + ':' + ss)
+                : (months[d.getMonth()] + ' ' + d.getDate() + ', ' + hh + ':' + mm + ':' + ss);
+            return clock + ' (' + ageStr + ')';
+        };
+
+        var localFirstSeen = localData && (localData.firstSeen || localData.first_seen) ? (localData.firstSeen || localData.first_seen) : null;
+
         // Show local data immediately (from brick)
         if (localData) {
             body.appendChild(bdCopyRow('TXID', shortTxid, txid));
@@ -1125,6 +1240,10 @@
                 body.appendChild(bdRow('Fee Rate', localData.feeRate.toFixed(1) + ' sat/vB'));
             if (localData.value != null && localData.value > 0)
                 body.appendChild(bdRow('Value', (localData.value / 1e8).toFixed(8) + ' BTC'));
+            if (localFirstSeen) {
+                var lfs = fmtFirstSeen(localFirstSeen);
+                if (lfs) body.appendChild(bdRow('First Seen', lfs));
+            }
         } else {
             body.appendChild(bdCopyRow('TXID', shortTxid, txid));
         }
@@ -1190,11 +1309,21 @@
                     details.appendChild(bdRow('Total Output', (tx.total_output / 1e8).toFixed(8) + ' BTC'));
                 }
 
+                // First seen / block time
+                if (!localFirstSeen && tx.first_seen) {
+                    var apiFs = fmtFirstSeen(tx.first_seen);
+                    if (apiFs) details.appendChild(bdRow('First Seen', apiFs));
+                }
+
                 // Confirmation status
                 if (tx.confirmed) {
                     details.appendChild(bdRow('Status', 'Confirmed'));
                     if (tx.block_height)
                         details.appendChild(bdRow('Block', '#' + tx.block_height.toLocaleString()));
+                    if (tx.block_time) {
+                        var bt = fmtFirstSeen(tx.block_time);
+                        if (bt) details.appendChild(bdRow('Block Time', bt));
+                    }
                     if (tx.confirmations)
                         details.appendChild(bdRow('Confirmations', tx.confirmations.toLocaleString()));
                 } else {

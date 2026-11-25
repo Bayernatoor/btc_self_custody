@@ -15,8 +15,8 @@ export var GRID_COLOR = 'rgba(255, 255, 255, 0.03)';
 // ── Thresholds & dimensions ───────────────────────────────
 export var POINT_WIDTH = 1.5;          // virtual pixels per PQRST point
 export var FLATLINE_PX_PER_SEC = 5.0;  // live flatline advance rate
-export var HEAD_POSITION_FRAC = 0.85;  // viewport fraction for live head
-export var MAX_FLATLINE_WIDTH = 300;   // max compressed flatline px
+export var HEAD_POSITION_FRAC = 0.65;  // viewport fraction for live head (comfortable center-right framing)
+export var MAX_FLATLINE_WIDTH = 1600;  // max compressed flatline px (90m+ soft cap)
 export var RETARGET_PERIOD = 2016;     // blocks per difficulty epoch
 export var RHYTHM_STRIP_BLOCKS = 144;  // blocks in 24hr strip
 export var MAX_BLIPS_PER_SEGMENT = 5000; // prune threshold (off-screen only)

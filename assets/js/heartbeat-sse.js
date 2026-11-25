@@ -1,22 +1,34 @@
 // heartbeat-sse.js: Heartbeat v2 state bridge, deterministic brick placement,
 // keyed reconciliation, pending-fee grace buffer, and DOM-safe notable feed.
 import { getState, FLATLINE_PX_PER_SEC, HEAD_POSITION_FRAC, POINT_WIDTH } from './heartbeat-state.js';
-import { feeRateColor, formatFeeRate, fmtBtc } from './heartbeat-timeline.js';
+import { feeRateColor, formatFeeRate, fmtBtc, createFlatlineSegment, resolveInterBlockSeconds, historyFlatlineWidth, waitColor, UNKNOWN_INTERVAL_COLOR, effectiveBlockWallTime } from './heartbeat-timeline.js';
 import { playBlockCue } from './heartbeat-audio.js';
 
-// Run the SEQUENCED block reveal up to this entry zoom (only when autoFollow && !_pinnedTxid).
-var REVEAL_MAX_ENTRY_ZOOM = 9.0;
+// Whether the viewer is currently watching the live tip (either auto-following OR
+// unpaused & unpinned with the live tip visibly inside the viewport), so the
+// cinematic block reveal triggers whenever you're watching live and never hijacks
+// an inspecting/paused/pinned/off-screen-history viewer.
+function isRevealEligible(_hb) {
+    if (!_hb || _hb._suppressLiveVisuals || _hb._revealEnabled === false) return false;
+    if (_hb._pinnedTxid || _hb.paused || _hb.isDragging || _hb._pinching) return false;
+    if (!(_hb.width > 0 && _hb.zoom > 0 && _hb.zoom <= REVEAL_MAX_ENTRY_ZOOM)) return false;
+    if (_hb.autoFollow) return true;
+    var headScreenX = (_hb.virtualX - _hb.viewOffset) * _hb.zoom;
+    return headScreenX >= _hb.width * 0.1 && headScreenX <= _hb.width * 0.98;
+}
+
+// Run the SEQUENCED block reveal at any active LIVE zoom up to maxZoom (50x):
+// form pulls out smoothly to 2.2x to frame the full spike + absorption, then
+// return glides right back to the viewer's exact entryZoom at the live tip.
+var REVEAL_MAX_ENTRY_ZOOM = 50.0;
 
 // Grace window (ms) to hold a newly observed membership_add before dropping it as a
 // pending-fee slate brick, giving tx_details a moment to arrive with its real fee.
 export var PENDING_GRACE_MS = 120;
 
-// Chunk size for RAF-spread initial snapshot placement so 50k+ tx loads stay at 60fps.
-var HISTORY_CHUNK = 2500;
-
-// Memory backstop for long-running sessions with huge mempools.
-var CULL_THRESHOLD = 170000;
-var CULL_TARGET = 150000;
+// Memory backstop for long-running sessions with huge mempools (aligned above 150k-200k congestion).
+var CULL_THRESHOLD = 220000;
+var CULL_TARGET = 200000;
 
 // ── TxFlags bitmask & notable classification ───────────────────────────────
 // Bit layout matches Rust `TxFlags`:
@@ -121,6 +133,63 @@ function nowPerfMs() {
     return typeof performance !== 'undefined' ? performance.now() : Date.now();
 }
 
+// Deterministic organic per-column target height (~45-145px) with gentle rolling
+// hills + per-column jitter so even sustained high-rate bursts keep a natural,
+// jagged skyline instead of water-leveling into a flat horizontal tabletop.
+function organicColCap(gx, maxStack) {
+    var col = (gx / 5) | 0;
+    var h = Math.imul(col ^ 0x9e3779b9, 2654435761) >>> 0;
+    var u = ((h >>> 16) & 0xffff) / 65536;
+    var hill = Math.sin(col * 0.22) * 14;
+    return Math.min(maxStack, Math.max(36, 58 + u * 72 + hill));
+}
+
+// Find a column near `prefGx` (within `[minGx, maxGx]`) minimizing overflow above
+// each column's own `organicColCap` (rather than raw height, which water-levels
+// columns into a flat tabletop). Only extends `_hb.virtualX` when `allowExtend`
+// is true (bulk resyncs, hidden-tab drains, or >200-tx wake dumps).
+function findColumnWithRoom(_hb, seg, prefGx, minGx, maxGx, brickH, softCap, hardCap, searchCols, allowExtend) {
+    var gx = Math.max(minGx, Math.min(maxGx, prefGx));
+    var sy = seg._colHeights[gx] || 0;
+    var prefCap = Math.min(softCap, organicColCap(gx, softCap));
+    if (sy === 0 || sy + brickH <= prefCap) {
+        return { gx: gx, sy: sy, maxGx: maxGx };
+    }
+    var bestX = gx;
+    var bestY = sy;
+    var bestExcess = (sy + brickH) - prefCap;
+    for (var step = 1; step <= searchCols; step++) {
+        var cLeft = gx - step * 5;
+        if (cLeft >= minGx) {
+            var hLeft = seg._colHeights[cLeft] || 0;
+            var capLeft = Math.min(softCap, organicColCap(cLeft, softCap));
+            if (hLeft + brickH <= capLeft) {
+                return { gx: cLeft, sy: hLeft, maxGx: maxGx };
+            }
+            var exLeft = (hLeft + brickH) - capLeft;
+            if (exLeft < bestExcess) { bestX = cLeft; bestY = hLeft; bestExcess = exLeft; }
+        }
+        var cRight = gx + step * 5;
+        if (cRight <= maxGx) {
+            var hRight = seg._colHeights[cRight] || 0;
+            var capRight = Math.min(softCap, organicColCap(cRight, softCap));
+            if (hRight + brickH <= capRight) {
+                return { gx: cRight, sy: hRight, maxGx: maxGx };
+            }
+            var exRight = (hRight + brickH) - capRight;
+            if (exRight < bestExcess) { bestX = cRight; bestY = hRight; bestExcess = exRight; }
+        }
+    }
+    if (allowExtend && bestY + brickH > hardCap) {
+        var nextGx = maxGx + 5;
+        if (_hb && nextGx + 5 > _hb.virtualX) {
+            _hb.virtualX = nextGx + 5;
+        }
+        return { gx: nextGx, sy: seg._colHeights[nextGx] || 0, maxGx: nextGx };
+    }
+    return { gx: bestX, sy: bestY, maxGx: maxGx };
+}
+
 export function ensureSegMaps(seg) {
     if (!seg) return;
     if (!seg._blipsByTxid) seg._blipsByTxid = new Map();
@@ -134,6 +203,242 @@ function getLiveFlatline(_hb) {
     if (!seg || seg.type !== 'flatline' || seg.x_end !== null) return null;
     ensureSegMaps(seg);
     return seg;
+}
+
+// Collect the open live flatline plus any flatlines sealed by an unresolved pending_block
+// so tx_details, membership_remove, and block_inclusion stay live during slow block_details.
+// O(1) tail scan: stops at the first confirmed block not preceded by an active pending slot.
+function getActiveFlatlines(_hb) {
+    var out = [];
+    if (!_hb || !_hb.timeline) return out;
+    var tl = _hb.timeline;
+    for (var i = tl.length - 1; i >= 0; i--) {
+        var seg = tl[i];
+        if (seg.type === 'flatline' && (seg.x_end === null || seg._pendingForHash)) {
+            ensureSegMaps(seg);
+            out.push(seg);
+        } else if (seg.type === 'block') {
+            var prev1 = i > 0 ? tl[i - 1] : null;
+            var prev2 = i > 1 ? tl[i - 2] : null;
+            var hasPendingBefore = (prev1 && prev1.type === 'flatline' && !!prev1._pendingForHash)
+                || (prev2 && prev2.type === 'pending_block');
+            if (!hasPendingBefore) break;
+        }
+    }
+    return out;
+}
+
+function findPendingBlockIndex(_hb, hash) {
+    if (!_hb || !_hb.timeline || !hash) return -1;
+    for (var i = _hb.timeline.length - 1; i >= 0; i--) {
+        var seg = _hb.timeline[i];
+        if (seg.type === 'pending_block' && seg.hash === hash) return i;
+    }
+    return -1;
+}
+
+// Temporarily swap to the parked live timeline while in 'history' mode so live SSE
+// snapshots, effects, and tab recovery keep the live timeline up to date without
+// disturbing the historical timeline or camera.
+export function withLiveTimeline(_hb, fn) {
+    if (!_hb || _hb._viewMode !== 'history' || !_hb._liveBackup) {
+        return fn();
+    }
+    var histTimeline = _hb.timeline;
+    var histVirtualX = _hb.virtualX;
+    var histViewOffset = _hb.viewOffset;
+    var histZoom = _hb.zoom;
+    var histAutoFollow = _hb.autoFollow;
+    var histPaused = _hb.paused;
+    var histViewOffsetY = _hb.viewOffsetY;
+    var prevSuppress = _hb._suppressLiveVisuals;
+    var prevSuppressAnn = _hb._suppressAnnounce;
+
+    _hb.timeline = _hb._liveBackup.timeline;
+    _hb.virtualX = _hb._liveBackup.virtualX;
+    _hb.viewOffset = _hb._liveBackup.viewOffset;
+    _hb.zoom = _hb._liveBackup.zoom;
+    _hb.autoFollow = false;
+    _hb._suppressLiveVisuals = true;
+    _hb._suppressAnnounce = true;
+    try {
+        return fn();
+    } finally {
+        _hb._liveBackup.timeline = _hb.timeline;
+        _hb._liveBackup.virtualX = _hb.virtualX;
+        _hb._liveBackup.viewOffset = _hb.viewOffset;
+        _hb._liveBackup.zoom = _hb.zoom;
+
+        _hb.timeline = histTimeline;
+        _hb.virtualX = histVirtualX;
+        _hb.viewOffset = histViewOffset;
+        _hb.zoom = histZoom;
+        _hb.autoFollow = histAutoFollow;
+        _hb.paused = histPaused;
+        _hb.viewOffsetY = histViewOffsetY;
+        _hb._suppressLiveVisuals = prevSuppress;
+        _hb._suppressAnnounce = prevSuppressAnn;
+    }
+}
+
+// Rebuild a flatline segment's column height & blip maps after shifting its blips horizontally.
+export function shiftSegmentBlips(seg, deltaX) {
+    if (!seg || !seg.blips || seg.blips.length === 0) return;
+    ensureSegMaps(seg);
+    var oldMinGx = Math.ceil((seg.x_start - deltaX) / 5) * 5;
+    var minGx = Math.ceil(seg.x_start / 5) * 5;
+    var gridDelta = minGx - oldMinGx;
+    seg._colHeights = {};
+    seg._colBlips = new Map();
+    seg._blipsByTxid = new Map();
+    seg._sortedByX = false;
+    for (var i = 0; i < seg.blips.length; i++) {
+        var b = seg.blips[i];
+        if (!b || b._removed) continue;
+        b.x = (b.x || 0) + deltaX;
+        if (b.absorbOriginX !== undefined) b.absorbOriginX += deltaX;
+        if (b.absorbTargetX !== undefined) b.absorbTargetX += deltaX;
+        if (b.fadeStart > 0) continue;
+        var newGx = (b.gridX !== undefined ? b.gridX : b.x) + gridDelta;
+        if (newGx < minGx) newGx = minGx;
+        b.gridX = newGx;
+        b.x = newGx;
+        if (b.txid) seg._blipsByTxid.set(b.txid, b);
+        var col = seg._colBlips.get(newGx);
+        if (!col) {
+            col = [];
+            seg._colBlips.set(newGx, col);
+        }
+        col.push(b);
+        var sy = seg._colHeights[newGx] || 0;
+        b.stackY = sy;
+        b.height = sy + (b.brickH || 0);
+        seg._colHeights[newGx] = b.height;
+    }
+}
+
+// Compress a sealed pre-block flatline from its raw real-time width to
+// historyFlatlineWidth(interBlock), shifting ONLY segments to its right
+// (never anything to the left of preFlatline.x_start). Preserves an inspecting
+// viewer's camera to the exact pixel unless they were looking past preFlatline.x_end.
+export function compressSealedFlatline(_hb, preFlatline, blockSegIndex, interBlock) {
+    if (!_hb || !preFlatline || preFlatline.type !== 'flatline' || preFlatline._compressed) return 0;
+    preFlatline._compressed = true;
+    var oldEnd = preFlatline.x_end !== null ? preFlatline.x_end : _hb.virtualX;
+    var oldW = Math.max(0, oldEnd - preFlatline.x_start);
+    var targetW = historyFlatlineWidth(interBlock);
+    var newEnd = preFlatline.x_start + targetW;
+    var deltaX = newEnd - oldEnd;
+
+    preFlatline.x_end = newEnd;
+    preFlatline.inter_block_seconds = interBlock;
+    preFlatline.color = interBlock === null ? UNKNOWN_INTERVAL_COLOR : waitColor(Math.max(0, interBlock));
+    preFlatline._sortedByX = false;
+
+    // Remap any shattering confirmed bricks still animating on preFlatline so they
+    // stay inside [x_start, newEnd] and fly into the shifted block spike.
+    if (preFlatline.blips && preFlatline.blips.length > 0 && Math.abs(deltaX) > 0.001) {
+        var ratio = oldW > 0 ? (targetW / oldW) : 1;
+        for (var bi = 0; bi < preFlatline.blips.length; bi++) {
+            var blp = preFlatline.blips[bi];
+            if (!blp || blp._removed) continue;
+            var mappedX = preFlatline.x_start + (blp.x - preFlatline.x_start) * ratio;
+            blp.x = mappedX;
+            blp.gridX = mappedX;
+            if (blp.absorbOriginX !== undefined) {
+                blp.absorbOriginX = preFlatline.x_start + (blp.absorbOriginX - preFlatline.x_start) * ratio;
+            }
+            if (blp.absorbTargetX !== undefined) {
+                blp.absorbTargetX += deltaX;
+            }
+        }
+    }
+
+    if (Math.abs(deltaX) < 0.001) return 0;
+
+    // Resolve blockSegIndex defensively if not provided or shifted
+    var startIdx = typeof blockSegIndex === 'number' ? blockSegIndex : (_hb.timeline.indexOf(preFlatline) + 1);
+    if (startIdx < 1) startIdx = _hb.timeline.indexOf(preFlatline) + 1;
+    for (var si = startIdx; si < _hb.timeline.length; si++) {
+        var s = _hb.timeline[si];
+        s.x_start += deltaX;
+        if (s.x_end !== null) s.x_end += deltaX;
+        if (typeof s._carryEndX === 'number') s._carryEndX += deltaX;
+        if (s.type === 'flatline') {
+            shiftSegmentBlips(s, deltaX);
+        }
+    }
+
+    var tailSeg = _hb.timeline.length > 0 ? _hb.timeline[_hb.timeline.length - 1] : null;
+    var minVirt = tailSeg ? tailSeg.x_start : 0;
+    _hb.virtualX = Math.max(minVirt, _hb.virtualX + deltaX);
+
+    if (_hb._searchHighlight && _hb._searchHighlight.x >= oldEnd) {
+        _hb._searchHighlight.x += deltaX;
+        if (_hb._searchHighlight.gridX !== undefined) _hb._searchHighlight.gridX += deltaX;
+    }
+    if (_hb._reveal) {
+        _hb._reveal.spikeVX += deltaX;
+        _hb._reveal.absorbX += deltaX;
+        if (_hb._reveal.fromOffset !== undefined) _hb._reveal.fromOffset += deltaX;
+    }
+
+    // Camera invariance: never move an inspecting viewer looking at older history
+    // to the left of preFlatline.x_end. During an active reveal or autoFollow, shift
+    // viewOffset by deltaX so the spike/head stays locked on the exact same pixel.
+    if (_hb._reveal || _hb.autoFollow) {
+        _hb.viewOffset += deltaX;
+    } else if (_hb.viewOffset >= oldEnd) {
+        _hb.viewOffset += deltaX;
+    }
+
+    return deltaX;
+}
+
+// Reserve a pending_block slot on the live timeline when block_observed arrives so
+// genuine post-block mempool admissions immediately land cleanly to its right.
+export function reservePendingBlockSlot(_hb, hash, observedAt) {
+    if (!_hb || !hash || !_hb.timeline) return null;
+
+    // Dedupe against existing pending_block or confirmed block on the timeline
+    for (var ti = _hb.timeline.length - 1; ti >= 0; ti--) {
+        var existing = _hb.timeline[ti];
+        if ((existing.type === 'pending_block' || existing.type === 'block') && existing.hash === hash) {
+            return existing;
+        }
+    }
+
+    // Finalize any active reveal for a previous block before sealing the live flatline
+    if (_hb._reveal && window._hbEndReveal) {
+        window._hbEndReveal(false);
+    }
+
+    var liveSeg = getLiveFlatline(_hb);
+    if (!liveSeg) return null;
+
+    var slotStart = Math.max(liveSeg.x_start, _hb.virtualX);
+    var obsTs = observedAt || Math.floor(Date.now() / 1000);
+    liveSeg.x_end = slotStart;
+    liveSeg._pendingForHash = hash;
+    if (_hb.lastBlockTime > 0 && obsTs >= _hb.lastBlockTime) {
+        liveSeg.inter_block_seconds = obsTs - _hb.lastBlockTime;
+        liveSeg.color = waitColor(liveSeg.inter_block_seconds);
+    }
+
+    var slotWidth = 51 * POINT_WIDTH;
+    var pendingSeg = {
+        type: 'pending_block',
+        hash: hash,
+        observed_at: obsTs,
+        receivedWallMs: Date.now(),
+        x_start: slotStart,
+        x_end: slotStart + slotWidth,
+        color: '#38bdf8'
+    };
+    _hb.timeline.push(pendingSeg);
+    _hb.virtualX = pendingSeg.x_end;
+    _hb.timeline.push(createFlatlineSegment(_hb.virtualX, null));
+    return pendingSeg;
 }
 
 export function registerBlipInSeg(seg, blip) {
@@ -413,7 +718,7 @@ function purgeInFlightTxids(_hb, txids) {
 
 // ── Snapshot installation & keyed reconciliation (v2) ────────────────────
 
-function syncBlocksFromSnapshot(_hb, payload, isResync) {
+function syncBlocksFromSnapshot(_hb, payload, isResync, skipPendingReserve) {
     if (!_hb._exactConfirmedByHash) _hb._exactConfirmedByHash = new Map();
     if (Array.isArray(payload.recent_confirmations)) {
         for (var ci = 0; ci < payload.recent_confirmations.length; ci++) {
@@ -426,66 +731,106 @@ function syncBlocksFromSnapshot(_hb, payload, isResync) {
             }
         }
     }
-    _hb._pendingBlocks = Array.isArray(payload.pending_blocks) ? payload.pending_blocks.slice() : [];
-
     var recent = Array.isArray(payload.recent_blocks) ? payload.recent_blocks : [];
-    if (recent.length === 0) return;
-
-    var sorted = recent.slice().sort(function(a, b) { return (a.height || 0) - (b.height || 0); });
-    var hasBlocks = false;
-    var maxH = 0;
-    for (var ti = _hb.timeline.length - 1; ti >= 0; ti--) {
-        if (_hb.timeline[ti].type === 'block') {
-            hasBlocks = true;
-            if (_hb.timeline[ti].height > maxH) maxH = _hb.timeline[ti].height;
-        }
-    }
-
-    if (!isResync && !hasBlocks && typeof window.pushHeartbeatBlocks === 'function') {
-        var replayList = [];
-        for (var i = 0; i < sorted.length; i++) {
-            var prevTs = i > 0 ? sorted[i - 1].timestamp : (sorted[i].timestamp - 600);
-            replayList.push({
-                hash: sorted[i].hash || null,
-                height: sorted[i].height,
-                timestamp: sorted[i].timestamp,
-                tx_count: sorted[i].tx_count,
-                total_fees: sorted[i].total_fees,
-                size: sorted[i].size,
-                weight: sorted[i].weight,
-                inter_block_seconds: Math.max(1, (sorted[i].timestamp || 0) - (prevTs || 0))
-            });
-        }
-        window.pushHeartbeatBlocks(JSON.stringify(replayList), true);
-    } else if (hasBlocks && typeof window.pushHeartbeatBlocks === 'function') {
-        // Append only blocks newer than our current timeline tip without hijacking camera.
-        var missed = [];
-        for (var mi = 0; mi < sorted.length; mi++) {
-            if ((sorted[mi].height || 0) > maxH) missed.push(sorted[mi]);
-        }
-        if (missed.length > 0) {
-            var prevSuppress = _hb._suppressAnnounce;
-            _hb._suppressAnnounce = true;
-            for (var k = 0; k < missed.length; k++) {
-                _hb._harvestLive = true;
-                _hb._revealPending = false;
-                window.pushHeartbeatBlocks(JSON.stringify([{
-                    hash: missed[k].hash || null,
-                    height: missed[k].height,
-                    timestamp: missed[k].timestamp,
-                    tx_count: missed[k].tx_count,
-                    total_fees: missed[k].total_fees,
-                    size: missed[k].size,
-                    weight: missed[k].weight
-                }]), false);
+    if (recent.length > 0) {
+        var sorted = recent.slice().sort(function(a, b) { return (a.height || 0) - (b.height || 0); });
+        var hasBlocks = false;
+        var maxH = 0;
+        for (var ti = _hb.timeline.length - 1; ti >= 0; ti--) {
+            if (_hb.timeline[ti].type === 'block') {
+                hasBlocks = true;
+                if (_hb.timeline[ti].height > maxH) maxH = _hb.timeline[ti].height;
             }
-            _hb._suppressAnnounce = prevSuppress;
+        }
+
+        if (!isResync && !hasBlocks && typeof window.pushHeartbeatBlocks === 'function') {
+            var replayList = [];
+            for (var i = 0; i < sorted.length; i++) {
+                var interSec = resolveInterBlockSeconds(sorted[i]);
+                if (interSec === null && i > 0 && sorted[i].timestamp && sorted[i - 1].timestamp) {
+                    interSec = sorted[i].timestamp - sorted[i - 1].timestamp;
+                }
+                replayList.push({
+                    hash: sorted[i].hash || null,
+                    height: sorted[i].height,
+                    timestamp: sorted[i].timestamp,
+                    observed_at: sorted[i].observed_at || 0,
+                    tx_count: sorted[i].tx_count,
+                    total_fees: sorted[i].total_fees,
+                    size: sorted[i].size,
+                    weight: sorted[i].weight,
+                    inter_block_seconds: interSec
+                });
+            }
+            window.pushHeartbeatBlocks(JSON.stringify(replayList), true);
+        } else if (hasBlocks && typeof window.pushHeartbeatBlocks === 'function') {
+            // Append only blocks newer than our current timeline tip without hijacking camera.
+            var missed = [];
+            for (var mi = 0; mi < sorted.length; mi++) {
+                if ((sorted[mi].height || 0) > maxH) missed.push(sorted[mi]);
+            }
+            if (missed.length > 0) {
+                var prevSuppress = _hb._suppressAnnounce;
+                _hb._suppressAnnounce = true;
+                for (var k = 0; k < missed.length; k++) {
+                    _hb._harvestLive = true;
+                    _hb._revealPending = false;
+                    window.pushHeartbeatBlocks(JSON.stringify([{
+                        hash: missed[k].hash || null,
+                        height: missed[k].height,
+                        timestamp: missed[k].timestamp,
+                        observed_at: missed[k].observed_at || 0,
+                        tx_count: missed[k].tx_count,
+                        total_fees: missed[k].total_fees,
+                        size: missed[k].size,
+                        weight: missed[k].weight,
+                        inter_block_seconds: resolveInterBlockSeconds(missed[k])
+                    }]), false);
+                }
+                _hb._suppressAnnounce = prevSuppress;
+            }
+        }
+
+        var newestBlock = sorted[sorted.length - 1];
+        var newestWall = effectiveBlockWallTime(newestBlock, Math.floor(Date.now() / 1000));
+        if (newestWall > 0 && newestWall > (_hb.lastBlockTime || 0)) {
+            _hb.lastBlockTime = newestWall;
         }
     }
 
-    var newestBlock = sorted[sorted.length - 1];
-    if (newestBlock && newestBlock.timestamp > (_hb.lastBlockTime || 0)) {
-        _hb.lastBlockTime = newestBlock.timestamp;
+    // Reserve pending_block slots for any snapshot pending_blocks not already on the timeline
+    // (deferred until after initial pre-block backlog placement when skipPendingReserve is true).
+    if (!skipPendingReserve && Array.isArray(payload.pending_blocks) && payload.pending_blocks.length > 0) {
+        for (var pbi = 0; pbi < payload.pending_blocks.length; pbi++) {
+            var pb = payload.pending_blocks[pbi];
+            if (pb && pb.hash) {
+                reservePendingBlockSlot(_hb, pb.hash, pb.observed_at);
+            }
+        }
+    }
+
+    // Remove any orphaned pending_block slot at the tail that is in neither
+    // payload.pending_blocks nor payload.recent_blocks.
+    var validHashes = new Set();
+    if (Array.isArray(payload.pending_blocks)) {
+        for (var vp = 0; vp < payload.pending_blocks.length; vp++) {
+            if (payload.pending_blocks[vp] && payload.pending_blocks[vp].hash) {
+                validHashes.add(payload.pending_blocks[vp].hash);
+            }
+        }
+    }
+    for (var vr = 0; vr < recent.length; vr++) {
+        if (recent[vr] && recent[vr].hash) validHashes.add(recent[vr].hash);
+    }
+    for (var oi = _hb.timeline.length - 1; oi >= Math.max(0, _hb.timeline.length - 64); oi--) {
+        var oSeg = _hb.timeline[oi];
+        if (oSeg.type === 'pending_block' && (!oSeg.hash || !validHashes.has(oSeg.hash))) {
+            var oWidth = Math.max(0, (oSeg.x_end || oSeg.x_start) - oSeg.x_start);
+            var oEnd = oSeg.x_end !== null ? oSeg.x_end : (oSeg.x_start + oWidth);
+            if (_hb.hoveredPendingBlock === oSeg) _hb.hoveredPendingBlock = null;
+            _hb.timeline.splice(oi, 1);
+            mergeAdjacentFlatlines(_hb, oi, oWidth, oEnd);
+        }
     }
 }
 
@@ -502,11 +847,28 @@ export function hbV2InstallSnapshot(payloadJson, isResync) {
     }
     if (!payload || typeof payload !== 'object') return;
 
+    return withLiveTimeline(_hb, function() {
+        return _hbV2InstallSnapshotInner(_hb, payload, isResync);
+    });
+}
+
+function _hbV2InstallSnapshotInner(_hb, payload, isResync) {
     _hb._coverage = payload.coverage || { status: 'unknown' };
     _hb._lastSseEventTs = Date.now() / 1000;
 
-    // Sync confirmations, pending blocks, and recent blocks before placing mempool txs.
-    syncBlocksFromSnapshot(_hb, payload, !!isResync);
+    var preActiveFlatlines = getActiveFlatlines(_hb);
+    var preTotalActiveBlips = 0;
+    for (var pafc = 0; pafc < preActiveFlatlines.length; pafc++) {
+        preTotalActiveBlips += preActiveFlatlines[pafc]._blipsByTxid.size;
+    }
+    var deferPendingForInitial = (!isResync || preTotalActiveBlips === 0)
+        && Array.isArray(payload.pending_blocks)
+        && payload.pending_blocks.length > 0;
+
+    // Sync confirmations and recent blocks before placing mempool txs; on initial load
+    // with pending_blocks, reserve the pending_block slot AFTER placing pre-block txs so
+    // the waiting mempool sits to the LEFT of the pending slot ready to absorb into it.
+    syncBlocksFromSnapshot(_hb, payload, !!isResync, deferPendingForInitial);
 
     var liveSeg = getLiveFlatline(_hb);
     if (!liveSeg) return;
@@ -525,7 +887,12 @@ export function hbV2InstallSnapshot(payloadJson, isResync) {
     var nowSec = Date.now() / 1000;
 
     // ── Non-destructive keyed reconciliation on resync ──
-    if (isResync && liveSeg._blipsByTxid.size > 0) {
+    var activeFlatlines = getActiveFlatlines(_hb);
+    var totalActiveBlips = 0;
+    for (var afc = 0; afc < activeFlatlines.length; afc++) {
+        totalActiveBlips += activeFlatlines[afc]._blipsByTxid.size;
+    }
+    if (isResync && totalActiveBlips > 0) {
         liveSeg._loadFillCount = 0;
         var incomingMap = new Map();
         var incomingOrder = [];
@@ -538,77 +905,118 @@ export function hbV2InstallSnapshot(payloadJson, isResync) {
             }
         }
 
-        var dirtyCols = new Set();
-        var toRemove = [];
-        liveSeg._blipsByTxid.forEach(function(blip, txid) {
-            if (!incomingMap.has(txid)) {
-                toRemove.push(txid);
+        // Reconcile removals & updates across ALL active flatlines (both the open live
+        // flatline and any flatline sealed by an unresolved pending_block) so resync never
+        // duplicates 64k pre-block bricks onto postFlatline while a block is pending.
+        var dirtyBySeg = new Map();
+        for (var afi = 0; afi < activeFlatlines.length; afi++) {
+            var aSeg = activeFlatlines[afi];
+            var aDirty = new Set();
+            var toRemove = [];
+            aSeg._blipsByTxid.forEach(function(blip, txid) {
+                if (!incomingMap.has(txid)) {
+                    toRemove.push(txid);
+                }
+            });
+            for (var ri = 0; ri < toRemove.length; ri++) {
+                var rTxid = toRemove[ri];
+                var rBlip = aSeg._blipsByTxid.get(rTxid);
+                if (!rBlip) continue;
+                aSeg._blipsByTxid.delete(rTxid);
+                rBlip._removed = true;
+                removeBlipFromArray(aSeg, rBlip);
+                aDirty.add(rBlip.gridX);
+                if (_hb.hoveredBlip === rBlip) _hb.hoveredBlip = null;
+                // Clear the canvas blip ref if removed, but NEVER clear _hb._pinnedTxid:
+                // WASM updates the pinned panel with confirmed/removed status.
+                if (_hb._pinnedBlip === rBlip) _hb._pinnedBlip = null;
             }
-        });
-        for (var ri = 0; ri < toRemove.length; ri++) {
-            var rTxid = toRemove[ri];
-            var rBlip = liveSeg._blipsByTxid.get(rTxid);
-            if (!rBlip) continue;
-            liveSeg._blipsByTxid.delete(rTxid);
-            rBlip._removed = true;
-            removeBlipFromArray(liveSeg, rBlip);
-            dirtyCols.add(rBlip.gridX);
-            if (_hb.hoveredBlip === rBlip) _hb.hoveredBlip = null;
-            // Clear the canvas blip ref if removed, but NEVER clear _hb._pinnedTxid:
-            // WASM updates the pinned panel with confirmed/removed status.
-            if (_hb._pinnedBlip === rBlip) _hb._pinnedBlip = null;
+            if (aDirty.size > 0) dirtyBySeg.set(aSeg, aDirty);
         }
 
         var newTxs = [];
         for (var ni = 0; ni < incomingOrder.length; ni++) {
             var itx = incomingOrder[ni];
-            var existing = liveSeg._blipsByTxid.get(itx.txid);
+            var existing = null;
+            var existingSeg = null;
+            for (var afi2 = 0; afi2 < activeFlatlines.length; afi2++) {
+                if (activeFlatlines[afi2]._blipsByTxid.has(itx.txid)) {
+                    existingSeg = activeFlatlines[afi2];
+                    existing = existingSeg._blipsByTxid.get(itx.txid);
+                    break;
+                }
+            }
             if (existing) {
                 var hChanged = updateBlipMetadata(existing, itx);
-                if (hChanged) dirtyCols.add(existing.gridX);
+                if (hChanged) {
+                    var sd = dirtyBySeg.get(existingSeg);
+                    if (!sd) { sd = new Set(); dirtyBySeg.set(existingSeg, sd); }
+                    sd.add(existing.gridX);
+                }
             } else {
                 newTxs.push(itx);
             }
         }
 
-        if (dirtyCols.size > 0) {
-            restackColumns(liveSeg, dirtyCols);
-        }
+        dirtyBySeg.forEach(function(cols, seg) {
+            if (cols.size > 0) restackColumns(seg, cols);
+        });
 
-        // Append newly discovered txids cleanly behind the live head without
-        // moving existing bricks, jumping virtualX on small diffs, or moving
-        // an inspecting viewer's camera.
+        // Append newly discovered txids cleanly without piling into flat-topped
+        // skyscrapers: size any large recovery span by brick-height volume and
+        // respect softMaxStack so the skyline stays organic.
         if (newTxs.length > 0) {
+            var resyncSoftMax = Math.min(maxStack, 160);
             var minGx = Math.ceil(liveSeg.x_start / 5) * 5;
-            var targetCols = Math.max(1, Math.ceil(newTxs.length / 10));
+            var newTotalH = 0;
+            for (var nhi = 0; nhi < newTxs.length; nhi++) {
+                var nt0 = newTxs[nhi];
+                var np0 = nt0.fee == null || nt0.vsize == null || nt0.vsize <= 0;
+                var nr0 = np0 ? null : (nt0.fee / nt0.vsize);
+                var nn0 = np0 ? 0.15 : Math.min(Math.log2(Math.max(0, nr0) + 1) / 6, 1.0);
+                newTotalH += (anyNotable(notableFlags(nt0)) ? (18 + nn0 * 10 + 1.5) : (np0 ? 6 : (3 + nn0 * 14 + 1.5)));
+            }
+            var targetCols = Math.max(1, Math.ceil(newTotalH / 65));
             var neededSpan = targetCols * 5;
             var headGx = Math.max(minGx, Math.floor(_hb.virtualX / 5) * 5);
-            var startGx = Math.max(minGx, headGx - neededSpan);
-            if (newTxs.length > 50 && startGx + neededSpan + 10 > _hb.virtualX) {
-                _hb.virtualX = startGx + neededSpan + 10;
+            var startGx;
+            if (newTxs.length > 100) {
+                // Recovery delta: open fresh room past existing bricks so we never
+                // pile hundreds/thousands of recovered txs on top of existing columns.
+                startGx = headGx + 5;
+                _hb.virtualX = Math.max(_hb.virtualX, startGx + neededSpan + 10);
                 headGx = Math.floor(_hb.virtualX / 5) * 5;
+            } else {
+                startGx = Math.max(minGx, headGx - neededSpan);
+                if (newTxs.length > 30 && startGx + neededSpan + 10 > _hb.virtualX) {
+                    _hb.virtualX = startGx + neededSpan + 10;
+                    headGx = Math.floor(_hb.virtualX / 5) * 5;
+                }
             }
             var availCols = Math.max(1, Math.floor(Math.max(5, headGx - startGx) / 5));
             for (var ai = 0; ai < newTxs.length; ai++) {
                 var ntx = newTxs[ai];
                 var gx;
                 var nAge = ntx.first_seen > 0 ? (nowSec - ntx.first_seen) : -1;
-                if (nAge >= 0 && nAge <= 300) {
+                if (newTxs.length <= 100 && nAge >= 0 && nAge <= 300) {
                     var ageCols = Math.round((nAge * FLATLINE_PX_PER_SEC) / 5);
                     var jit = Math.round(txidSkylineOffset(ntx.txid) * 1.5);
                     gx = Math.max(minGx, Math.min(headGx, headGx - (ageCols + jit) * 5));
                 } else {
                     var colIdx = Math.floor((ai * availCols) / newTxs.length);
-                    gx = startGx + colIdx * 5;
+                    var spreadJit = newTxs.length > 100 ? Math.round(txidSkylineOffset(ntx.txid) * Math.min(16, Math.floor(availCols * 0.05))) : 0;
+                    var finalCol = Math.max(0, Math.min(availCols - 1, colIdx + spreadJit));
+                    gx = startGx + finalCol * 5;
                 }
-                var sy = liveSeg._colHeights[gx] || 0;
-                var nBlip = buildBlip(ntx, gx, gx, sy, nowSec, false);
-                var steps = 0;
-                while (sy > 0 && sy + nBlip.brickH > maxStack && steps < 20) {
-                    gx = gx >= minGx + 5 ? gx - 5 : gx + 5;
-                    sy = liveSeg._colHeights[gx] || 0;
-                    steps++;
-                }
+                var resyncHardMax = Math.min(maxStack, 185);
+                var nBlip = buildBlip(ntx, gx, gx, 0, nowSec, false);
+                var rSlot = findColumnWithRoom(
+                    _hb, liveSeg, gx, minGx, headGx, nBlip.brickH,
+                    resyncSoftMax, resyncHardMax, 24, true
+                );
+                gx = rSlot.gx;
+                var sy = rSlot.sy;
+                headGx = rSlot.maxGx;
                 nBlip.x = gx;
                 nBlip.gridX = gx;
                 nBlip.stackY = sy;
@@ -621,16 +1029,69 @@ export function hbV2InstallSnapshot(payloadJson, isResync) {
         }
 
         if (_hb._pinnedTxid) {
-            _hb._pinnedBlip = liveSeg._blipsByTxid.get(_hb._pinnedTxid) || null;
+            _hb._pinnedBlip = null;
+            for (var afi3 = 0; afi3 < activeFlatlines.length; afi3++) {
+                if (activeFlatlines[afi3]._blipsByTxid.has(_hb._pinnedTxid)) {
+                    _hb._pinnedBlip = activeFlatlines[afi3]._blipsByTxid.get(_hb._pinnedTxid);
+                    break;
+                }
+            }
         }
         return;
     }
 
     // ── Initial ordered backlog placement ──
+    // If empty-live resync arrived while pending_block slot(s) were already reserved
+    // on the empty tail, unwind those empty tail slots so bucket 0 lands LEFT of the
+    // earliest pending slot and slots are re-reserved cleanly between buckets.
+    if (deferPendingForInitial) {
+        while (_hb.timeline.length >= 3) {
+            var tailF = _hb.timeline[_hb.timeline.length - 1];
+            var prevP = _hb.timeline[_hb.timeline.length - 2];
+            if (tailF.type === 'flatline' && tailF.x_end === null
+                && (!tailF.blips || tailF.blips.length === 0)
+                && prevP.type === 'pending_block') {
+                _hb.timeline.pop(); // empty post-flatline
+                var poppedP = _hb.timeline.pop(); // pending_block
+                if (_hb.hoveredPendingBlock === poppedP) _hb.hoveredPendingBlock = null;
+                var prevPre = _hb.timeline[_hb.timeline.length - 1];
+                if (prevPre && prevPre.type === 'flatline') {
+                    prevPre.x_end = null;
+                    prevPre._pendingForHash = null;
+                    _hb.virtualX = Math.max(prevPre.x_start, poppedP.x_start);
+                }
+            } else {
+                break;
+            }
+        }
+        liveSeg = getLiveFlatline(_hb);
+        if (!liveSeg) return;
+    }
+
     liveSeg.blips = [];
     liveSeg._blipsByTxid = new Map();
     liveSeg._colHeights = {};
     liveSeg._colBlips = new Map();
+
+    // Sort pending blocks chronologically and partition rawTxs into buckets:
+    // bucket 0 (left of pending[0]), buckets 1..N-1 (between pending[k-1] and pending[k]),
+    // and bucket N (right of pending[N-1]).
+    var sortedPending = [];
+    var postPendingBuckets = [];
+    if (deferPendingForInitial) {
+        for (var epo = 0; epo < payload.pending_blocks.length; epo++) {
+            var epb = payload.pending_blocks[epo];
+            if (epb && epb.hash) {
+                sortedPending.push(epb);
+            }
+        }
+        sortedPending.sort(function(a, b) {
+            return (a.observed_at || 0) - (b.observed_at || 0);
+        });
+        for (var pbi0 = 0; pbi0 < sortedPending.length; pbi0++) {
+            postPendingBuckets.push([]);
+        }
+    }
 
     var TARGET_COL_H = 65;
     var parsedTxs = new Array(rawTxs.length);
@@ -641,6 +1102,20 @@ export function hbV2InstallSnapshot(payloadJson, isResync) {
         var ptx = compactTupleToTx(rawTxs[pi]);
         if (!ptx || !ptx.txid) continue;
         if (_hb._removedTxids && _hb._removedTxids.has(ptx.txid)) continue;
+        if (deferPendingForInitial && sortedPending.length > 0 && ptx.first_seen > 0) {
+            var placedBucket = -1;
+            for (var pbi1 = sortedPending.length - 1; pbi1 >= 0; pbi1--) {
+                var pObs = sortedPending[pbi1].observed_at || 0;
+                if (pObs > 0 && ptx.first_seen > pObs) {
+                    placedBucket = pbi1;
+                    break;
+                }
+            }
+            if (placedBucket >= 0) {
+                postPendingBuckets[placedBucket].push(ptx);
+                continue;
+            }
+        }
         parsedTxs[parsedCount++] = ptx;
         var pFlags = notableFlags(ptx);
         var pNotable = anyNotable(pFlags);
@@ -667,13 +1142,13 @@ export function hbV2InstallSnapshot(payloadJson, isResync) {
     var flatlineSpan = _hb.virtualX - liveSeg.x_start;
     liveSeg._loadFillCount = parsedCount;
 
-    // Auto-fit zoom ONLY on initial load when auto-following and not pinned.
+    // Auto-fit zoom ONLY on initial load when auto-following and not pinned (never in history mode).
     // Re-arm the load fade veil so dismissing the loading overlay fades cleanly
     // into the already-framed mempool with zero zoomed-in spike flash.
-    if (!isResync) {
+    if (!isResync && !_hb._suppressLiveVisuals) {
         _hb._loadFadeStart = nowSec;
     }
-    if (!isResync && _hb.autoFollow && !_hb._pinnedTxid && _hb.width && flatlineSpan > 10) {
+    if (!isResync && !_hb._suppressLiveVisuals && _hb.autoFollow && !_hb._pinnedTxid && _hb.width && flatlineSpan > 10) {
         var fit = (_hb.width * 0.8) / flatlineSpan;
         _hb.zoom = Math.max(_hb.minZoom, Math.min(fit, 1.9));
         _hb.viewOffset = _hb.virtualX - (_hb.width * HEAD_POSITION_FRAC) / _hb.zoom;
@@ -685,8 +1160,8 @@ export function hbV2InstallSnapshot(payloadJson, isResync) {
     // Macro-ordered organic skyline: O(n) column bucketing (avoiding an O(n log n)
     // sort over 45k+ items on the main thread). Within each ~10-brick column bucket,
     // sort by deterministic yKey so bursts mix vertically with zero diagonal shear.
-    var DROP_DURATION = isResync ? 0 : 2.3;
-    var dropOrigin = nowSec + (isResync ? 0 : 0.08);
+    var DROP_DURATION = (isResync || _hb._suppressLiveVisuals) ? 0 : 2.3;
+    var dropOrigin = nowSec + ((isResync || _hb._suppressLiveVisuals) ? 0 : 0.08);
     var startGridX = Math.ceil(liveSeg.x_start / 5) * 5;
     var usableSpan = Math.max(5, flatlineSpan - 15);
     var usableCols = Math.max(1, Math.floor(usableSpan / 5));
@@ -720,7 +1195,7 @@ export function hbV2InstallSnapshot(payloadJson, isResync) {
             var baseCol = Math.min(usableCols - 1, Math.floor((cumH * usableCols) / denomH));
             var jitter = Math.round(txidSkylineOffset(pTx.txid) * localSpreadCols);
             pCol = baseCol + jitter;
-            if (pCol < knownStartCol) pCol = knownStartCol + (knownStartCol - pCol);
+            if (pCol < knownStartCol) pCol = knownStartCol + (knownStartCol - pCol - 1);
             if (pCol >= usableCols) pCol = (usableCols - 1) - (pCol - (usableCols - 1));
             pCol = Math.max(knownStartCol, Math.min(usableCols - 1, pCol));
             if (knownCols <= 1) pCol = Math.min(usableCols - 1, baseCol);
@@ -748,11 +1223,43 @@ export function hbV2InstallSnapshot(payloadJson, isResync) {
     var notableTxs = [];
     var idx = 0;
     var CHUNK_SIZE = 4000;
-    _hb._pendingSnapshot = { seg: liveSeg, items: planned, nextIdx: 0, buildBlip: buildBlip };
+    var snapRec = { seg: liveSeg, items: planned, nextIdx: 0, buildBlip: buildBlip };
+    _hb._pendingSnapshot = snapRec;
+
+    // On initial load with pending_blocks, reserve each pending slot in order and
+    // place each inter-pending / post-pending bucket on the flatline directly after
+    // its corresponding pending slot so every tx sits on the exact side it belongs on.
+    if (deferPendingForInitial && sortedPending.length > 0) {
+        var postSoftMax = Math.min(maxStack, 160);
+        for (var dpbi = 0; dpbi < sortedPending.length; dpbi++) {
+            var dpb = sortedPending[dpbi];
+            reservePendingBlockSlot(_hb, dpb.hash, dpb.observed_at);
+            var bucketTxs = postPendingBuckets[dpbi];
+            if (bucketTxs && bucketTxs.length > 0) {
+                var postSeg = getLiveFlatline(_hb);
+                if (postSeg) {
+                    ensureSegMaps(postSeg);
+                    var postMinGx = Math.ceil(postSeg.x_start / 5) * 5;
+                    var postMaxGx = Math.max(postMinGx, Math.floor(_hb.virtualX / 5) * 5);
+                    for (var ppi = 0; ppi < bucketTxs.length; ppi++) {
+                        var pptx = bucketTxs[ppi];
+                        if (postSeg._blipsByTxid.has(pptx.txid)) continue;
+                        var pColPos = findColumnWithRoom(_hb, postSeg, postMaxGx, postMinGx, postMaxGx, 10, postSoftMax, maxStack, 24, true);
+                        postMaxGx = pColPos.maxGx;
+                        registerBlipInSeg(postSeg, buildBlip(pptx, pColPos.gx, pColPos.sy, 0, nowSec, false));
+                    }
+                }
+            }
+        }
+        if (!isResync && !_hb._suppressLiveVisuals && _hb.autoFollow && !_hb._pinnedTxid && _hb.width) {
+            _hb.viewOffset = _hb.virtualX - (_hb.width * HEAD_POSITION_FRAC) / _hb.zoom;
+        }
+    }
 
     var finishSnapshot = function() {
-        liveSeg._loadFillCount = 0;
-        if (_hb._pendingSnapshot && _hb._pendingSnapshot.seg === liveSeg) {
+        var curSeg = snapRec.seg;
+        if (curSeg) curSeg._loadFillCount = 0;
+        if (_hb._pendingSnapshot === snapRec) {
             _hb._pendingSnapshot = null;
         }
         if (_hb._deferredDetails) _hb._deferredDetails.clear();
@@ -761,8 +1268,8 @@ export function hbV2InstallSnapshot(payloadJson, isResync) {
             var pendingFocus = _hb._pendingFocusTxid;
             _hb._pendingFocusTxid = null;
             hbV2FocusTx(pendingFocus);
-        } else if (_hb._pinnedTxid) {
-            _hb._pinnedBlip = liveSeg._blipsByTxid.get(_hb._pinnedTxid) || null;
+        } else if (_hb._pinnedTxid && curSeg && curSeg._blipsByTxid) {
+            _hb._pinnedBlip = curSeg._blipsByTxid.get(_hb._pinnedTxid) || null;
         }
         if (notableTxs.length > 0 && window._notableFeed) {
             for (var ni = notableTxs.length - 1; ni >= 0; ni--) {
@@ -773,13 +1280,20 @@ export function hbV2InstallSnapshot(payloadJson, isResync) {
 
     var placeChunk = function() {
         var s = getState();
-        if (!s || s.timeline[s.timeline.length - 1] !== liveSeg || liveSeg.x_end !== null) {
-            if (s) s._historyRaf = null;
+        if (!s) return;
+        var curSeg = snapRec.seg;
+        var liveTl = (s._viewMode === 'history' && s._liveBackup) ? s._liveBackup.timeline : s.timeline;
+        var stillActivePrePending = !!(curSeg && curSeg._pendingForHash && liveTl.indexOf(curSeg) >= 0);
+        var isLiveTail = !!(curSeg && liveTl[liveTl.length - 1] === curSeg && curSeg.x_end === null);
+        if (!isLiveTail && !stillActivePrePending) {
+            s._historyRaf = null;
             finishSnapshot();
             return;
         }
+        ensureSegMaps(curSeg);
         var end = Math.min(idx + CHUNK_SIZE, planned.length);
         var span = Math.max(1, usableSpan);
+        var chunkStartGridX = Math.ceil(curSeg.x_start / 5) * 5;
         for (; idx < end; idx++) {
             var item = planned[idx];
             var tx = item.tx;
@@ -792,11 +1306,11 @@ export function hbV2InstallSnapshot(payloadJson, isResync) {
                 tx = deferred;
                 s._deferredDetails.delete(tx.txid);
             }
-            if (liveSeg._blipsByTxid.has(tx.txid)) continue;
+            if (curSeg._blipsByTxid.has(tx.txid)) continue;
 
-            var gx = startGridX + item.col * 5;
-            var sy = liveSeg._colHeights[gx] || 0;
-            var xFrac = Math.min(1, Math.max(0, (gx - liveSeg.x_start) / span));
+            var gx = chunkStartGridX + item.col * 5;
+            var sy = curSeg._colHeights[gx] || 0;
+            var xFrac = Math.min(1, Math.max(0, (gx - curSeg.x_start) / span));
             // Use an uncorrelated per-brick delay (from txidSkylineOffset) plus a
             // gentle stackY offset so blue bricks rain down feathered like the
             // notables instead of launching in lockstep as one solid curved sheet.
@@ -806,19 +1320,19 @@ export function hbV2InstallSnapshot(payloadJson, isResync) {
             var blip = buildBlip(tx, gx, gx, sy, dropTs, !isResync);
 
             if (sy > 0 && sy + blip.brickH > softMaxStack) {
-                var minZoneX = startGridX + (tx.first_seen ? knownStartCol : 0) * 5;
-                var maxZoneX = startGridX + (tx.first_seen ? usableCols - 1 : Math.max(0, unknownCols - 1)) * 5;
+                var minZoneX = chunkStartGridX + (tx.first_seen ? knownStartCol : 0) * 5;
+                var maxZoneX = chunkStartGridX + (tx.first_seen ? usableCols - 1 : Math.max(0, unknownCols - 1)) * 5;
                 var bestX = gx;
                 var bestY = sy;
                 for (var step = 1; step <= 10; step++) {
                     var c1 = gx + step * 5;
                     if (c1 <= maxZoneX) {
-                        var h1 = liveSeg._colHeights[c1] || 0;
+                        var h1 = curSeg._colHeights[c1] || 0;
                         if (h1 < bestY) { bestX = c1; bestY = h1; if (bestY + blip.brickH <= softMaxStack) break; }
                     }
                     var c2 = gx - step * 5;
                     if (c2 >= minZoneX) {
-                        var h2 = liveSeg._colHeights[c2] || 0;
+                        var h2 = curSeg._colHeights[c2] || 0;
                         if (h2 < bestY) { bestX = c2; bestY = h2; if (bestY + blip.brickH <= softMaxStack) break; }
                     }
                 }
@@ -828,13 +1342,13 @@ export function hbV2InstallSnapshot(payloadJson, isResync) {
                 blip.height = bestY + blip.brickH;
             }
 
-            registerBlipInSeg(liveSeg, blip);
+            registerBlipInSeg(curSeg, blip);
 
             if (blip.notableType) {
                 notableTxs.push(tx);
             }
         }
-        if (s._pendingSnapshot && s._pendingSnapshot.seg === liveSeg) {
+        if (s._pendingSnapshot === snapRec) {
             s._pendingSnapshot.nextIdx = idx;
         }
         if (idx < planned.length) {
@@ -861,6 +1375,138 @@ function findBlockSegment(_hb, hash, height) {
     return null;
 }
 
+// Merge two adjacent flatlines leftSeg + rightSeg after splicing out a segment
+// of width `removedWidth` between them, preserving every surviving brick cleanly.
+function mergeAdjacentFlatlines(_hb, spliceIdx, removedWidth, removedEnd) {
+    if (spliceIdx > 0 && spliceIdx < _hb.timeline.length &&
+        _hb.timeline[spliceIdx - 1].type === 'flatline' &&
+        _hb.timeline[spliceIdx].type === 'flatline') {
+        var leftSeg = _hb.timeline[spliceIdx - 1];
+        var rightSeg = _hb.timeline[spliceIdx];
+        var effRemovedEnd = typeof removedEnd === 'number' ? removedEnd : rightSeg.x_start;
+        ensureSegMaps(leftSeg);
+        ensureSegMaps(rightSeg);
+
+        // Rebuild leftSeg maps from its active blips in case they were cleared on seal
+        if (leftSeg.blips && leftSeg.blips.length > 0 && leftSeg._blipsByTxid.size === 0) {
+            leftSeg._colHeights = {};
+            leftSeg._colBlips = new Map();
+            for (var li = 0; li < leftSeg.blips.length; li++) {
+                var lb = leftSeg.blips[li];
+                if (!lb || lb._removed || lb.fadeStart > 0) continue;
+                if (lb.txid) leftSeg._blipsByTxid.set(lb.txid, lb);
+                var lgx = lb.gridX !== undefined ? lb.gridX : Math.round(lb.x / 5) * 5;
+                lb.gridX = lgx;
+                var lcol = leftSeg._colBlips.get(lgx);
+                if (!lcol) { lcol = []; leftSeg._colBlips.set(lgx, lcol); }
+                lcol.push(lb);
+                var lsy = leftSeg._colHeights[lgx] || 0;
+                lb.stackY = lsy;
+                lb.height = lsy + (lb.brickH || 0);
+                leftSeg._colHeights[lgx] = lb.height;
+            }
+        }
+
+        leftSeg._pendingForHash = rightSeg._pendingForHash || null;
+        leftSeg._compressed = false;
+        leftSeg._sortedByX = false;
+        leftSeg.x_end = rightSeg.x_end === null ? null : Math.max(leftSeg.x_start, rightSeg.x_end - removedWidth);
+        if (leftSeg.x_end === null) {
+            leftSeg.color = null;
+        }
+        if (typeof rightSeg._carryEndX === 'number') {
+            leftSeg._carryEndX = Math.max(leftSeg.x_start, rightSeg._carryEndX - removedWidth);
+        }
+
+        var minLeftGx = Math.ceil(leftSeg.x_start / 5) * 5;
+        var gridShift = Math.round(removedWidth / 5) * 5;
+        if (rightSeg.blips && rightSeg.blips.length > 0) {
+            for (var rbi = 0; rbi < rightSeg.blips.length; rbi++) {
+                var rb = rightSeg.blips[rbi];
+                if (!rb || rb._removed) continue;
+                if (rb.fadeStart === 0 && rb.txid && leftSeg._blipsByTxid.has(rb.txid)) continue;
+                rb.x = Math.max(leftSeg.x_start, (rb.x || 0) - removedWidth);
+                if (rb.absorbOriginX !== undefined) rb.absorbOriginX -= removedWidth;
+                if (rb.absorbTargetX !== undefined) rb.absorbTargetX -= removedWidth;
+                if (rb.fadeStart === 0) {
+                    var rgx = (rb.gridX !== undefined ? rb.gridX : rb.x) - gridShift;
+                    if (rgx < minLeftGx) rgx = minLeftGx;
+                    rb.gridX = rgx;
+                    rb.x = rgx;
+                    var rsy = leftSeg._colHeights[rgx] || 0;
+                    rb.stackY = rsy;
+                    rb.height = rsy + (rb.brickH || 0);
+                    registerBlipInSeg(leftSeg, rb);
+                } else {
+                    rb._segIdx = leftSeg.blips.length;
+                    leftSeg.blips.push(rb);
+                }
+            }
+        }
+
+        if (_hb._pendingSnapshot && _hb._pendingSnapshot.seg === rightSeg) {
+            _hb._pendingSnapshot.seg = leftSeg;
+        }
+        if (_hb._pendingCarry && _hb._pendingCarry.seg === rightSeg) {
+            _hb._pendingCarry.seg = leftSeg;
+        }
+        _hb.timeline.splice(spliceIdx, 1);
+
+        // Shift any segments still to the right of the merged flatline left by -removedWidth
+        for (var si = spliceIdx; si < _hb.timeline.length; si++) {
+            var rs = _hb.timeline[si];
+            rs.x_start -= removedWidth;
+            if (rs.x_end !== null) rs.x_end -= removedWidth;
+            if (typeof rs._carryEndX === 'number') rs._carryEndX -= removedWidth;
+            if (rs.type === 'flatline') shiftSegmentBlips(rs, -removedWidth);
+        }
+        _hb.virtualX = Math.max(leftSeg.x_start, _hb.virtualX - removedWidth);
+        if (removedWidth > 0) {
+            if (_hb._searchHighlight && _hb._searchHighlight.x >= effRemovedEnd) {
+                _hb._searchHighlight.x -= removedWidth;
+                if (_hb._searchHighlight.gridX !== undefined) _hb._searchHighlight.gridX -= removedWidth;
+            }
+            if (_hb._reveal) {
+                _hb._reveal.spikeVX -= removedWidth;
+                _hb._reveal.absorbX -= removedWidth;
+                if (_hb._reveal.fromOffset !== undefined) _hb._reveal.fromOffset -= removedWidth;
+            }
+            if (_hb._reveal || _hb.autoFollow || _hb.viewOffset >= effRemovedEnd) {
+                _hb.viewOffset -= removedWidth;
+            }
+        }
+        return;
+    }
+
+    // Fallback: not flanked by two flatlines — just shift remaining right-hand segments left
+    var fallbackRemovedEnd = typeof removedEnd === 'number'
+        ? removedEnd
+        : (spliceIdx < _hb.timeline.length ? _hb.timeline[spliceIdx].x_start : _hb.virtualX);
+    for (var si2 = spliceIdx; si2 < _hb.timeline.length; si2++) {
+        var rs2 = _hb.timeline[si2];
+        rs2.x_start -= removedWidth;
+        if (rs2.x_end !== null) rs2.x_end -= removedWidth;
+        if (typeof rs2._carryEndX === 'number') rs2._carryEndX -= removedWidth;
+        if (rs2.type === 'flatline') shiftSegmentBlips(rs2, -removedWidth);
+    }
+    var tail = _hb.timeline.length > 0 ? _hb.timeline[_hb.timeline.length - 1] : null;
+    _hb.virtualX = Math.max(tail ? tail.x_start : 0, _hb.virtualX - removedWidth);
+    if (removedWidth > 0) {
+        if (_hb._searchHighlight && _hb._searchHighlight.x >= fallbackRemovedEnd) {
+            _hb._searchHighlight.x -= removedWidth;
+            if (_hb._searchHighlight.gridX !== undefined) _hb._searchHighlight.gridX -= removedWidth;
+        }
+        if (_hb._reveal) {
+            _hb._reveal.spikeVX -= removedWidth;
+            _hb._reveal.absorbX -= removedWidth;
+            if (_hb._reveal.fromOffset !== undefined) _hb._reveal.fromOffset -= removedWidth;
+        }
+        if (_hb._reveal || _hb.autoFollow || _hb.viewOffset >= fallbackRemovedEnd) {
+            _hb.viewOffset -= removedWidth;
+        }
+    }
+}
+
 export function hbV2ApplyEffect(effectJson) {
     var _hb = getState();
     if (!_hb) return;
@@ -874,15 +1520,21 @@ export function hbV2ApplyEffect(effectJson) {
     }
     if (!effect || !effect.type) return;
 
+    return withLiveTimeline(_hb, function() {
+        return _hbV2ApplyEffectInner(_hb, effect);
+    });
+}
+
+function _hbV2ApplyEffectInner(_hb, effect) {
     if (!_hb._pendingAdds) _hb._pendingAdds = new Map();
     if (!_hb._hiddenTxMap) _hb._hiddenTxMap = new Map();
     if (!_hb._txBatchQueue) _hb._txBatchQueue = [];
     if (!_hb._removedTxids) _hb._removedTxids = new Set();
     if (!_hb._exactConfirmedByHash) _hb._exactConfirmedByHash = new Map();
-    if (!_hb._pendingBlocks) _hb._pendingBlocks = [];
 
     _hb._lastSseEventTs = Date.now() / 1000;
     var liveSeg = getLiveFlatline(_hb);
+    var activeFlatlines = getActiveFlatlines(_hb);
     var isHidden = typeof document !== 'undefined' && document.hidden;
 
     switch (effect.type) {
@@ -890,7 +1542,9 @@ export function hbV2ApplyEffect(effectJson) {
             var addTxid = effect.txid;
             if (!addTxid) return;
             _hb._removedTxids.delete(addTxid);
-            if (liveSeg && liveSeg._blipsByTxid.has(addTxid)) return;
+            for (var afi = 0; afi < activeFlatlines.length; afi++) {
+                if (activeFlatlines[afi]._blipsByTxid.has(addTxid)) return;
+            }
             var inFlightAdd = findInFlightBlip(_hb, addTxid);
             if (inFlightAdd && !inFlightAdd._removed) return;
             var baseTx = {
@@ -955,17 +1609,20 @@ export function hbV2ApplyEffect(effectJson) {
                 return;
             }
 
-            // 2. Already placed on the live flatline -> recolour & restack its single column in place.
-            if (liveSeg && liveSeg._blipsByTxid.has(dtx.txid)) {
-                var existingBlip = liveSeg._blipsByTxid.get(dtx.txid);
-                var heightChanged = updateBlipMetadata(existingBlip, dtx);
-                if (heightChanged) {
-                    restackColumns(liveSeg, [existingBlip.gridX]);
+            // 2. Already placed on the live flatline (or a pending-sealed pre-block flatline) -> recolour & restack in place.
+            for (var dfi = 0; dfi < activeFlatlines.length; dfi++) {
+                var aSeg = activeFlatlines[dfi];
+                if (aSeg._blipsByTxid.has(dtx.txid)) {
+                    var existingBlip = aSeg._blipsByTxid.get(dtx.txid);
+                    var heightChanged = updateBlipMetadata(existingBlip, dtx);
+                    if (heightChanged) {
+                        restackColumns(aSeg, [existingBlip.gridX]);
+                    }
+                    if (anyNotable(notableFlags(dtx)) && window._notableFeed) {
+                        window._notableFeed(dtx);
+                    }
+                    return;
                 }
-                if (anyNotable(notableFlags(dtx)) && window._notableFeed) {
-                    window._notableFeed(dtx);
-                }
-                return;
             }
 
             // 3. Waiting in the RAF batch queue (drained after 120ms, before RAF ran) -> upgrade in place.
@@ -1001,7 +1658,7 @@ export function hbV2ApplyEffect(effectJson) {
             var remTxids = effect.txids;
             if (!Array.isArray(remTxids) || remTxids.length === 0) return;
             var remSet = new Set(remTxids);
-            var dirtyCols = new Set();
+            var dirtyBySeg = new Map();
 
             for (var ri = 0; ri < remTxids.length; ri++) {
                 var rtxid = remTxids[ri];
@@ -1011,14 +1668,19 @@ export function hbV2ApplyEffect(effectJson) {
                 if (_hb._hiddenTxMap) _hb._hiddenTxMap.delete(rtxid);
                 if (_hb._deferredDetails) _hb._deferredDetails.delete(rtxid);
 
-                if (liveSeg && liveSeg._blipsByTxid.has(rtxid)) {
-                    var rBlip = liveSeg._blipsByTxid.get(rtxid);
-                    liveSeg._blipsByTxid.delete(rtxid);
-                    rBlip._removed = true;
-                    removeBlipFromArray(liveSeg, rBlip);
-                    dirtyCols.add(rBlip.gridX);
-                    if (_hb.hoveredBlip === rBlip) _hb.hoveredBlip = null;
-                    if (_hb._pinnedBlip === rBlip) _hb._pinnedBlip = null;
+                for (var rfi = 0; rfi < activeFlatlines.length; rfi++) {
+                    var rfSeg = activeFlatlines[rfi];
+                    if (rfSeg._blipsByTxid.has(rtxid)) {
+                        var rBlip = rfSeg._blipsByTxid.get(rtxid);
+                        rfSeg._blipsByTxid.delete(rtxid);
+                        rBlip._removed = true;
+                        removeBlipFromArray(rfSeg, rBlip);
+                        var dCols = dirtyBySeg.get(rfSeg);
+                        if (!dCols) { dCols = new Set(); dirtyBySeg.set(rfSeg, dCols); }
+                        dCols.add(rBlip.gridX);
+                        if (_hb.hoveredBlip === rBlip) _hb.hoveredBlip = null;
+                        if (_hb._pinnedBlip === rBlip) _hb._pinnedBlip = null;
+                    }
                 }
             }
 
@@ -1030,39 +1692,22 @@ export function hbV2ApplyEffect(effectJson) {
                 });
             }
 
-            if (liveSeg && dirtyCols.size > 0) {
-                restackColumns(liveSeg, dirtyCols);
-            }
+            dirtyBySeg.forEach(function(cols, seg) {
+                if (cols.size > 0) restackColumns(seg, cols);
+            });
             return;
         }
 
         case 'block_observed': {
             if (!effect.hash) return;
-            var exists = false;
-            for (var pi = 0; pi < _hb._pendingBlocks.length; pi++) {
-                if (_hb._pendingBlocks[pi].hash === effect.hash) { exists = true; break; }
-            }
-            if (!exists) {
-                _hb._pendingBlocks.push({
-                    hash: effect.hash,
-                    observed_at: effect.observed_at || Math.floor(Date.now() / 1000),
-                    height: effect.height || null
-                });
-            }
+            reservePendingBlockSlot(_hb, effect.hash, effect.observed_at);
             return;
         }
 
         case 'block_details': {
-            if (effect.hash) {
-                _hb._pendingBlocks = _hb._pendingBlocks.filter(function(pb) {
-                    return pb.hash !== effect.hash;
-                });
-            }
             if (!effect.height) return;
-            if (_hb._lastCuedBlockHeight !== effect.height) {
-                _hb._lastCuedBlockHeight = effect.height;
-                playBlockCue();
-            }
+            var cueKey = effect.hash || ('h:' + effect.height);
+            playBlockCue(cueKey);
             if (typeof document !== 'undefined' && document.hidden) {
                 if (!_hb._blockQueue) _hb._blockQueue = [];
                 _hb._blockQueue.push(effect);
@@ -1158,17 +1803,14 @@ export function hbV2ApplyEffect(effectJson) {
             }
 
             // 3. Server ordering: block_inclusion often arrives BEFORE block_details.
-            // If no block segment exists on the timeline yet AND the viewer is reveal-eligible,
-            // keep the confirmed bricks intact (fadeStart === 0) and tag them with
-            // _pendingInclusionHash so block_details puts them into reveal.confirmed and the
+            // If no measured block segment exists on the timeline yet AND the viewer is reveal-eligible,
+            // keep the confirmed bricks intact (fadeStart === 0) on preFlatline/liveSeg and tag them
+            // with _pendingInclusionHash so block_details puts them into reveal.confirmed and the
             // reveal's harvest beat visibly shatters them into the new spike.
             var blockSeg = findBlockSegment(_hb, effect.hash, effect.height);
-            var revealEligible = !isHidden
-                && _hb._revealEnabled !== false
-                && _hb.autoFollow && !_hb._pinnedTxid
-                && !_hb.paused && !_hb.isDragging && !_hb._pinching
-                && _hb.width > 0 && _hb.zoom > 0
-                && _hb.zoom <= REVEAL_MAX_ENTRY_ZOOM;
+            var pendingIdx = findPendingBlockIndex(_hb, effect.hash);
+            var pendingSeg = pendingIdx >= 0 ? _hb.timeline[pendingIdx] : null;
+            var revealEligible = !isHidden && isRevealEligible(_hb);
 
             if (!blockSeg && revealEligible) {
                 for (var pci = 0; pci < effect.confirmed_txids.length; pci++) {
@@ -1178,9 +1820,14 @@ export function hbV2ApplyEffect(effectJson) {
                     if (_hb._hiddenTxMap) _hb._hiddenTxMap.delete(pctxid);
                     if (_hb._deferredDetails) _hb._deferredDetails.delete(pctxid);
 
-                    var pBlip = (liveSeg && liveSeg._blipsByTxid.has(pctxid))
-                        ? liveSeg._blipsByTxid.get(pctxid)
-                        : findInFlightBlip(_hb, pctxid);
+                    var pBlip = null;
+                    for (var pfi = 0; pfi < activeFlatlines.length; pfi++) {
+                        if (activeFlatlines[pfi]._blipsByTxid.has(pctxid)) {
+                            pBlip = activeFlatlines[pfi]._blipsByTxid.get(pctxid);
+                            break;
+                        }
+                    }
+                    if (!pBlip) pBlip = findInFlightBlip(_hb, pctxid);
                     if (pBlip && !pBlip._removed) {
                         pBlip._pendingInclusionHash = effect.hash;
                         pBlip._confirmedHeight = effect.height || 0;
@@ -1196,15 +1843,16 @@ export function hbV2ApplyEffect(effectJson) {
 
             // 4. Instant mode / inspecting / reveal disabled / block segment already exists / hidden:
             // tombstone confirmed txids so neither _pendingSnapshot nor placeCarriedLeftovers can
-            // resurrect them, purge in-flight bricks, and shatter live bricks immediately.
-            var absorbX = blockSeg ? (blockSeg.x_start + blockSeg.x_end) / 2 : _hb.virtualX;
+            // resurrect them, purge in-flight bricks, and shatter active bricks immediately.
+            var targetSeg = blockSeg || pendingSeg;
+            var absorbX = targetSeg ? (targetSeg.x_start + targetSeg.x_end) / 2 : _hb.virtualX;
             var absorbNow = Date.now() / 1000;
             var zoom = _hb.zoom || 1;
             var maxPartsPerBlip = (zoom < 0.5 || confSet.size > 1000) ? 1
                 : (zoom < 1.0 || confSet.size > 500) ? 2 : 3;
             var viewLeft = _hb.viewOffset || 0;
             var viewRight = viewLeft + (_hb.width || 800) / zoom;
-            var incDirtyCols = new Set();
+            var incDirtyBySeg = new Map();
 
             for (var ci = 0; ci < effect.confirmed_txids.length; ci++) {
                 var ctxid = effect.confirmed_txids[ci];
@@ -1214,28 +1862,33 @@ export function hbV2ApplyEffect(effectJson) {
                 if (_hb._hiddenTxMap) _hb._hiddenTxMap.delete(ctxid);
                 if (_hb._deferredDetails) _hb._deferredDetails.delete(ctxid);
 
-                if (liveSeg && liveSeg._blipsByTxid.has(ctxid)) {
-                    var cBlip = liveSeg._blipsByTxid.get(ctxid);
-                    liveSeg._blipsByTxid.delete(ctxid);
-                    if (cBlip.fadeStart === 0) {
-                        cBlip.fadeStart = absorbNow;
-                        cBlip._confirmedHeight = effect.height || 0;
-                        cBlip.absorbTargetX = absorbX;
-                        cBlip.absorbOriginX = cBlip.x;
-                        cBlip.particles = [];
-                        if (cBlip.x >= viewLeft - 50 && cBlip.x <= viewRight + 50) {
-                            for (var pp = 0; pp < maxPartsPerBlip; pp++) {
-                                cBlip.particles.push({
-                                    offsetX: (Math.random() - 0.5) * 8,
-                                    offsetY: Math.random() * (cBlip.height || 10) * 0.8,
-                                    speed: 0.7 + Math.random() * 0.6,
-                                    arcHeight: 20 + Math.random() * 60,
-                                    delay: Math.random() * 0.3,
-                                    size: 1.5 + Math.random() * 2.5
-                                });
+                for (var ifi = 0; ifi < activeFlatlines.length; ifi++) {
+                    var incSeg = activeFlatlines[ifi];
+                    if (incSeg._blipsByTxid.has(ctxid)) {
+                        var cBlip = incSeg._blipsByTxid.get(ctxid);
+                        incSeg._blipsByTxid.delete(ctxid);
+                        if (cBlip.fadeStart === 0) {
+                            cBlip.fadeStart = absorbNow;
+                            cBlip._confirmedHeight = effect.height || 0;
+                            cBlip.absorbTargetX = absorbX;
+                            cBlip.absorbOriginX = cBlip.x;
+                            cBlip.particles = [];
+                            if (cBlip.x >= viewLeft - 50 && cBlip.x <= viewRight + 50) {
+                                for (var pp = 0; pp < maxPartsPerBlip; pp++) {
+                                    cBlip.particles.push({
+                                        offsetX: (Math.random() - 0.5) * 8,
+                                        offsetY: Math.random() * (cBlip.height || 10) * 0.8,
+                                        speed: 0.7 + Math.random() * 0.6,
+                                        arcHeight: 20 + Math.random() * 60,
+                                        delay: Math.random() * 0.3,
+                                        size: 1.5 + Math.random() * 2.5
+                                    });
+                                }
                             }
+                            var idCols = incDirtyBySeg.get(incSeg);
+                            if (!idCols) { idCols = new Set(); incDirtyBySeg.set(incSeg, idCols); }
+                            idCols.add(cBlip.gridX);
                         }
-                        incDirtyCols.add(cBlip.gridX);
                     }
                 }
             }
@@ -1248,9 +1901,9 @@ export function hbV2ApplyEffect(effectJson) {
                 });
             }
 
-            if (liveSeg && incDirtyCols.size > 0) {
-                restackColumns(liveSeg, incDirtyCols);
-            }
+            incDirtyBySeg.forEach(function(cols, seg) {
+                if (cols.size > 0) restackColumns(seg, cols);
+            });
             return;
         }
 
@@ -1260,46 +1913,67 @@ export function hbV2ApplyEffect(effectJson) {
                 window._hbEndReveal();
             }
             _hb._exactConfirmedByHash.delete(effect.hash);
-            if (liveSeg && liveSeg.blips) {
-                for (var pdi = 0; pdi < liveSeg.blips.length; pdi++) {
-                    var pdb = liveSeg.blips[pdi];
-                    if (pdb && pdb._pendingInclusionHash === effect.hash) {
-                        pdb._pendingInclusionHash = null;
-                        pdb._confirmedHeight = 0;
+            for (var dfi2 = 0; dfi2 < activeFlatlines.length; dfi2++) {
+                var afSeg = activeFlatlines[dfi2];
+                if (afSeg.blips) {
+                    for (var pdi = 0; pdi < afSeg.blips.length; pdi++) {
+                        var pdb = afSeg.blips[pdi];
+                        if (pdb && pdb._pendingInclusionHash === effect.hash) {
+                            pdb._pendingInclusionHash = null;
+                            pdb._confirmedHeight = 0;
+                        }
                     }
                 }
             }
-            _hb._pendingBlocks = _hb._pendingBlocks.filter(function(pb) {
-                return pb.hash !== effect.hash;
-            });
+            if (Array.isArray(_hb._blockQueue) && _hb._blockQueue.length > 0) {
+                _hb._blockQueue = _hb._blockQueue.filter(function(qb) {
+                    return !qb || qb.hash !== effect.hash;
+                });
+            }
+            var removedConfirmed = false;
             if (Array.isArray(_hb.recentBlocks)) {
+                var beforeLen = _hb.recentBlocks.length;
                 _hb.recentBlocks = _hb.recentBlocks.filter(function(rb) {
                     return rb.hash !== effect.hash;
                 });
+                if (_hb.recentBlocks.length !== beforeLen) removedConfirmed = true;
             }
             for (var bi = _hb.timeline.length - 1; bi >= 0; bi--) {
                 var seg = _hb.timeline[bi];
-                if (seg.type === 'block' && seg.hash === effect.hash) {
-                    if (_hb.hoveredBlock === seg) _hb.hoveredBlock = null;
-                    _hb.timeline.splice(bi, 1);
-                    // Bridge adjacent flatlines cleanly without moving any existing bricks.
-                    if (bi > 0 && bi < _hb.timeline.length &&
-                        _hb.timeline[bi - 1].type === 'flatline' &&
-                        _hb.timeline[bi].type === 'flatline') {
-                        _hb.timeline[bi - 1].x_end = _hb.timeline[bi].x_start;
+                if ((seg.type === 'pending_block' || seg.type === 'block') && seg.hash === effect.hash) {
+                    var segWidth = Math.max(0, (seg.x_end || seg.x_start) - seg.x_start);
+                    var segEnd = seg.x_end !== null ? seg.x_end : (seg.x_start + segWidth);
+                    if (seg.type === 'block') {
+                        removedConfirmed = true;
+                        if (_hb.hoveredBlock === seg) _hb.hoveredBlock = null;
+                    } else {
+                        if (_hb.hoveredPendingBlock === seg) _hb.hoveredPendingBlock = null;
                     }
+                    _hb.timeline.splice(bi, 1);
+                    mergeAdjacentFlatlines(_hb, bi, segWidth, segEnd);
                     break;
                 }
             }
-            // Refresh lastBlockTime from the new latest remaining block segment.
+            if (_hb._pinnedTxid) {
+                _hb._pinnedBlip = lookupBlipOnTimeline(_hb, _hb._pinnedTxid);
+            }
+            // Refresh lastBlockTime from the new latest remaining block segment (wall-clamped).
             var latestTs = 0;
+            var discNow = Math.floor(Date.now() / 1000);
             for (var li = _hb.timeline.length - 1; li >= 0; li--) {
-                if (_hb.timeline[li].type === 'block' && _hb.timeline[li].timestamp) {
-                    latestTs = _hb.timeline[li].timestamp;
-                    break;
+                if (_hb.timeline[li].type === 'block') {
+                    var wallTs = effectiveBlockWallTime(_hb.timeline[li], discNow);
+                    if (wallTs > 0) {
+                        latestTs = wallTs;
+                        break;
+                    }
                 }
             }
             if (latestTs > 0) _hb.lastBlockTime = latestTs;
+            else if (removedConfirmed) _hb.lastBlockTime = 0;
+            if (removedConfirmed && window.renderRhythmStrip && window.getHeartbeatRecentBlocks) {
+                window.renderRhythmStrip('rhythm-strip-canvas', window.getHeartbeatRecentBlocks());
+            }
             return;
         }
 
@@ -1377,6 +2051,9 @@ function lookupBlipOnTimeline(_hb, rawTxid) {
 export function hbV2FocusTx(txid) {
     var _hb = getState();
     if (!_hb || !txid) return false;
+    if (_hb._viewMode === 'history' && typeof window.hbV2ExitHistoryMode === 'function') {
+        window.hbV2ExitHistoryMode();
+    }
 
     var blip = lookupBlipOnTimeline(_hb, txid);
     if (!blip) {
@@ -1398,12 +2075,14 @@ export function hbV2FocusTx(txid) {
 
     _hb.autoFollow = false;
     _hb.paused = false;
-    _hb.zoom = Math.max(_hb.zoom || 1, 3.5);
+    _hb.zoom = Math.max(_hb.zoom || 1, 4.2);
     _hb.viewOffset = blip.x - ((_hb.width || 800) * 0.5) / _hb.zoom;
     _hb.viewOffsetY = 0;
     _hb._pinnedTxid = blip.txid;
     _hb._pinnedBlip = blip;
     _hb._searchHighlight = {
+        txid: blip.txid,
+        blip: blip,
         x: blip.x,
         gridX: blip.gridX,
         start: Date.now() / 1000,
@@ -1448,6 +2127,48 @@ export function hbV2FocusBlockHeight(height) {
     return true;
 }
 
+export function hbV2FocusPendingSlot(hash) {
+    var _hb = getState();
+    if (!_hb) return false;
+    if (_hb._viewMode === 'history' && typeof window.hbV2ExitHistoryMode === 'function') {
+        window.hbV2ExitHistoryMode();
+    }
+    if (!_hb.timeline) return false;
+    var target = null;
+    for (var i = _hb.timeline.length - 1; i >= 0; i--) {
+        var seg = _hb.timeline[i];
+        if (seg.type === 'pending_block' && (!hash || seg.hash === hash)) {
+            target = seg;
+            break;
+        }
+    }
+    if (!target) return false;
+
+    if (_hb._reveal && window._hbEndReveal) window._hbEndReveal();
+    _hb._intro = null;
+    _hb.autoFollow = false;
+    _hb.zoom = Math.max(_hb.zoom || 1, 1.5);
+    var mid = (target.x_start + target.x_end) / 2;
+    _hb.viewOffset = mid - ((_hb.width || 800) * 0.5) / _hb.zoom;
+    _hb.viewOffsetY = 0;
+    _hb.hoveredPendingBlock = target;
+    return true;
+}
+
+export function hbV2IsPendingSlotOffscreen(hash) {
+    var _hb = getState();
+    if (!_hb || !_hb.timeline || _hb._viewMode === 'history') return false;
+    var viewLeft = _hb.viewOffset;
+    var viewRight = viewLeft + (_hb.width || 800) / Math.max(_hb.zoom || 1, 0.01);
+    for (var i = _hb.timeline.length - 1; i >= 0; i--) {
+        var seg = _hb.timeline[i];
+        if (seg.type === 'pending_block' && (!hash || seg.hash === hash)) {
+            return seg.x_end < viewLeft || seg.x_start > viewRight;
+        }
+    }
+    return false;
+}
+
 export function hbV2SetConnectionState(state) {
     var _hb = getState();
     if (!_hb) return;
@@ -1471,55 +2192,66 @@ export function processLiveBlock(block) {
     if (!_hb) return;
 
     // Ignore a re-broadcast of the SAME block during an active reveal; finalize
-    // the reveal first if a genuinely NEW block arrives mid-reveal.
-    if (_hb._reveal && block && block.height) {
-        if (_hb._reveal.height === block.height) return;
+    // the reveal first if a genuinely NEW block (or same-height reorg hash) arrives mid-reveal.
+    if (_hb._reveal && block && (block.hash || block.height)) {
+        var sameRevealBlock = (block.hash && _hb._reveal.hash && _hb._reveal.hash === block.hash)
+            || (!block.hash && block.height && _hb._reveal.height === block.height);
+        if (sameRevealBlock) return;
         if (window._hbEndReveal) window._hbEndReveal();
     }
 
     _hb._backlogSpreadPx = 0;
     _hb._backlogSpreadStart = 0;
 
-    // Inspection continuity rule: never hijack an inspecting or pinned viewer's camera.
-    var revealEligible = _hb._revealEnabled !== false
-        && _hb.autoFollow && !_hb._pinnedTxid
-        && !_hb.paused && !_hb.isDragging && !_hb._pinching
-        && _hb.width > 0 && _hb.zoom > 0
-        && _hb.zoom <= REVEAL_MAX_ENTRY_ZOOM;
+    // Inspection continuity rule: never hijack an inspecting, pinned, or history-mode viewer's camera.
+    var revealEligible = isRevealEligible(_hb);
 
-    // Collapse any empty processing gap past the rightmost active brick.
+    var pendingIdx = block.hash ? findPendingBlockIndex(_hb, block.hash) : -1;
+
+    // Collapse any empty processing gap past the rightmost active brick (direct path only;
+    // when a pending_block slot exists, the live flatline holds genuine post-block arrivals).
     var collapsedPx = 0;
-    var liveSeg = getLiveFlatline(_hb);
-    if (liveSeg && liveSeg.blips.length > 0) {
-        var rightmost = liveSeg.x_start;
-        for (var ri = 0; ri < liveSeg.blips.length; ri++) {
-            var rb = liveSeg.blips[ri];
-            if (!rb._removed && rb.fadeStart === 0 && rb.x > rightmost) {
-                rightmost = rb.x;
+    if (pendingIdx < 0) {
+        var liveSeg = getLiveFlatline(_hb);
+        if (liveSeg && liveSeg.blips.length > 0) {
+            var rightmost = liveSeg.x_start;
+            for (var ri = 0; ri < liveSeg.blips.length; ri++) {
+                var rb = liveSeg.blips[ri];
+                if (!rb._removed && rb.fadeStart === 0 && rb.x > rightmost) {
+                    rightmost = rb.x;
+                }
             }
-        }
-        var closeAt = rightmost + 5;
-        if (closeAt < _hb.virtualX) {
-            collapsedPx = _hb.virtualX - closeAt;
-            _hb.virtualX = closeAt;
+            var closeAt = rightmost + 5;
+            if (closeAt < _hb.virtualX) {
+                collapsedPx = _hb.virtualX - closeAt;
+                _hb.virtualX = closeAt;
+            }
         }
     }
 
     var blockTs = block.timestamp || Math.floor(Date.now() / 1000);
-    var inter = 600;
-    for (var pi = _hb.timeline.length - 1; pi >= 0; pi--) {
-        if (_hb.timeline[pi].type === 'block') {
-            var prevTs = _hb.timeline[pi].timestamp;
-            if (prevTs > 0 && blockTs >= prevTs) {
-                inter = Math.max(1, blockTs - prevTs);
+    var inter = resolveInterBlockSeconds(block);
+    if (inter === null) {
+        var scanFrom = pendingIdx >= 0 ? (pendingIdx - 1) : (_hb.timeline.length - 1);
+        for (var pi = scanFrom; pi >= 0; pi--) {
+            var pSeg = _hb.timeline[pi];
+            if (pSeg.type === 'pending_block') {
+                break;
             }
-            break;
+            if (pSeg.type === 'block') {
+                var prevTs = pSeg.timestamp;
+                if (prevTs > 0 && blockTs > 0 && block.height && pSeg.height + 1 === block.height) {
+                    inter = blockTs - prevTs;
+                }
+                break;
+            }
         }
     }
     var blockJson = JSON.stringify([{
         hash: block.hash || null,
         height: block.height,
         timestamp: blockTs,
+        observed_at: block.observed_at || 0,
         tx_count: block.tx_count || block.confirmed_count || 0,
         total_fees: block.total_fees || 0,
         size: block.size || 0,
@@ -1538,7 +2270,7 @@ export function processLiveBlock(block) {
     _hb._pendingReveal = null;
     if (revealEligible && pending) {
         setupBlockReveal(_hb, pending);
-    } else if (collapsedPx > 40) {
+    } else if (pendingIdx < 0 && collapsedPx > 40) {
         var newSeg = getLiveFlatline(_hb);
         if (newSeg) {
             _hb.virtualX += collapsedPx;
@@ -1553,8 +2285,10 @@ export function processLiveBlock(block) {
     var miningEl = document.getElementById('heartbeat-mining-overlay');
     if (miningEl) miningEl.classList.add('hidden');
 
-    if (window.heartbeatFlash) window.heartbeatFlash();
-    if (window.heartbeatPulse) window.heartbeatPulse();
+    if (!_hb._suppressLiveVisuals) {
+        if (window.heartbeatFlash) window.heartbeatFlash();
+        if (window.heartbeatPulse) window.heartbeatPulse();
+    }
 
     if (window.renderRhythmStrip && window.getHeartbeatRecentBlocks) {
         window.renderRhythmStrip('rhythm-strip-canvas', window.getHeartbeatRecentBlocks());
@@ -1609,8 +2343,9 @@ function applyExactHarvest(r, blockSet) {
 function setupBlockReveal(_hb, pr) {
     var spikeSeg = pr.spikeSeg;
     if (!spikeSeg || !spikeSeg.points) return;
-    if (_hb._lastRevealHeight === spikeSeg.height) return;
-    _hb._lastRevealHeight = spikeSeg.height;
+    var revealKey = spikeSeg.hash || String(spikeSeg.height);
+    if (_hb._lastRevealKey === revealKey) return;
+    _hb._lastRevealKey = revealKey;
 
     var peakIdx = 0, peakY = 0;
     for (var p = 0; p < spikeSeg.points.length; p++) {
@@ -1631,8 +2366,9 @@ function setupBlockReveal(_hb, pr) {
         spikeVX: spikeSeg.x_start + peakIdx * POINT_WIDTH,
         oldSeg: pr.oldSeg,
         newSeg: pr.newSeg,
-        leftovers: pr.leftovers,
-        confirmed: pr.confirmed,
+        interBlock: pr.interBlock !== undefined ? pr.interBlock : null,
+        leftovers: pr.leftovers || [],
+        confirmed: pr.confirmed || [],
         absorbX: pr.absorbX,
         maxParts: pr.maxParts,
         blockFees: spikeSeg.total_fees || 0,
@@ -1653,13 +2389,13 @@ function setupBlockReveal(_hb, pr) {
     rebuildRevealIndex(_hb._reveal);
 
     var spikeVX = _hb._reveal.spikeVX;
-    var workingZoom = Math.max(_hb.zoom, 1);
+    var workingZoom = Math.min(Math.max(_hb.zoom, 1.4), 2.2);
     var spikeScreenX = (spikeVX - _hb.viewOffset) * _hb.zoom;
     var headScreenX = _hb.width * HEAD_POSITION_FRAC;
     var nearHead = spikeScreenX > 0 && spikeScreenX < _hb.width
         && Math.abs(spikeScreenX - headScreenX) < _hb.width * 0.35;
-    var zoomingIn = workingZoom / _hb.zoom > 1.25;
-    if (nearHead && !zoomingIn) {
+    var zoomRatio = Math.max(workingZoom / Math.max(_hb.zoom, 0.001), _hb.zoom / workingZoom);
+    if (nearHead && zoomRatio <= 1.25) {
         spikeSeg._strikeStart = Date.now() / 1000;
     } else {
         _hb._reveal._deferStrike = true;
@@ -1669,20 +2405,6 @@ function setupBlockReveal(_hb, pr) {
     if (spikeSeg.hash && _hb._exactConfirmedByHash && _hb._exactConfirmedByHash.has(spikeSeg.hash)) {
         applyExactHarvest(_hb._reveal, _hb._exactConfirmedByHash.get(spikeSeg.hash).set);
     }
-}
-
-// Legacy no-op stub: WASM HeartbeatClientController owns the single v2 EventSource.
-export function connectOwnFeed() {}
-
-// Widen the live flatline to reflect wall-clock time since `blockTs`.
-export function fastForwardLiveFlatline(blockTs) {
-    var _hb = getState();
-    if (!_hb || !blockTs) return;
-    var liveSeg = getLiveFlatline(_hb);
-    if (!liveSeg) return;
-    var age = Math.max(0, Math.min(Date.now() / 1000 - blockTs, 1800));
-    var wanted = liveSeg.x_start + age * FLATLINE_PX_PER_SEC;
-    if (wanted > _hb.virtualX) _hb.virtualX = wanted;
 }
 
 // ── Per-frame RAF tx flush + pending-fee grace drain ─────────────────────
@@ -1746,7 +2468,18 @@ export function drainHiddenTxsAcrossGap(gapStart, gapEnd, windowStartSec, window
         && windowEndSec > windowStartSec;
     var minTs = hasTimeSpan ? windowStartSec : Infinity;
     var maxTs = hasTimeSpan ? windowEndSec : 0;
-    if (!hasTimeSpan) {
+    if (hasTimeSpan) {
+        // Expand minTs down to the earliest buffered arrival (clamped to 30m before
+        // windowEndSec) so a miner's future-skewed block header timestamp can never
+        // clamp real post-block arrivals onto colIdx = 0.
+        var floorTs = maxTs - 1800;
+        for (var ti0 = 0; ti0 < buffered.length; ti0++) {
+            var fts0 = buffered[ti0].first_seen || 0;
+            if (fts0 > floorTs && fts0 < minTs) {
+                minTs = fts0;
+            }
+        }
+    } else {
         for (var ti = 0; ti < buffered.length; ti++) {
             var fts = buffered[ti].first_seen || 0;
             if (fts > 0) {
@@ -1771,31 +2504,19 @@ export function drainHiddenTxsAcrossGap(gapStart, gapEnd, windowStartSec, window
             colIdx = Math.floor((i * numCols) / buffered.length);
         }
         var gx = startGx + colIdx * 5;
-        var sy = liveSeg._colHeights[gx] || 0;
-        var blip = buildBlip(tx, gx, gx, sy, nowSec, false);
-
-        if (sy > 0 && sy + blip.brickH > maxStack) {
-            var bestX = gx;
-            var bestY = sy;
-            for (var back = 1; back <= 20; back++) {
-                var tryX = gx - back * 5;
-                if (tryX < minGridX) break;
-                var tryH = liveSeg._colHeights[tryX] || 0;
-                if (tryH + blip.brickH <= maxStack) {
-                    bestX = tryX;
-                    bestY = tryH;
-                    break;
-                }
-                if (tryH < bestY) {
-                    bestX = tryX;
-                    bestY = tryH;
-                }
-            }
-            blip.x = bestX;
-            blip.gridX = bestX;
-            blip.stackY = bestY;
-            blip.height = bestY + blip.brickH;
-        }
+        var drainSoftMax = Math.min(maxStack, 145);
+        var drainHardMax = Math.min(maxStack, 180);
+        var drainSearch = Math.max(32, Math.min(120, Math.floor(numCols * 0.25)));
+        var blip = buildBlip(tx, gx, gx, 0, nowSec, false);
+        var dSlot = findColumnWithRoom(
+            _hb, liveSeg, gx, minGridX, endGx, blip.brickH,
+            drainSoftMax, drainHardMax, drainSearch, true
+        );
+        endGx = dSlot.maxGx;
+        blip.x = dSlot.gx;
+        blip.gridX = dSlot.gx;
+        blip.stackY = dSlot.sy;
+        blip.height = dSlot.sy + blip.brickH;
 
         registerBlipInSeg(liveSeg, blip);
         if (blip.notableType && window._notableFeed) {
@@ -1839,13 +2560,32 @@ export function flushTxBatch(nowMsOverride) {
         return;
     }
 
-    var batch = _hb._txBatchQueue;
-    _hb._txBatchQueue = [];
+    // While a block reveal is in form/harvest/unfurl/hold, hold incoming live
+    // arrivals briefly so they don't pop onto the live tip off-camera; once the
+    // camera begins zooming back in (return) and for 2.5s after, trickle-drain
+    // them smoothly across frames so the tip comes alive gently with zero dump.
+    var nowSec = Date.now() / 1000;
+    var revealTrickle = false;
+    if (nowMsOverride === undefined) {
+        if (_hb._reveal && _hb._reveal.phase !== 'return') {
+            return;
+        }
+        revealTrickle = !!(_hb._reveal && _hb._reveal.phase === 'return')
+            || (_hb._postRevealTrickleUntil > 0 && nowSec < _hb._postRevealTrickleUntil);
+    }
+
+    var batch;
+    if (revealTrickle && _hb._txBatchQueue.length > 6) {
+        var take = Math.max(4, Math.min(18, Math.ceil(_hb._txBatchQueue.length / 18)));
+        batch = _hb._txBatchQueue.splice(0, take);
+    } else {
+        batch = _hb._txBatchQueue;
+        _hb._txBatchQueue = [];
+    }
 
     // virtualX is advanced ONLY by drawFrame (single smooth 60fps clock).
     // Never jump _hb.virtualX here; spread live bursts gently behind the head.
     var maxStack = (_hb.height || 400) * 0.35;
-    var nowSec = Date.now() / 1000;
     var minGridX = Math.ceil(liveSeg.x_start / 5) * 5;
     var headGridX = Math.max(minGridX, Math.floor(_hb.virtualX / 5) * 5);
     var postCarryMinX = liveSeg._carryEndX ? (liveSeg._carryEndX + 5) : minGridX;
@@ -1865,8 +2605,24 @@ export function flushTxBatch(nowMsOverride) {
             _hb._backlogSpreadPx = 0;
         }
     }
+    // virtualX is advanced ONLY by drawFrame (single smooth 60fps clock) during
+    // normal live streaming so bursts never hitch or jump the camera forward.
+    // Only allow rightward head extension on massive (>200-tx) sleep/wake dumps.
+    var isMassiveWakeDump = batch.length > 200;
+    if (isMassiveWakeDump) {
+        var neededBatchSpan = Math.ceil(batch.length / 8) * 5;
+        if (headGridX - liveMinX < neededBatchSpan) {
+            var growTo = Math.max(_hb.virtualX, liveMinX + neededBatchSpan + 10);
+            _hb.virtualX = growTo;
+            headGridX = Math.max(minGridX, Math.floor(_hb.virtualX / 5) * 5);
+            flatlineWidth = Math.max(0, _hb.virtualX - liveSeg.x_start);
+        }
+        if (neededBatchSpan > spread) spread = neededBatchSpan;
+    }
     var spreadCols = Math.max(1, Math.floor(spread / 5));
     var removedSet = _hb._removedTxids;
+    var liveSoftMax = Math.min(maxStack, 130);
+    var liveHardMax = Math.min(maxStack, 140);
 
     for (var i = 0; i < batch.length; i++) {
         var tx = batch[i];
@@ -1882,18 +2638,23 @@ export function flushTxBatch(nowMsOverride) {
             continue;
         }
 
-        // If Chrome held SSE deltas while a background tab was frozen and
-        // released them after visibilitychange already advanced virtualX,
-        // place aged catch-up txs back at their true real-time column
-        // (headGridX - age * 5px/s) so they fill the elapsed stretch instead
-        // of leaving a blank gap and piling at the tip. Never stack them back
-        // on top of pre-block carried columns (clamped to >= liveMinX).
+        // If Chrome held SSE deltas while a background tab or sleeping screen was
+        // throttled, back-place aged catch-up txs across the elapsed stretch
+        // instead of piling >5m wake-up txs into a skyscraper at headGridX.
         var ageSec = (tx.first_seen > 0) ? (nowSec - tx.first_seen) : 0;
         var gridX;
         var animateDrop = true;
-        if (ageSec > 2.5 && ageSec <= 300) {
-            var ageCols = Math.round((ageSec * FLATLINE_PX_PER_SEC) / 5);
-            var catchJit = Math.round(txidSkylineOffset(tx.txid) * 1.5);
+        if (revealTrickle) {
+            // Smooth feathered trickle during/just after reveal return: drop gently
+            // near the live head with animated sky fall instead of popping in abruptly.
+            var trSpread = Math.max(4, Math.min(16, spreadCols));
+            var trOff = Math.floor(txidJitter(tx.txid) * trSpread);
+            gridX = Math.max(liveMinX, headGridX - trOff * 5);
+            animateDrop = true;
+        } else if (ageSec > 2.5) {
+            var clampedAge = Math.min(ageSec, 300);
+            var ageCols = Math.round((clampedAge * FLATLINE_PX_PER_SEC) / 5);
+            var catchJit = Math.round(txidSkylineOffset(tx.txid) * Math.max(2, Math.min(12, spreadCols * 0.25)));
             gridX = Math.max(liveMinX, Math.min(headGridX, headGridX - (ageCols + catchJit) * 5));
             animateDrop = ageSec < 4.0;
         } else {
@@ -1902,34 +2663,17 @@ export function flushTxBatch(nowMsOverride) {
             var offsetCols = spreadCols > 1 ? Math.floor(txidJitter(tx.txid) * spreadCols) : 0;
             gridX = Math.max(liveMinX, headGridX - offsetCols * 5);
         }
-        var sy = liveSeg._colHeights[gridX] || 0;
-        var blip = buildBlip(tx, gridX, gridX, sy, nowSec, animateDrop);
-
-        if (sy > 0 && sy + blip.brickH > maxStack) {
-            var bestX = gridX;
-            var bestY = sy;
-            var maxBack = Math.max(20, spreadCols);
-            for (var back = 1; back <= maxBack; back++) {
-                var tryX = gridX - back * 5;
-                if (tryX < liveMinX) break;
-                var tryH = liveSeg._colHeights[tryX] || 0;
-                if (tryH + blip.brickH <= maxStack) {
-                    bestX = tryX;
-                    bestY = tryH;
-                    break;
-                }
-                if (tryH < bestY) {
-                    bestX = tryX;
-                    bestY = tryH;
-                }
-            }
-            gridX = bestX;
-            sy = bestY;
-        }
-        blip.x = gridX;
-        blip.gridX = gridX;
-        blip.stackY = sy;
-        blip.height = sy + blip.brickH;
+        var dropStamp = revealTrickle ? (nowSec + Math.random() * 0.35) : nowSec;
+        var blip = buildBlip(tx, gridX, gridX, 0, dropStamp, animateDrop);
+        var fSlot = findColumnWithRoom(
+            _hb, liveSeg, gridX, liveMinX, headGridX, blip.brickH,
+            liveSoftMax, liveHardMax, Math.max(60, spreadCols), isMassiveWakeDump
+        );
+        headGridX = fSlot.maxGx;
+        blip.x = fSlot.gx;
+        blip.gridX = fSlot.gx;
+        blip.stackY = fSlot.sy;
+        blip.height = fSlot.sy + blip.brickH;
 
         registerBlipInSeg(liveSeg, blip);
 
@@ -2080,7 +2824,7 @@ function _buildNotableRow(tx) {
         var fullMsg = tx.op_return_text || '';
         labelNodes = [
             _feedSpan('text-[#ffa500] font-bold shrink-0', 'MSG'),
-            _feedSpan('text-white/60 shrink-0 truncate max-w-[200px]',
+            _feedSpan('text-white/75 min-w-0 truncate flex-1 sm:flex-none sm:max-w-[240px]',
                       fullMsg.substring(0, 30), fullMsg)
         ];
     } else {
@@ -2120,7 +2864,7 @@ window._notableFeed = function(tx, opts) {
 
     var row = document.createElement('div');
     var appendMode = opts && opts.append;
-    row.className = 'flex items-baseline gap-3 px-4 py-2 border-b border-white/5 text-xs font-mono'
+    row.className = 'flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2 border-b border-white/5 text-[11px] sm:text-xs font-mono min-w-0'
         + (appendMode ? '' : ' opacity-0');
     if (!appendMode) row.style.animation = 'fadeinone 0.5s ease forwards';
     row.dataset.type = built.feedType;
@@ -2152,7 +2896,8 @@ window._notableFeed = function(tx, opts) {
                     fee: tx.fee != null ? tx.fee : null,
                     vsize: tx.vsize != null ? tx.vsize : null,
                     feeRate: tx.fee != null && tx.vsize ? tx.fee / tx.vsize : null,
-                    value: tx.value != null ? tx.value : null
+                    value: tx.value != null ? tx.value : null,
+                    firstSeen: tx.first_seen || tx.timestamp || null
                 });
             }
         });

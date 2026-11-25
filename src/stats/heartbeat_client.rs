@@ -63,6 +63,84 @@ impl PinnedTxView {
     }
 }
 
+/// Classification of a user query in the unified Heartbeat search bar.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SearchQuery {
+    /// Explicit `tx:` prefix (1..=64 hex) or bare 8..=63 hex prefix.
+    Tx(String),
+    /// Integer block height (optional `#` or `block:` prefix, optional commas).
+    BlockHeight(u64),
+    /// Explicit `block:<64-hex>` block hash.
+    BlockHash(String),
+    /// Bare 64-hex string without prefix (could be either a txid or a block hash).
+    AmbiguousHex64(String),
+}
+
+/// Initial search parameter parsed from the page URL (`?tx=...` or `?block=...`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum InitialSearchParam {
+    Tx(String),
+    Block(String),
+}
+
+/// Active historical-window view metadata mirrored from the JS canvas engine.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct HistoryModeInfo {
+    pub target_height: u64,
+    #[serde(default)]
+    pub target_hash: String,
+    pub from_height: u64,
+    pub to_height: u64,
+}
+
+#[derive(Deserialize)]
+struct BlockWindowPayloadMeta {
+    target_height: u64,
+    #[serde(default)]
+    target_hash: Option<String>,
+    #[serde(default)]
+    from_height: Option<u64>,
+    #[serde(default)]
+    to_height: Option<u64>,
+    #[serde(default)]
+    blocks: Vec<BlockWindowRowHeight>,
+}
+
+#[derive(Deserialize)]
+struct BlockWindowRowHeight {
+    height: u64,
+}
+
+/// Extract `HistoryModeInfo` from either a JS `__hbHistoryModeChange` payload
+/// or a `/api/stats/heartbeat/block/{query}` HTTP response body.
+pub fn parse_history_mode_info(json: &str) -> Option<HistoryModeInfo> {
+    let meta: BlockWindowPayloadMeta = serde_json::from_str(json).ok()?;
+    let from_height = meta
+        .from_height
+        .or_else(|| meta.blocks.first().map(|b| b.height))
+        .unwrap_or(meta.target_height);
+    let to_height = meta
+        .to_height
+        .or_else(|| meta.blocks.last().map(|b| b.height))
+        .unwrap_or(meta.target_height);
+    Some(HistoryModeInfo {
+        target_height: meta.target_height,
+        target_hash: meta.target_hash.unwrap_or_default(),
+        from_height,
+        to_height,
+    })
+}
+
+/// Pending block metadata for the top-of-canvas cue banner while block details are in flight.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PendingBlockBanner {
+    pub hash: String,
+    pub observed_at: u64,
+    /// Client-side Unix timestamp (seconds) used to compute the 2s display grace
+    /// period without being skewed by client/server clock drift.
+    pub received_at_client: u64,
+}
+
 /// Deserialization shape for `/api/stats/tx/{txid}` JSON responses.
 #[derive(Clone, Debug, Default, Deserialize)]
 pub struct RawTxDetailResponse {
@@ -306,6 +384,227 @@ pub fn apply_deep_details(
     }
 }
 
+/// Validate a decimal block height string (either plain ASCII digits or standard
+/// thousands-grouped digits like `840,000`) and return its 1..=10 raw digits.
+/// Rejects malformed comma placement such as `8,4,0000`, `,840`, or `0,000`.
+fn parse_decimal_height_digits(raw: &str) -> Option<String> {
+    if raw.is_empty() {
+        return None;
+    }
+    let digits = if raw.contains(',') {
+        let mut parts = raw.split(',');
+        let first = parts.next()?;
+        if !(1..=3).contains(&first.len())
+            || !first.bytes().all(|b| b.is_ascii_digit())
+            || first.starts_with('0')
+        {
+            return None;
+        }
+        let mut out = String::with_capacity(raw.len());
+        out.push_str(first);
+        for group in parts {
+            if group.len() != 3 || !group.bytes().all(|b| b.is_ascii_digit()) {
+                return None;
+            }
+            out.push_str(group);
+        }
+        out
+    } else {
+        if !raw.bytes().all(|b| b.is_ascii_digit()) {
+            return None;
+        }
+        raw.to_string()
+    };
+    if !(1..=10).contains(&digits.len()) {
+        return None;
+    }
+    Some(digits)
+}
+
+/// Build the user-facing not-found feedback for an `AmbiguousHex64` query whose
+/// TX lookup missed and whose block-hash fallback returned 404, preserving any
+/// partial-coverage or node-unavailable context.
+#[cfg_attr(not(any(feature = "hydrate", test)), allow(dead_code))]
+fn ambiguous_hex_not_found_message(
+    coverage: Option<&Coverage>,
+    tx_lookup_unavailable: bool,
+) -> &'static str {
+    if coverage.is_some_and(|c| !c.is_complete()) {
+        "Not found (mempool coverage is currently partial)"
+    } else if tx_lookup_unavailable || coverage.is_none() {
+        "Not found (node currently unavailable)"
+    } else {
+        "Not found"
+    }
+}
+
+/// Classify a unified Heartbeat search query into a transaction, block height,
+/// block hash, or ambiguous 64-character hex string.
+///
+/// UTF-8 safe: never slices raw byte offsets without `.get(..)` or `strip_prefix`.
+pub fn parse_search_query(raw: &str) -> Option<SearchQuery> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    // Explicit `tx:` prefix (case-insensitive) -> validate 1..=64 ASCII hex.
+    if trimmed
+        .get(..3)
+        .is_some_and(|p| p.eq_ignore_ascii_case("tx:"))
+    {
+        let rest = trimmed.get(3..).unwrap_or("").trim();
+        if (1..=64).contains(&rest.len())
+            && rest.bytes().all(|b| b.is_ascii_hexdigit())
+        {
+            return Some(SearchQuery::Tx(rest.to_ascii_lowercase()));
+        }
+        return None;
+    }
+
+    // Explicit `block:` prefix (case-insensitive) or leading `#`.
+    let explicit_block = if trimmed
+        .get(..6)
+        .is_some_and(|p| p.eq_ignore_ascii_case("block:"))
+    {
+        Some(trimmed.get(6..).unwrap_or("").trim())
+    } else {
+        trimmed.strip_prefix('#').map(str::trim)
+    };
+
+    if let Some(rest) = explicit_block {
+        if rest.is_empty() {
+            return None;
+        }
+        if let Some(digits) = parse_decimal_height_digits(rest) {
+            if let Ok(h) = digits.parse::<u64>() {
+                return Some(SearchQuery::BlockHeight(h));
+            }
+            return None;
+        }
+        if rest.len() == 64 && rest.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return Some(SearchQuery::BlockHash(rest.to_ascii_lowercase()));
+        }
+        return None;
+    }
+
+    // Bare query (no prefix):
+    // 1. Block height: valid 1..=10 digit decimal (with optional standard commas)
+    //    that has 1..=7 digits, or parses as u64 <= 10_000_000 without a leading
+    //    zero (so 8-char hex txid prefixes like "00001234" stay Tx).
+    if let Some(digits) = parse_decimal_height_digits(trimmed) {
+        if digits.len() <= 7
+            || (!digits.starts_with('0')
+                && digits.parse::<u64>().is_ok_and(|h| h <= 10_000_000))
+        {
+            if let Ok(h) = digits.parse::<u64>() {
+                return Some(SearchQuery::BlockHeight(h));
+            }
+        }
+    }
+
+    // 2. 64-char hex without prefix -> ambiguous (could be txid or block hash).
+    if trimmed.len() == 64 && trimmed.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Some(SearchQuery::AmbiguousHex64(trimmed.to_ascii_lowercase()));
+    }
+
+    // 3. 8..=63-char hex without prefix -> txid prefix.
+    if (8..=63).contains(&trimmed.len())
+        && trimmed.bytes().all(|b| b.is_ascii_hexdigit())
+    {
+        return Some(SearchQuery::Tx(trimmed.to_ascii_lowercase()));
+    }
+
+    None
+}
+
+/// UTF-8 safe percent-decoder for URL query parameter values.
+fn percent_decode_param(raw: &str) -> Option<String> {
+    let bytes = raw.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'%' if i + 2 < bytes.len() => {
+                let hi = hex_nibble(bytes[i + 1]);
+                let lo = hex_nibble(bytes[i + 2]);
+                if let (Some(h), Some(l)) = (hi, lo) {
+                    out.push((h << 4) | l);
+                    i += 3;
+                } else {
+                    out.push(bytes[i]);
+                    i += 1;
+                }
+            }
+            b'+' => {
+                out.push(b' ');
+                i += 1;
+            }
+            b => {
+                out.push(b);
+                i += 1;
+            }
+        }
+    }
+    String::from_utf8(out).ok()
+}
+
+fn hex_nibble(b: u8) -> Option<u8> {
+    match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(b - b'a' + 10),
+        b'A'..=b'F' => Some(b - b'A' + 10),
+        _ => None,
+    }
+}
+
+/// Parse `?tx=...` or `?block=...` from a URL query string.
+///
+/// Decodes percent-encoded characters such as `%23` (`#`) and `%3A` (`:`) cleanly
+/// and validates the result without raw byte-index slicing.
+pub fn parse_initial_search_param(search: &str) -> Option<InitialSearchParam> {
+    let query = search.strip_prefix('?').unwrap_or(search);
+    for pair in query.split('&') {
+        let Some((key, raw_val)) = pair.split_once('=') else {
+            continue;
+        };
+        if key == "tx" {
+            let Some(decoded) = percent_decode_param(raw_val) else {
+                continue;
+            };
+            if let Some(norm) = normalize_tx_query(&decoded) {
+                if norm.len() >= 8 {
+                    return Some(InitialSearchParam::Tx(norm));
+                }
+            }
+        } else if key == "block" {
+            let Some(decoded) = percent_decode_param(raw_val) else {
+                continue;
+            };
+            let trimmed = decoded.trim();
+            let candidate = if trimmed
+                .get(..6)
+                .is_some_and(|p| p.eq_ignore_ascii_case("block:"))
+                || trimmed.starts_with('#')
+            {
+                trimmed.to_string()
+            } else {
+                format!("block:{trimmed}")
+            };
+            match parse_search_query(&candidate) {
+                Some(SearchQuery::BlockHeight(h)) => {
+                    return Some(InitialSearchParam::Block(h.to_string()));
+                }
+                Some(SearchQuery::BlockHash(hash)) => {
+                    return Some(InitialSearchParam::Block(hash));
+                }
+                _ => {}
+            }
+        }
+    }
+    None
+}
+
 /// Normalize a user-supplied txid query (trim, strip optional `tx:` prefix, lowercase,
 /// validate 1..=64 ASCII hex characters).
 pub fn normalize_tx_query(raw: &str) -> Option<String> {
@@ -454,6 +753,22 @@ mod js_bridge {
         #[wasm_bindgen(js_name = hbV2SetConnectionState, catch)]
         fn js_hb_v2_set_connection_state(state: &str) -> Result<(), JsValue>;
 
+        #[wasm_bindgen(js_name = hbV2EnterHistoryMode, catch)]
+        fn js_hb_v2_enter_history_mode(
+            payload_json: &str,
+        ) -> Result<bool, JsValue>;
+
+        #[wasm_bindgen(js_name = hbV2ExitHistoryMode, catch)]
+        fn js_hb_v2_exit_history_mode() -> Result<(), JsValue>;
+
+        #[wasm_bindgen(js_name = hbV2FocusPendingSlot, catch)]
+        fn js_hb_v2_focus_pending_slot(hash: &str) -> Result<bool, JsValue>;
+
+        #[wasm_bindgen(js_name = hbV2IsPendingSlotOffscreen, catch)]
+        fn js_hb_v2_is_pending_slot_offscreen(
+            hash: &str,
+        ) -> Result<bool, JsValue>;
+
         #[wasm_bindgen(js_name = getHeartbeatRecentBlocks, catch)]
         fn js_get_heartbeat_recent_blocks() -> Result<String, JsValue>;
 
@@ -488,6 +803,22 @@ mod js_bridge {
         let _ = js_hb_v2_set_connection_state(state);
     }
 
+    pub fn hb_v2_enter_history_mode(payload_json: &str) -> bool {
+        js_hb_v2_enter_history_mode(payload_json).unwrap_or(false)
+    }
+
+    pub fn hb_v2_exit_history_mode() {
+        let _ = js_hb_v2_exit_history_mode();
+    }
+
+    pub fn hb_v2_focus_pending_slot(hash: &str) -> bool {
+        js_hb_v2_focus_pending_slot(hash).unwrap_or(false)
+    }
+
+    pub fn hb_v2_is_pending_slot_offscreen(hash: &str) -> bool {
+        js_hb_v2_is_pending_slot_offscreen(hash).unwrap_or(false)
+    }
+
     pub fn refresh_rhythm_strip_from_canvas() {
         if let Ok(recent) = js_get_heartbeat_recent_blocks() {
             if recent.len() > 2 {
@@ -509,11 +840,23 @@ mod js_bridge {
         false
     }
     pub fn hb_v2_set_connection_state(_state: &str) {}
+    pub fn hb_v2_enter_history_mode(_payload_json: &str) -> bool {
+        false
+    }
+    pub fn hb_v2_exit_history_mode() {}
+    pub fn hb_v2_focus_pending_slot(_hash: &str) -> bool {
+        false
+    }
+    pub fn hb_v2_is_pending_slot_offscreen(_hash: &str) -> bool {
+        false
+    }
 }
 
 pub use js_bridge::{
-    hb_v2_apply_effect, hb_v2_focus_block_height, hb_v2_focus_tx,
-    hb_v2_install_snapshot, hb_v2_set_connection_state, hb_v2_set_pinned_tx,
+    hb_v2_apply_effect, hb_v2_enter_history_mode, hb_v2_exit_history_mode,
+    hb_v2_focus_block_height, hb_v2_focus_pending_slot, hb_v2_focus_tx,
+    hb_v2_install_snapshot, hb_v2_is_pending_slot_offscreen,
+    hb_v2_set_connection_state, hb_v2_set_pinned_tx,
 };
 
 // ---------------------------------------------------------------------------
@@ -534,14 +877,18 @@ mod client {
     use wasm_bindgen::JsCast;
 
     use super::{
-        apply_block_disconnected_to_pinned, apply_deep_details,
-        build_canvas_effect_json, build_canvas_snapshot_json,
-        connection_state_for_mirror, format_u64_commas, hb_v2_apply_effect,
-        hb_v2_focus_tx, hb_v2_install_snapshot, hb_v2_set_connection_state,
-        hb_v2_set_pinned_tx, js_bridge, normalize_tx_query,
+        ambiguous_hex_not_found_message, apply_block_disconnected_to_pinned,
+        apply_deep_details, build_canvas_effect_json,
+        build_canvas_snapshot_json, connection_state_for_mirror,
+        format_u64_commas, hb_v2_apply_effect, hb_v2_enter_history_mode,
+        hb_v2_exit_history_mode, hb_v2_focus_block_height,
+        hb_v2_focus_pending_slot, hb_v2_focus_tx, hb_v2_install_snapshot,
+        hb_v2_set_connection_state, hb_v2_set_pinned_tx, js_bridge,
+        normalize_tx_query, parse_history_mode_info, parse_search_query,
         pinned_from_compact, pinned_from_confirmed, retry_delay_ms,
-        update_pinned_from_mirror, PinnedTxStatus, PinnedTxView,
-        RawTxDetailResponse,
+        update_pinned_from_mirror, HistoryModeInfo, InitialSearchParam,
+        PendingBlockBanner, PinnedTxStatus, PinnedTxView, RawTxDetailResponse,
+        SearchQuery,
     };
     use crate::stats::heartbeat_sync::{
         ApplyEffect, ApplyOutcome, Coverage, HeartbeatDelta, HeartbeatMirror,
@@ -560,9 +907,15 @@ mod client {
         pub set_sse_height: WriteSignal<u64>,
         pub sse_height: ReadSignal<u64>,
         pub set_sse_ts: WriteSignal<u64>,
+        pub set_pending_block: WriteSignal<Option<PendingBlockBanner>>,
+        pub set_history_mode: WriteSignal<Option<HistoryModeInfo>>,
     }
 
     type EventListenerEntry = (&'static str, Closure<dyn FnMut(Event)>);
+
+    fn client_now_unix_secs() -> u64 {
+        (js_sys::Date::now() / 1000.0).max(0.0) as u64
+    }
 
     #[derive(Default)]
     struct ClientState {
@@ -571,15 +924,20 @@ mod client {
         es_listeners: Vec<EventListenerEntry>,
         snapshot_abort: Option<AbortController>,
         lookup_abort: Option<AbortController>,
+        block_lookup_abort: Option<AbortController>,
         retry_timer_id: Option<i32>,
         retry_closure: Option<Closure<dyn FnMut()>>,
         retry_count: u32,
         connected: bool,
         resume_attempted: bool,
-        initial_tx_param: Option<String>,
+        initial_search_param: Option<InitialSearchParam>,
+        history_mode: Option<HistoryModeInfo>,
+        pending_block: Option<PendingBlockBanner>,
         visibility_closure: Option<Closure<dyn FnMut(Event)>>,
         select_tx_closure: Option<Closure<dyn FnMut(String)>>,
         clear_pinned_closure: Option<Closure<dyn FnMut()>>,
+        history_mode_change_closure: Option<Closure<dyn FnMut(JsValue)>>,
+        resync_canvas_closure: Option<Closure<dyn FnMut()>>,
         destroyed: bool,
     }
 
@@ -590,6 +948,8 @@ mod client {
         cycle_gen: Cell<u64>,
         /// Incremented on every tx search/select/clear and on `destroy()`.
         lookup_gen: Cell<u64>,
+        /// Incremented on every block-window lookup, exit-to-LIVE, and `destroy()`.
+        block_lookup_gen: Cell<u64>,
         signals: HeartbeatClientSignals,
         state: RefCell<ClientState>,
     }
@@ -607,6 +967,7 @@ mod client {
                     generation: Cell::new(1),
                     cycle_gen: Cell::new(1),
                     lookup_gen: Cell::new(1),
+                    block_lookup_gen: Cell::new(1),
                     signals,
                     state: RefCell::new(ClientState::default()),
                 }),
@@ -631,8 +992,17 @@ mod client {
                 && self.inner.lookup_gen.get() == lookup_gen
         }
 
+        fn is_block_lookup_live(
+            &self,
+            mount_gen: u64,
+            block_lookup_gen: u64,
+        ) -> bool {
+            self.inner.generation.get() == mount_gen
+                && self.inner.block_lookup_gen.get() == block_lookup_gen
+        }
+
         /// Start the v2 snapshot + SSE sync loop and attach window/document listeners.
-        pub fn start(&self, initial_tx_param: Option<String>) {
+        pub fn start(&self, initial_search_param: Option<InitialSearchParam>) {
             let mount_gen = self.inner.generation.get();
 
             // Register visibilitychange listener (reconnect only if stream is closed).
@@ -679,7 +1049,28 @@ mod client {
                 );
             }
 
-            // Register canvas/feed -> WASM selection bridge on window.
+            // `?block=` queries hit the DB-backed `/api/stats/heartbeat/block/{query}`
+            // endpoint directly and do not depend on the live mempool snapshot.
+            let (immediate_block, deferred_param) = match initial_search_param {
+                Some(InitialSearchParam::Block(query)) => (Some(query), None),
+                other => (None, other),
+            };
+
+            {
+                let mut st = self.inner.state.borrow_mut();
+                st.initial_search_param = deferred_param;
+                st.visibility_closure = Some(vis_cb);
+            }
+
+            self.install_js_callbacks(mount_gen);
+            self.fetch_and_connect(false);
+            if let Some(query) = immediate_block {
+                self.search(&format!("block:{query}"));
+            }
+        }
+
+        fn install_js_callbacks(&self, mount_gen: u64) {
+            // Register canvas/feed -> WASM selection and history-mode bridges on window.
             let sel_client = self.downgrade();
             let select_cb =
                 Closure::<dyn FnMut(String)>::new(move |txid: String| {
@@ -703,6 +1094,46 @@ mod client {
                 clr_client.clear_pinned_tx();
             });
 
+            let hm_client = self.downgrade();
+            let history_mode_cb =
+                Closure::<dyn FnMut(JsValue)>::new(move |val: JsValue| {
+                    let Some(hm_client) = upgrade_client(&hm_client) else {
+                        return;
+                    };
+                    if !hm_client.is_mount_live(mount_gen) {
+                        return;
+                    }
+                    let info_json = val.as_string().unwrap_or_default();
+                    if info_json.trim().is_empty() {
+                        let _ = hm_client.begin_block_lookup_generation();
+                        hm_client.set_history_mode_if_changed(None);
+                        return;
+                    }
+                    let next = parse_history_mode_info(&info_json);
+                    hm_client.set_history_mode_if_changed(next);
+                });
+
+            let resync_client = self.downgrade();
+            let resync_cb = Closure::<dyn FnMut()>::new(move || {
+                let Some(resync_client) = upgrade_client(&resync_client) else {
+                    return;
+                };
+                if !resync_client.is_mount_live(mount_gen) {
+                    return;
+                }
+                let snapshot_json = {
+                    let st = resync_client.inner.state.borrow();
+                    if st.destroyed || st.mirror.revision().is_none() {
+                        None
+                    } else {
+                        Some(build_canvas_snapshot_json(&st.mirror))
+                    }
+                };
+                if let Some(json) = snapshot_json {
+                    hb_v2_install_snapshot(&json, true);
+                }
+            });
+
             if let Some(win) = web_sys::window() {
                 let _ = js_sys::Reflect::set(
                     &win,
@@ -714,17 +1145,58 @@ mod client {
                     &JsValue::from_str("__hbClearPinnedTx"),
                     clear_cb.as_ref().unchecked_ref(),
                 );
+                let _ = js_sys::Reflect::set(
+                    &win,
+                    &JsValue::from_str("__hbHistoryModeChange"),
+                    history_mode_cb.as_ref().unchecked_ref(),
+                );
+                let _ = js_sys::Reflect::set(
+                    &win,
+                    &JsValue::from_str("__hbResyncCanvasFromMirror"),
+                    resync_cb.as_ref().unchecked_ref(),
+                );
             }
 
             {
                 let mut st = self.inner.state.borrow_mut();
-                st.initial_tx_param = initial_tx_param;
-                st.visibility_closure = Some(vis_cb);
                 st.select_tx_closure = Some(select_cb);
                 st.clear_pinned_closure = Some(clear_cb);
+                st.history_mode_change_closure = Some(history_mode_cb);
+                st.resync_canvas_closure = Some(resync_cb);
             }
+        }
 
-            self.fetch_and_connect(false);
+        fn set_history_mode_if_changed(&self, next: Option<HistoryModeInfo>) {
+            let changed = {
+                let mut st = self.inner.state.borrow_mut();
+                if st.history_mode != next {
+                    st.history_mode = next.clone();
+                    true
+                } else {
+                    false
+                }
+            };
+            if changed {
+                let _ = self.inner.signals.set_history_mode.try_set(next);
+            }
+        }
+
+        fn set_pending_block_if_changed(
+            &self,
+            next: Option<PendingBlockBanner>,
+        ) {
+            let changed = {
+                let mut st = self.inner.state.borrow_mut();
+                if st.pending_block != next {
+                    st.pending_block = next.clone();
+                    true
+                } else {
+                    false
+                }
+            };
+            if changed {
+                let _ = self.inner.signals.set_pending_block.try_set(next);
+            }
         }
 
         /// Close active EventSource, abort in-flight fetches, clear timers, and detach all listeners.
@@ -738,32 +1210,43 @@ mod client {
             self.inner
                 .lookup_gen
                 .set(self.inner.lookup_gen.get().wrapping_add(1));
+            self.inner
+                .block_lookup_gen
+                .set(self.inner.block_lookup_gen.get().wrapping_add(1));
 
             let (
                 es,
                 es_listeners,
                 snap_abort,
                 lookup_abort,
+                block_lookup_abort,
                 timer_id,
                 _retry_cb,
                 vis_cb,
                 _sel_cb,
                 _clr_cb,
+                _hm_cb,
+                _resync_cb,
             ) = {
                 let mut st = self.inner.state.borrow_mut();
                 st.destroyed = true;
                 st.connected = false;
+                st.history_mode = None;
+                st.pending_block = None;
                 st.mirror = HeartbeatMirror::default();
                 (
                     st.event_source.take(),
                     std::mem::take(&mut st.es_listeners),
                     st.snapshot_abort.take(),
                     st.lookup_abort.take(),
+                    st.block_lookup_abort.take(),
                     st.retry_timer_id.take(),
                     st.retry_closure.take(),
                     st.visibility_closure.take(),
                     st.select_tx_closure.take(),
                     st.clear_pinned_closure.take(),
+                    st.history_mode_change_closure.take(),
+                    st.resync_canvas_closure.take(),
                 )
             };
 
@@ -772,6 +1255,9 @@ mod client {
                 ac.abort();
             }
             if let Some(ac) = lookup_abort {
+                ac.abort();
+            }
+            if let Some(ac) = block_lookup_abort {
                 ac.abort();
             }
             if let Some(win) = web_sys::window() {
@@ -785,6 +1271,14 @@ mod client {
                 let _ = js_sys::Reflect::delete_property(
                     &win,
                     &JsValue::from_str("__hbClearPinnedTx"),
+                );
+                let _ = js_sys::Reflect::delete_property(
+                    &win,
+                    &JsValue::from_str("__hbHistoryModeChange"),
+                );
+                let _ = js_sys::Reflect::delete_property(
+                    &win,
+                    &JsValue::from_str("__hbResyncCanvasFromMirror"),
                 );
                 if let Some(doc) = win.document() {
                     if let Some(cb) = vis_cb {
@@ -946,25 +1440,46 @@ mod client {
                     .recent_blocks()
                     .last()
                     .map(|b| (b.height, b.timestamp));
+                let client_now = client_now_unix_secs();
+                let pending_banner =
+                    st.mirror.pending_blocks().last().map(|pb| {
+                        let received_at_client = st
+                            .pending_block
+                            .as_ref()
+                            .filter(|existing| existing.hash == pb.hash)
+                            .map(|existing| existing.received_at_client)
+                            .unwrap_or_else(|| {
+                                if pb.observed_at > 0 {
+                                    pb.observed_at.min(client_now)
+                                } else {
+                                    client_now
+                                }
+                            });
+                        PendingBlockBanner {
+                            hash: pb.hash.clone(),
+                            observed_at: pb.observed_at,
+                            received_at_client,
+                        }
+                    });
                 let updated_pinned =
                     existing_pinned.as_ref().and_then(|existing| {
                         let mut pv = existing.clone();
                         update_pinned_from_mirror(&mut pv, &st.mirror);
                         (&pv != existing).then_some(pv)
                     });
-                let initial_tx = if !is_resync {
-                    st.initial_tx_param.take()
-                } else {
-                    None
-                };
+                // Consume on the first successful snapshot install regardless of
+                // `is_resync` so a transient initial snapshot failure cannot drop
+                // `?tx=` deep links.
+                let initial_search = st.initial_search_param.take();
                 (
                     epoch,
                     seq,
                     snapshot_json,
                     coverage_note,
                     newest_block,
+                    pending_banner,
                     updated_pinned,
-                    initial_tx,
+                    initial_search,
                 )
             };
 
@@ -974,11 +1489,13 @@ mod client {
                 snapshot_json,
                 coverage_note,
                 newest_block,
+                pending_banner,
                 updated_pinned,
-                initial_tx,
+                initial_search,
             ) = extracted;
 
             let _ = self.inner.signals.set_coverage_note.try_set(coverage_note);
+            self.set_pending_block_if_changed(pending_banner);
 
             if let Some(pv) = updated_pinned {
                 let _ = self.inner.signals.set_pinned_tx.try_set(Some(pv));
@@ -991,8 +1508,15 @@ mod client {
             hb_v2_install_snapshot(&snapshot_json, is_resync);
             let _ = self.inner.signals.set_loading.try_set(false);
 
-            if let Some(tx_param) = initial_tx {
-                self.search_tx(&tx_param);
+            if let Some(param) = initial_search {
+                match param {
+                    InitialSearchParam::Tx(tx) => {
+                        self.search(&format!("tx:{tx}"));
+                    }
+                    InitialSearchParam::Block(block) => {
+                        self.search(&format!("block:{block}"));
+                    }
+                }
             }
 
             self.open_event_source(&epoch, seq, mount_gen, cycle_gen);
@@ -1145,6 +1669,8 @@ mod client {
             struct AppliedStep {
                 effect_json: String,
                 block_update: Option<(u64, u64)>,
+                disconnected_reconcile: Option<Option<(u64, u64)>>,
+                pending_update: Option<Option<PendingBlockBanner>>,
                 coverage_update: Option<(&'static str, Option<String>)>,
                 updated_pinned: Option<PinnedTxView>,
             }
@@ -1173,6 +1699,47 @@ mod client {
                             }
                             _ => None,
                         };
+                        let pending_update = match &eff {
+                            ApplyEffect::BlockObserved {
+                                hash,
+                                observed_at,
+                            } => Some(Some(PendingBlockBanner {
+                                hash: hash.clone(),
+                                observed_at: *observed_at,
+                                received_at_client: client_now_unix_secs(),
+                            })),
+                            ApplyEffect::BlockDetails(_)
+                            | ApplyEffect::BlockDisconnected { .. } => {
+                                let client_now = client_now_unix_secs();
+                                Some(st.mirror.pending_blocks().last().map(
+                                    |pb| {
+                                        let received_at_client = st
+                                            .pending_block
+                                            .as_ref()
+                                            .filter(|existing| {
+                                                existing.hash == pb.hash
+                                            })
+                                            .map(|existing| {
+                                                existing.received_at_client
+                                            })
+                                            .unwrap_or_else(|| {
+                                                if pb.observed_at > 0 {
+                                                    pb.observed_at
+                                                        .min(client_now)
+                                                } else {
+                                                    client_now
+                                                }
+                                            });
+                                        PendingBlockBanner {
+                                            hash: pb.hash.clone(),
+                                            observed_at: pb.observed_at,
+                                            received_at_client,
+                                        }
+                                    },
+                                ))
+                            }
+                            _ => None,
+                        };
                         let coverage_update = match &eff {
                             ApplyEffect::CoverageChanged { coverage } => {
                                 let cs = connection_state_for_mirror(
@@ -1194,6 +1761,17 @@ mod client {
                             }
                             _ => None,
                         };
+                        let disconnected_reconcile =
+                            if disconnected_hash.is_some() {
+                                Some(
+                                    st.mirror
+                                        .recent_blocks()
+                                        .last()
+                                        .map(|b| (b.height, b.timestamp)),
+                                )
+                            } else {
+                                None
+                            };
                         let updated_pinned =
                             existing_pinned.as_ref().and_then(|existing| {
                                 let mut pv = existing.clone();
@@ -1208,6 +1786,8 @@ mod client {
                         Step::Apply(Box::new(AppliedStep {
                             effect_json,
                             block_update,
+                            disconnected_reconcile,
+                            pending_update,
                             coverage_update,
                             updated_pinned,
                         }))
@@ -1225,12 +1805,21 @@ mod client {
                     let AppliedStep {
                         effect_json,
                         block_update,
+                        disconnected_reconcile,
+                        pending_update,
                         coverage_update,
                         updated_pinned,
                     } = *applied;
                     hb_v2_apply_effect(&effect_json);
+                    if let Some(pb) = pending_update {
+                        self.set_pending_block_if_changed(pb);
+                    }
                     if let Some((height, ts)) = block_update {
                         self.advance_header_block(height, ts);
+                        js_bridge::refresh_rhythm_strip_from_canvas();
+                    }
+                    if let Some(remaining_tip) = disconnected_reconcile {
+                        self.reconcile_header_block(remaining_tip);
                         js_bridge::refresh_rhythm_strip_from_canvas();
                     }
                     if let Some((cs, note)) = coverage_update {
@@ -1258,6 +1847,23 @@ mod client {
                 if ts > 0 {
                     let now = (js_sys::Date::now() / 1000.0) as u64;
                     let _ = self.inner.signals.set_sse_ts.try_set(ts.min(now));
+                }
+            }
+        }
+
+        fn reconcile_header_block(&self, remaining_tip: Option<(u64, u64)>) {
+            match remaining_tip {
+                Some((height, ts)) => {
+                    let _ = self.inner.signals.set_sse_height.try_set(height);
+                    if ts > 0 {
+                        let now = (js_sys::Date::now() / 1000.0) as u64;
+                        let _ =
+                            self.inner.signals.set_sse_ts.try_set(ts.min(now));
+                    }
+                }
+                None => {
+                    let _ = self.inner.signals.set_sse_height.try_set(0);
+                    let _ = self.inner.signals.set_sse_ts.try_set(0);
                 }
             }
         }
@@ -1337,105 +1943,490 @@ mod client {
             (mount_gen, lookup_gen)
         }
 
-        /// Search for a transaction by full txid or >= 8 hex character prefix.
-        pub fn search_tx(&self, raw_query: &str) {
-            let Some(needle) = normalize_tx_query(raw_query) else {
-                let _ = self.inner.signals.set_search_feedback.try_set(Some((
-                    true,
-                    "Enter at least 8 hex characters of a txid".to_string(),
-                )));
-                return;
-            };
-            if needle.len() < 8 {
-                let _ = self.inner.signals.set_search_feedback.try_set(Some((
-                    true,
-                    "Enter at least 8 hex characters of a txid".to_string(),
-                )));
-                return;
+        fn begin_block_lookup_generation(&self) -> (u64, u64) {
+            let mount_gen = self.inner.generation.get();
+            let block_lookup_gen =
+                self.inner.block_lookup_gen.get().wrapping_add(1);
+            self.inner.block_lookup_gen.set(block_lookup_gen);
+            let prev = self.inner.state.borrow_mut().block_lookup_abort.take();
+            if let Some(ac) = prev {
+                ac.abort();
             }
+            (mount_gen, block_lookup_gen)
+        }
 
-            let (mount_gen, lookup_gen) = self.begin_lookup_generation();
-
-            // Step 1: instant local mirror search.
-            let local_match = {
-                let st = self.inner.state.borrow();
-                st.mirror.search_tx(&needle)
+        /// Unified search for a transaction (full txid or >= 8 hex prefix),
+        /// block height (`840000`, `#840000`, `840,000`, `block:840000`), or block hash.
+        pub fn search(&self, raw_query: &str) {
+            let Some(query) = parse_search_query(raw_query) else {
+                let _ = self.inner.signals.set_search_feedback.try_set(Some((
+                    true,
+                    "Enter a txid (8+ hex), block height (#840000), or block hash"
+                        .to_string(),
+                )));
+                return;
             };
 
-            if let Some(m) = local_match {
-                match m {
-                    MirrorTxMatch::Unconfirmed(tx) => {
-                        let on_canvas = hb_v2_focus_tx(&tx.txid);
-                        if !on_canvas {
-                            hb_v2_set_pinned_tx(Some(&tx.txid));
-                        }
-                        let mut pv = pinned_from_compact(&tx, on_canvas);
-                        pv.deep_loading = true;
-                        let txid = tx.txid.clone();
-                        let _ =
-                            self.inner.signals.set_pinned_tx.try_set(Some(pv));
-                        let msg = if on_canvas {
-                            "Found in mempool".to_string()
-                        } else {
-                            "In node mempool (outside rendered window)"
-                                .to_string()
-                        };
-                        let _ = self
-                            .inner
-                            .signals
-                            .set_search_feedback
-                            .try_set(Some((false, msg)));
-                        self.fetch_deep_tx_details(
-                            &txid, mount_gen, lookup_gen,
+            match query {
+                SearchQuery::Tx(needle) => {
+                    if needle.len() < 8 {
+                        let _ = self.inner.signals.set_search_feedback.try_set(
+                            Some((
+                                true,
+                                "Enter at least 8 hex characters of a txid"
+                                    .to_string(),
+                            )),
                         );
+                        return;
                     }
-                    MirrorTxMatch::Confirmed {
-                        txid,
-                        block_hash,
-                        block_height,
-                    } => {
-                        hb_v2_set_pinned_tx(None);
-                        let mut pv = pinned_from_confirmed(
-                            txid.clone(),
-                            block_hash,
-                            block_height,
+                    let (mount_gen, lookup_gen) =
+                        self.begin_lookup_generation();
+                    let local_match = {
+                        let st = self.inner.state.borrow();
+                        st.mirror.search_tx(&needle)
+                    };
+                    if let Some(m) = local_match {
+                        self.handle_local_tx_match(m, mount_gen, lookup_gen);
+                        return;
+                    }
+                    if needle.len() < 64 {
+                        let _ = self.inner.signals.set_search_feedback.try_set(
+                            Some((
+                                true,
+                                "Not found in live mempool (paste full 64-char txid to search confirmed blocks)"
+                                    .to_string(),
+                            )),
                         );
-                        pv.deep_loading = true;
-                        let _ =
-                            self.inner.signals.set_pinned_tx.try_set(Some(pv));
+                        return;
+                    }
+                    let _ = self.inner.signals.set_search_feedback.try_set(
+                        Some((false, "Searching node...".to_string())),
+                    );
+                    self.fetch_server_tx_lookup(
+                        &needle, true, false, mount_gen, lookup_gen,
+                    );
+                }
+                SearchQuery::BlockHeight(height) => {
+                    let (mount_gen, block_gen) =
+                        self.begin_block_lookup_generation();
+                    let in_live_mode =
+                        self.inner.state.borrow().history_mode.is_none();
+                    if in_live_mode && hb_v2_focus_block_height(height) {
                         let _ = self.inner.signals.set_search_feedback.try_set(
                             Some((
                                 false,
                                 format!(
-                                    "Confirmed in block #{}",
-                                    format_u64_commas(block_height)
+                                    "Focused block #{}",
+                                    format_u64_commas(height)
                                 ),
                             )),
                         );
-                        self.fetch_deep_tx_details(
-                            &txid, mount_gen, lookup_gen,
+                        return;
+                    }
+                    let _ =
+                        self.inner.signals.set_search_feedback.try_set(Some((
+                            false,
+                            format!(
+                                "Loading block #{}...",
+                                format_u64_commas(height)
+                            ),
+                        )));
+                    self.fetch_block_window(
+                        &height.to_string(),
+                        Some(height),
+                        None,
+                        None,
+                        mount_gen,
+                        block_gen,
+                    );
+                }
+                SearchQuery::BlockHash(hash) => {
+                    let (mount_gen, block_gen) =
+                        self.begin_block_lookup_generation();
+                    let (in_live_mode, local_height) = {
+                        let st = self.inner.state.borrow();
+                        let h = st
+                            .mirror
+                            .recent_blocks()
+                            .iter()
+                            .find(|b| b.hash.eq_ignore_ascii_case(&hash))
+                            .map(|b| b.height);
+                        (st.history_mode.is_none(), h)
+                    };
+                    if let Some(h) = local_height {
+                        if in_live_mode && hb_v2_focus_block_height(h) {
+                            let _ =
+                                self.inner.signals.set_search_feedback.try_set(
+                                    Some((
+                                        false,
+                                        format!(
+                                            "Focused block #{}",
+                                            format_u64_commas(h)
+                                        ),
+                                    )),
+                                );
+                            return;
+                        }
+                    }
+                    let _ = self
+                        .inner
+                        .signals
+                        .set_search_feedback
+                        .try_set(Some((false, "Loading block...".to_string())));
+                    self.fetch_block_window(
+                        &hash,
+                        local_height,
+                        None,
+                        None,
+                        mount_gen,
+                        block_gen,
+                    );
+                }
+                SearchQuery::AmbiguousHex64(hex) => {
+                    let (in_live_mode, local_block_height, local_tx) = {
+                        let st = self.inner.state.borrow();
+                        let blk_h = st
+                            .mirror
+                            .recent_blocks()
+                            .iter()
+                            .find(|b| b.hash.eq_ignore_ascii_case(&hex))
+                            .map(|b| b.height);
+                        let tx_m = if blk_h.is_none() {
+                            st.mirror.search_tx(&hex)
+                        } else {
+                            None
+                        };
+                        (st.history_mode.is_none(), blk_h, tx_m)
+                    };
+                    if let Some(h) = local_block_height {
+                        let (mount_gen, block_gen) =
+                            self.begin_block_lookup_generation();
+                        if in_live_mode && hb_v2_focus_block_height(h) {
+                            let _ =
+                                self.inner.signals.set_search_feedback.try_set(
+                                    Some((
+                                        false,
+                                        format!(
+                                            "Focused block #{}",
+                                            format_u64_commas(h)
+                                        ),
+                                    )),
+                                );
+                            return;
+                        }
+                        let _ = self.inner.signals.set_search_feedback.try_set(
+                            Some((
+                                false,
+                                format!(
+                                    "Loading block #{}...",
+                                    format_u64_commas(h)
+                                ),
+                            )),
+                        );
+                        self.fetch_block_window(
+                            &hex,
+                            Some(h),
+                            None,
+                            None,
+                            mount_gen,
+                            block_gen,
+                        );
+                        return;
+                    }
+                    if let Some(m) = local_tx {
+                        let (mount_gen, lookup_gen) =
+                            self.begin_lookup_generation();
+                        self.handle_local_tx_match(m, mount_gen, lookup_gen);
+                        return;
+                    }
+
+                    let _ = self.inner.signals.set_search_feedback.try_set(
+                        Some((false, "Searching node...".to_string())),
+                    );
+                    if hex.starts_with("00000000") {
+                        let (mount_gen, block_gen) =
+                            self.begin_block_lookup_generation();
+                        self.fetch_block_window(
+                            &hex,
+                            None,
+                            Some(hex.clone()),
+                            None,
+                            mount_gen,
+                            block_gen,
+                        );
+                    } else {
+                        let (mount_gen, lookup_gen) =
+                            self.begin_lookup_generation();
+                        self.fetch_server_tx_lookup(
+                            &hex, true, true, mount_gen, lookup_gen,
                         );
                     }
                 }
-                return;
             }
+        }
 
-            // Step 2: server fallback for full 64-char txids.
-            if needle.len() < 64 {
+        /// Backwards-compatible alias delegating to unified `search`.
+        pub fn search_tx(&self, raw_query: &str) {
+            self.search(raw_query);
+        }
+
+        /// Focus a block spike on the live canvas, or load its historical ~40-block window.
+        pub fn view_block_height(&self, height: u64) {
+            let (mount_gen, block_gen) = self.begin_block_lookup_generation();
+            let in_live_mode = self.inner.state.borrow().history_mode.is_none();
+            if in_live_mode && hb_v2_focus_block_height(height) {
                 let _ = self.inner.signals.set_search_feedback.try_set(Some((
-                    true,
-                    "Not found in live mempool (paste full 64-char txid to search confirmed blocks)"
-                        .to_string(),
+                    false,
+                    format!("Focused block #{}", format_u64_commas(height)),
                 )));
                 return;
             }
+            let _ = self.inner.signals.set_search_feedback.try_set(Some((
+                false,
+                format!("Loading block #{}...", format_u64_commas(height)),
+            )));
+            self.fetch_block_window(
+                &height.to_string(),
+                Some(height),
+                None,
+                None,
+                mount_gen,
+                block_gen,
+            );
+        }
 
-            let _ = self
-                .inner
-                .signals
-                .set_search_feedback
-                .try_set(Some((false, "Searching node...".to_string())));
-            self.fetch_server_tx_lookup(&needle, true, mount_gen, lookup_gen);
+        /// Exit historical block window mode and return to the live Heartbeat stream.
+        pub fn exit_history_mode(&self) {
+            let _ = self.begin_block_lookup_generation();
+            hb_v2_exit_history_mode();
+        }
+
+        /// Focus the canvas camera on the pending-block slot for `hash`.
+        pub fn focus_pending_slot(&self, hash: &str) {
+            let _ = hb_v2_focus_pending_slot(hash);
+        }
+
+        fn handle_local_tx_match(
+            &self,
+            m: MirrorTxMatch,
+            mount_gen: u64,
+            lookup_gen: u64,
+        ) {
+            match m {
+                MirrorTxMatch::Unconfirmed(tx) => {
+                    let on_canvas = hb_v2_focus_tx(&tx.txid);
+                    if !on_canvas {
+                        hb_v2_set_pinned_tx(Some(&tx.txid));
+                    }
+                    let mut pv = pinned_from_compact(&tx, on_canvas);
+                    pv.deep_loading = true;
+                    let txid = tx.txid.clone();
+                    let _ = self.inner.signals.set_pinned_tx.try_set(Some(pv));
+                    let msg = if on_canvas {
+                        "Found in mempool".to_string()
+                    } else {
+                        "In node mempool (outside rendered window)".to_string()
+                    };
+                    let _ = self
+                        .inner
+                        .signals
+                        .set_search_feedback
+                        .try_set(Some((false, msg)));
+                    self.fetch_deep_tx_details(&txid, mount_gen, lookup_gen);
+                }
+                MirrorTxMatch::Confirmed {
+                    txid,
+                    block_hash,
+                    block_height,
+                } => {
+                    hb_v2_set_pinned_tx(None);
+                    let mut pv = pinned_from_confirmed(
+                        txid.clone(),
+                        block_hash,
+                        block_height,
+                    );
+                    pv.deep_loading = true;
+                    let _ = self.inner.signals.set_pinned_tx.try_set(Some(pv));
+                    let _ =
+                        self.inner.signals.set_search_feedback.try_set(Some((
+                            false,
+                            format!(
+                                "Confirmed in block #{}",
+                                format_u64_commas(block_height)
+                            ),
+                        )));
+                    self.fetch_deep_tx_details(&txid, mount_gen, lookup_gen);
+                }
+            }
+        }
+
+        /// Fetch `/api/stats/heartbeat/block/{query}?radius=40` and enter canvas history mode.
+        fn fetch_block_window(
+            &self,
+            query: &str,
+            requested_height: Option<u64>,
+            fallback_tx_on_404: Option<String>,
+            not_found_msg: Option<&'static str>,
+            mount_gen: u64,
+            block_lookup_gen: u64,
+        ) {
+            let Ok(controller) = AbortController::new() else {
+                return;
+            };
+            let fetch_controller = controller.clone();
+            {
+                self.inner.state.borrow_mut().block_lookup_abort =
+                    Some(controller);
+            }
+
+            let encoded: String = js_sys::encode_uri_component(query).into();
+            let url = format!("/api/stats/heartbeat/block/{encoded}?radius=40");
+            let fb_ok = fallback_tx_on_404.clone();
+            let fb_err = fallback_tx_on_404;
+            let ok_client = self.downgrade();
+            let err_client = self.downgrade();
+
+            fetch_text_with_abort(
+                &url,
+                &fetch_controller,
+                move |status, body| {
+                    let Some(ok_client) = upgrade_client(&ok_client) else {
+                        return;
+                    };
+                    if !ok_client
+                        .is_block_lookup_live(mount_gen, block_lookup_gen)
+                    {
+                        return;
+                    }
+                    {
+                        ok_client.inner.state.borrow_mut().block_lookup_abort =
+                            None;
+                    }
+                    if status == 200 {
+                        let parsed_info = parse_history_mode_info(&body);
+                        let target_height = parsed_info
+                            .as_ref()
+                            .map(|info| info.target_height)
+                            .or(requested_height);
+                        if hb_v2_enter_history_mode(&body) {
+                            if let Some(info) = parsed_info {
+                                ok_client
+                                    .set_history_mode_if_changed(Some(info));
+                            }
+                            let msg = match target_height {
+                                Some(h) => format!(
+                                    "Historical view: block #{}",
+                                    format_u64_commas(h)
+                                ),
+                                None => "Historical view loaded".to_string(),
+                            };
+                            let _ = ok_client
+                                .inner
+                                .signals
+                                .set_search_feedback
+                                .try_set(Some((false, msg)));
+                        } else {
+                            let _ = ok_client
+                                .inner
+                                .signals
+                                .set_search_feedback
+                                .try_set(Some((
+                                    true,
+                                    "Unable to display historical block window"
+                                        .to_string(),
+                                )));
+                        }
+                        return;
+                    }
+
+                    if status == 404 {
+                        if let Some(txid) = fb_ok {
+                            let (tx_mount_gen, tx_lookup_gen) =
+                                ok_client.begin_lookup_generation();
+                            ok_client.fetch_server_tx_lookup(
+                                &txid,
+                                true,
+                                false,
+                                tx_mount_gen,
+                                tx_lookup_gen,
+                            );
+                            return;
+                        }
+                        let msg = if let Some(custom) = not_found_msg {
+                            custom.to_string()
+                        } else if let Some(h) = requested_height {
+                            format!(
+                                "Block #{} not found in database",
+                                format_u64_commas(h)
+                            )
+                        } else {
+                            "Block not found in database".to_string()
+                        };
+                        let _ = ok_client
+                            .inner
+                            .signals
+                            .set_search_feedback
+                            .try_set(Some((true, msg)));
+                        return;
+                    }
+
+                    if let Some(txid) = fb_ok {
+                        let (tx_mount_gen, tx_lookup_gen) =
+                            ok_client.begin_lookup_generation();
+                        ok_client.fetch_server_tx_lookup(
+                            &txid,
+                            true,
+                            false,
+                            tx_mount_gen,
+                            tx_lookup_gen,
+                        );
+                        return;
+                    }
+                    let _ =
+                        ok_client.inner.signals.set_search_feedback.try_set(
+                            Some((
+                                true,
+                                "Failed to load block window".to_string(),
+                            )),
+                        );
+                },
+                move |_err| {
+                    let Some(err_client) = upgrade_client(&err_client) else {
+                        return;
+                    };
+                    if !err_client
+                        .is_block_lookup_live(mount_gen, block_lookup_gen)
+                    {
+                        return;
+                    }
+                    {
+                        err_client
+                            .inner
+                            .state
+                            .borrow_mut()
+                            .block_lookup_abort = None;
+                    }
+                    if let Some(txid) = fb_err {
+                        let (tx_mount_gen, tx_lookup_gen) =
+                            err_client.begin_lookup_generation();
+                        err_client.fetch_server_tx_lookup(
+                            &txid,
+                            true,
+                            false,
+                            tx_mount_gen,
+                            tx_lookup_gen,
+                        );
+                        return;
+                    }
+                    let _ =
+                        err_client.inner.signals.set_search_feedback.try_set(
+                            Some((
+                                true,
+                                "Failed to load block window".to_string(),
+                            )),
+                        );
+                },
+            );
         }
 
         /// Select a transaction clicked on the canvas or in The Lookout without jumping the camera.
@@ -1477,7 +2468,7 @@ mod client {
                 TxLookupStatus::Absent { .. } => {
                     if txid.len() == 64 {
                         self.fetch_server_tx_lookup(
-                            &txid, false, mount_gen, lookup_gen,
+                            &txid, false, false, mount_gen, lookup_gen,
                         );
                     }
                 }
@@ -1495,6 +2486,7 @@ mod client {
             &self,
             txid: &str,
             focus_camera: bool,
+            fallback_to_block: bool,
             mount_gen: u64,
             lookup_gen: u64,
         ) {
@@ -1605,6 +2597,7 @@ mod client {
                                         &txid_ok,
                                         Some(coverage),
                                         focus_camera,
+                                        fallback_to_block,
                                         mount_gen,
                                         lookup_gen,
                                     );
@@ -1617,6 +2610,7 @@ mod client {
                         &txid_ok,
                         None,
                         focus_camera,
+                        fallback_to_block,
                         mount_gen,
                         lookup_gen,
                     );
@@ -1632,6 +2626,7 @@ mod client {
                         &txid_err,
                         None,
                         focus_camera,
+                        fallback_to_block,
                         mount_gen,
                         lookup_gen,
                     );
@@ -1645,6 +2640,7 @@ mod client {
             txid: &str,
             coverage: Option<Coverage>,
             focus_camera: bool,
+            fallback_to_block: bool,
             mount_gen: u64,
             lookup_gen: u64,
         ) {
@@ -1658,6 +2654,7 @@ mod client {
 
             let url = format!("/api/stats/tx/{txid}");
             let txid_owned = txid.to_string();
+            let txid_err = txid.to_string();
             let cov_err = coverage.clone();
             let ok_client = self.downgrade();
             let err_client = self.downgrade();
@@ -1749,6 +2746,24 @@ mod client {
                         }
                     }
 
+                    if fallback_to_block {
+                        let msg = ambiguous_hex_not_found_message(
+                            coverage.as_ref(),
+                            status >= 500,
+                        );
+                        let (blk_mount_gen, blk_gen) =
+                            ok_client.begin_block_lookup_generation();
+                        ok_client.fetch_block_window(
+                            &txid_owned,
+                            None,
+                            None,
+                            Some(msg),
+                            blk_mount_gen,
+                            blk_gen,
+                        );
+                        return;
+                    }
+
                     if focus_camera {
                         let msg = match coverage {
                             Some(ref c) if !c.is_complete() => {
@@ -1769,6 +2784,23 @@ mod client {
                         return;
                     };
                     if !err_client.is_lookup_live(mount_gen, lookup_gen) {
+                        return;
+                    }
+                    if fallback_to_block {
+                        let msg = ambiguous_hex_not_found_message(
+                            cov_err.as_ref(),
+                            true,
+                        );
+                        let (blk_mount_gen, blk_gen) =
+                            err_client.begin_block_lookup_generation();
+                        err_client.fetch_block_window(
+                            &txid_err,
+                            None,
+                            None,
+                            Some(msg),
+                            blk_mount_gen,
+                            blk_gen,
+                        );
                         return;
                     }
                     if focus_camera {
@@ -2365,5 +3397,228 @@ mod tests {
         assert_eq!(retry_delay_ms(5), 15_000);
         assert_eq!(retry_delay_ms(8), 15_000);
         assert_eq!(retry_delay_ms(20), 15_000);
+    }
+
+    #[test]
+    fn parse_search_query_classifies_heights_hashes_txids_and_ambiguous_hex() {
+        let hex64 = txid(0xab);
+        let blk_hash = format!("00000000{}", "cd".repeat(28));
+
+        // Heights: bare, commas, `#`, `block:`
+        assert_eq!(parse_search_query("0"), Some(SearchQuery::BlockHeight(0)));
+        assert_eq!(
+            parse_search_query("840000"),
+            Some(SearchQuery::BlockHeight(840_000))
+        );
+        assert_eq!(
+            parse_search_query("  840,000  "),
+            Some(SearchQuery::BlockHeight(840_000))
+        );
+        assert_eq!(
+            parse_search_query("#840000"),
+            Some(SearchQuery::BlockHeight(840_000))
+        );
+        assert_eq!(
+            parse_search_query("# 840,000"),
+            Some(SearchQuery::BlockHeight(840_000))
+        );
+        assert_eq!(
+            parse_search_query("block:840000"),
+            Some(SearchQuery::BlockHeight(840_000))
+        );
+        assert_eq!(
+            parse_search_query("BLOCK: 1,000,000"),
+            Some(SearchQuery::BlockHeight(1_000_000))
+        );
+        assert_eq!(
+            parse_search_query("10,000,000"),
+            Some(SearchQuery::BlockHeight(10_000_000))
+        );
+
+        // Explicit block:<64-hex> and #<64-hex>
+        assert_eq!(
+            parse_search_query(&format!("block:{}", blk_hash.to_uppercase())),
+            Some(SearchQuery::BlockHash(blk_hash.clone()))
+        );
+        assert_eq!(
+            parse_search_query(&format!("#{blk_hash}")),
+            Some(SearchQuery::BlockHash(blk_hash.clone()))
+        );
+
+        // Explicit tx: prefix (1..=64 hex)
+        assert_eq!(
+            parse_search_query("tx:AbCd1234"),
+            Some(SearchQuery::Tx("abcd1234".to_string()))
+        );
+        assert_eq!(
+            parse_search_query("TX:beef"),
+            Some(SearchQuery::Tx("beef".to_string()))
+        );
+        assert_eq!(
+            parse_search_query(&format!("tx:{}", hex64.to_uppercase())),
+            Some(SearchQuery::Tx(hex64.clone()))
+        );
+
+        // Bare 8..=63 hex -> Tx (including 8 numeric digits > 10_000_000 or leading zeros)
+        assert_eq!(
+            parse_search_query("deadbeef"),
+            Some(SearchQuery::Tx("deadbeef".to_string()))
+        );
+        assert_eq!(
+            parse_search_query("00001234"),
+            Some(SearchQuery::Tx("00001234".to_string()))
+        );
+        assert_eq!(
+            parse_search_query("12345678"),
+            Some(SearchQuery::Tx("12345678".to_string()))
+        );
+
+        // Bare 64-char hex -> AmbiguousHex64
+        assert_eq!(
+            parse_search_query(&hex64.to_uppercase()),
+            Some(SearchQuery::AmbiguousHex64(hex64.clone()))
+        );
+        assert_eq!(
+            parse_search_query(&blk_hash),
+            Some(SearchQuery::AmbiguousHex64(blk_hash))
+        );
+
+        // Invalid inputs
+        assert_eq!(parse_search_query(""), None);
+        assert_eq!(parse_search_query("   "), None);
+        assert_eq!(parse_search_query("abc"), None);
+        assert_eq!(parse_search_query("tx:"), None);
+        assert_eq!(parse_search_query("block:"), None);
+        assert_eq!(parse_search_query("#"), None);
+        assert_eq!(parse_search_query("block:deadbeef"), None);
+        assert_eq!(parse_search_query("block:not-a-block"), None);
+        assert_eq!(parse_search_query("tx:zzzzzzzz"), None);
+        assert_eq!(parse_search_query(&"a".repeat(65)), None);
+
+        // Digit cap (1..=10) and thousands-comma validation.
+        assert_eq!(
+            parse_search_query("block:1,234,567,890"),
+            Some(SearchQuery::BlockHeight(1_234_567_890))
+        );
+        assert_eq!(parse_search_query("block:12345678901"), None);
+        assert_eq!(parse_search_query("#99999999999999999999"), None);
+        assert_eq!(parse_search_query("8,4,0000"), None);
+        assert_eq!(parse_search_query("block:8,4,0000"), None);
+        assert_eq!(parse_search_query("#8,4,0000"), None);
+        assert_eq!(parse_search_query(",840,000"), None);
+        assert_eq!(parse_search_query("840,000,"), None);
+        assert_eq!(parse_search_query("0,000"), None);
+        assert_eq!(parse_search_query("1234,567"), None);
+    }
+
+    #[test]
+    fn ambiguous_hex_not_found_preserves_partial_and_unavailable_hints() {
+        let complete = Coverage::Complete;
+        let partial = Coverage::Partial {
+            reason: "hydrating".to_string(),
+        };
+        assert_eq!(
+            ambiguous_hex_not_found_message(Some(&complete), false),
+            "Not found"
+        );
+        assert!(ambiguous_hex_not_found_message(Some(&partial), false)
+            .contains("partial"));
+        assert!(ambiguous_hex_not_found_message(Some(&partial), true)
+            .contains("partial"));
+        assert!(ambiguous_hex_not_found_message(None, false)
+            .contains("unavailable"));
+        assert!(ambiguous_hex_not_found_message(Some(&complete), true)
+            .contains("unavailable"));
+    }
+
+    #[test]
+    fn parse_search_query_is_utf8_safe() {
+        // Multi-byte UTF-8 characters spanning byte offsets 1, 3, and 6 must never panic.
+        assert_eq!(parse_search_query("abécd1234"), None);
+        assert_eq!(parse_search_query("€12345678"), None);
+        assert_eq!(parse_search_query("🔥840000"), None);
+        assert_eq!(parse_search_query("txé:abcd1234"), None);
+        assert_eq!(parse_search_query("blocké:840000"), None);
+        assert_eq!(parse_search_query("#é840000"), None);
+        assert_eq!(parse_search_query("ééé"), None);
+    }
+
+    #[test]
+    fn parse_initial_search_param_handles_block_and_tx_params() {
+        let full_tx = txid(0xde);
+        let blk_hash = format!("00000000{}", "ef".repeat(28));
+
+        assert_eq!(
+            parse_initial_search_param("?block=840000"),
+            Some(InitialSearchParam::Block("840000".to_string()))
+        );
+        assert_eq!(
+            parse_initial_search_param("?block=%23840000"),
+            Some(InitialSearchParam::Block("840000".to_string()))
+        );
+        assert_eq!(
+            parse_initial_search_param("?block=block%3A840%2C000"),
+            Some(InitialSearchParam::Block("840000".to_string()))
+        );
+        assert_eq!(
+            parse_initial_search_param(&format!(
+                "?foo=1&block={}&bar=2",
+                blk_hash.to_uppercase()
+            )),
+            Some(InitialSearchParam::Block(blk_hash))
+        );
+        assert_eq!(
+            parse_initial_search_param(&format!("?tx={full_tx}")),
+            Some(InitialSearchParam::Tx(full_tx))
+        );
+        assert_eq!(
+            parse_initial_search_param("?tx=tx%3AABCDEF12"),
+            Some(InitialSearchParam::Tx("abcdef12".to_string()))
+        );
+        // Invalid earlier param does not hide a valid later param.
+        assert_eq!(
+            parse_initial_search_param("?tx=%FF&block=840000"),
+            Some(InitialSearchParam::Block("840000".to_string()))
+        );
+        // Invalid or short params rejected safely, including multi-byte UTF-8.
+        assert_eq!(parse_initial_search_param("?tx=abcdef1"), None);
+        assert_eq!(parse_initial_search_param("?block=notablock"), None);
+        assert_eq!(parse_initial_search_param("?block=🔥840000"), None);
+        assert_eq!(parse_initial_search_param("?block=%C3%A9"), None);
+        assert_eq!(parse_initial_search_param("?tx=🔥abcd1234"), None);
+        assert_eq!(parse_initial_search_param("?other=840000"), None);
+    }
+
+    #[test]
+    fn history_mode_info_deserializes_with_extra_fields() {
+        let json = r#"{
+            "target_height": 840000,
+            "target_hash": "0000000000000000000320283a032748cef8bc278972eb12977ed62928c4569f",
+            "from_height": 839980,
+            "to_height": 840020,
+            "blocks": []
+        }"#;
+        let info: HistoryModeInfo = serde_json::from_str(json).unwrap();
+        assert_eq!(info.target_height, 840_000);
+        assert_eq!(
+            info.target_hash,
+            "0000000000000000000320283a032748cef8bc278972eb12977ed62928c4569f"
+        );
+        assert_eq!(info.from_height, 839_980);
+        assert_eq!(info.to_height, 840_020);
+
+        // Also handles `/api/stats/heartbeat/block/{query}` response without explicit from/to.
+        let api_json = r#"{
+            "target_height": 840000,
+            "target_hash": "0000000000000000000320283a032748cef8bc278972eb12977ed62928c4569f",
+            "tip_height": 976000,
+            "blocks": [
+                {"height": 839980},
+                {"height": 840000},
+                {"height": 840020}
+            ]
+        }"#;
+        let parsed = parse_history_mode_info(api_json).unwrap();
+        assert_eq!(parsed, info);
     }
 }

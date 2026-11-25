@@ -3,7 +3,7 @@
 // Block audio lives in heartbeat-audio.js, not here: it is cued from the SSE handler
 // so it also fires for a hidden tab, which this module's effects deliberately do not.
 import { getState, COLORS, POINT_WIDTH, HEAD_POSITION_FRAC, FLATLINE_PX_PER_SEC, RHYTHM_STRIP_BLOCKS, BG_COLOR, GRID_COLOR } from './heartbeat-state.js';
-import { generatePQRST, computeColor, hexToRgb, formatDuration } from './heartbeat-timeline.js';
+import { generatePQRST, computeColor, hexToRgb, formatDuration, resolveInterBlockSeconds, historyFlatlineWidth, waitColor, buildFlatlineGradient, UNKNOWN_INTERVAL_COLOR } from './heartbeat-timeline.js';
 
 // ── Module-level audio state ─────────────────────────────
 
@@ -64,11 +64,11 @@ export function computeTemperature(mempoolMB) {
 // Immune system (hashrate)
 export function computeImmune(hashrateEH) {
     var label, color;
-    if (hashrateEH >= 700) {
+    if (hashrateEH >= 900) {
         label = 'Excellent'; color = COLORS.healthy;
-    } else if (hashrateEH >= 400) {
+    } else if (hashrateEH >= 600) {
         label = 'Strong'; color = COLORS.healthy;
-    } else if (hashrateEH >= 200) {
+    } else if (hashrateEH >= 300) {
         label = 'Moderate'; color = COLORS.elevated;
     } else {
         label = 'Weak'; color = COLORS.stressed;
@@ -121,112 +121,215 @@ export function getHeartbeatVitals() {
 
 // ── 24-Hour Rhythm Strip ─────────────────────────────────
 
-export function renderRhythmStrip(canvasId, blocksJson) {
+function clearNodeChildren(el) {
+    if (!el) return;
+    while (el.firstChild) {
+        el.removeChild(el.firstChild);
+    }
+    el.textContent = '';
+}
+
+function renderRhythmDetailDom(canvas, detailEl, idx) {
+    if (!detailEl) return;
+    clearNodeChildren(detailEl);
+    var regions = canvas._rhythmHitRegions;
+    if (!regions || idx < 0 || idx >= regions.length) {
+        canvas._rhythmSelected = null;
+        return;
+    }
+    var r = regions[idx];
+    var b = r.block;
+    var feeBtc = ((b.total_fees || 0) / 1e8).toFixed(4);
+    var wait = formatDuration(r.interBlockSeconds);
+
+    var hSpan = document.createElement('span');
+    hSpan.style.color = r.color;
+    hSpan.textContent = 'Block #' + (b.height || 0).toLocaleString();
+    detailEl.appendChild(hSpan);
+
+    var txSpan = document.createElement('span');
+    txSpan.textContent = (b.tx_count || 0).toLocaleString() + ' txs';
+    detailEl.appendChild(txSpan);
+
+    var feeSpan = document.createElement('span');
+    feeSpan.textContent = feeBtc + ' BTC fees';
+    detailEl.appendChild(feeSpan);
+
+    var waitSpan = document.createElement('span');
+    waitSpan.textContent = wait + ' wait';
+    detailEl.appendChild(waitSpan);
+
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = 'View Block Data';
+    btn.style.color = r.color;
+    btn.style.textDecoration = 'underline';
+    btn.style.textUnderlineOffset = '2px';
+    btn.style.cursor = 'pointer';
+    btn.style.background = 'transparent';
+    btn.style.border = 'none';
+    btn.style.padding = '0';
+    btn.style.font = 'inherit';
+    var blockHeight = b.height || 0;
+    btn.addEventListener('click', function() {
+        if (typeof window.showBlockDetail === 'function') {
+            window.showBlockDetail(blockHeight);
+        }
+    });
+    detailEl.appendChild(btn);
+
+    canvas._rhythmSelected = r;
+}
+
+export function renderRhythmStrip(canvasId, blocksJson, _skipSliderSync) {
     var canvas = document.getElementById(canvasId);
     if (!canvas) return;
 
-    var dpr = window.devicePixelRatio || 1;
-    var rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width * dpr;
-    canvas.height = rect.height * dpr;
-
-    var ctx = canvas.getContext('2d');
-    ctx.scale(dpr, dpr);
-
-    var w = rect.width;
-    var h = rect.height;
-    var baseline = h * 0.55;
-
-    // Fill background
-    ctx.fillStyle = BG_COLOR;
-    ctx.fillRect(0, 0, w, h);
-
-    // Subtle grid
-    ctx.strokeStyle = GRID_COLOR;
-    ctx.lineWidth = 0.5;
-    var gridH = 30;
-    for (var gy = 0; gy < h; gy += gridH) {
-        ctx.beginPath();
-        ctx.moveTo(0, gy);
-        ctx.lineTo(w, gy);
-        ctx.stroke();
-    }
-
     var blocks;
-    try {
-        blocks = JSON.parse(blocksJson);
-    } catch(e) {
-        return;
+    if (Array.isArray(blocksJson)) {
+        blocks = blocksJson;
+    } else {
+        try {
+            blocks = JSON.parse(blocksJson);
+        } catch(e) {
+            return;
+        }
     }
     if (!Array.isArray(blocks) || blocks.length === 0) return;
 
-    // Generate all waveform data
+    // Always store the latest blocks array on the canvas so slider/touch handlers
+    // never close over a stale initial-load snapshot.
+    canvas._rhythmBlocks = blocks;
+
+    var dpr = window.devicePixelRatio || 1;
+    var rect = canvas.getBoundingClientRect();
+    var w = rect.width || 600;
+    var h = rect.height || 80;
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+
+    var ctx = canvas.getContext('2d');
+    if (ctx) {
+        if (typeof ctx.scale === 'function') ctx.scale(dpr, dpr);
+        var baseline = h * 0.55;
+
+        // Fill background
+        ctx.fillStyle = BG_COLOR;
+        ctx.fillRect(0, 0, w, h);
+
+        // Subtle grid
+        ctx.strokeStyle = GRID_COLOR;
+        ctx.lineWidth = 0.5;
+        var gridH = 30;
+        for (var gy = 0; gy < h; gy += gridH) {
+            ctx.beginPath();
+            ctx.moveTo(0, gy);
+            ctx.lineTo(w, gy);
+            ctx.stroke();
+        }
+    }
+
+    // Generate all waveform data with exact inter-block seconds & progressive width
     var waveforms = [];
     var totalPoints = 0;
     for (var i = 0; i < blocks.length; i++) {
-        var pts = generatePQRST(blocks[i]);
-        var interBlock = blocks[i].inter_block_seconds || 600;
-        // Compressed flatline: proportional to gap but tight
-        var flatPx = Math.max(3, Math.min(interBlock / 40, 20));
-        waveforms.push({ points: pts, flatline: flatPx, block: blocks[i] });
+        var blk = blocks[i];
+        var rawInter = resolveInterBlockSeconds(blk);
+        if (rawInter === null && i > 0 && blk.timestamp && blocks[i - 1].timestamp) {
+            rawInter = blk.timestamp - blocks[i - 1].timestamp;
+        }
+        var pts = generatePQRST(rawInter === null ? blk : Object.assign({}, blk, { inter_block_seconds: rawInter }));
+        var flatPx = Math.max(2, Math.min(historyFlatlineWidth(rawInter) / 14, 115));
+        waveforms.push({ points: pts, flatline: flatPx, block: blk, interBlockSeconds: rawInter });
         totalPoints += pts.length + flatPx;
     }
 
     // Scale to fit canvas width
-    var scale = w / totalPoints;
+    var scale = totalPoints > 0 ? (w / totalPoints) : 1;
     if (scale > 3) scale = 3; // cap individual point width
 
-    // Draw each block segment with its own color, store hit regions
+    // Draw each block segment with progressive wait gradient on flatline and color on spike
     var x = 0;
+    var baselineY = h * 0.55;
     var vScale = 0.4; // compress vertically
     var hitRegions = [];
     for (var wi = 0; wi < waveforms.length; wi++) {
         var wf = waveforms[wi];
-        var interBlock = wf.block.inter_block_seconds || 600;
+        var rawInter2 = wf.interBlockSeconds;
+        var effInter = rawInter2 === null ? null : Math.max(0, rawInter2);
+        var wfVbytes = wf.block.weight > 0 ? (wf.block.weight / 4) : (wf.block.size > 0 ? wf.block.size : 1000000);
+        var feeRate = wf.block.total_fees ? (wf.block.total_fees / wfVbytes) : 0;
+        var segColor = rawInter2 === null ? UNKNOWN_INTERVAL_COLOR : computeColor(effInter, feeRate, 0);
 
-        var feeRate = wf.block.total_fees ? wf.block.total_fees / 100000 : 0;
-        var segColor = computeColor(interBlock, feeRate, 0);
-
-        ctx.beginPath();
-        ctx.moveTo(x, baseline);
-
-        // Draw flatline before waveform
+        var flatStart = x;
         var flatEnd = x + wf.flatline * scale;
-        ctx.lineTo(flatEnd, baseline);
-
         var waveStart = flatEnd;
         x = flatEnd;
 
-        // Draw waveform points
-        for (var pi = 0; pi < wf.points.length; pi++) {
-            x += scale;
-            ctx.lineTo(x, baseline + wf.points[pi] * vScale);
+        if (ctx) {
+            // Flatline leading into the spike: progressive wait color gradient (or neutral slate if unknown)
+            ctx.beginPath();
+            ctx.moveTo(flatStart, baselineY);
+            ctx.lineTo(flatEnd, baselineY);
+            ctx.strokeStyle = rawInter2 === null
+                ? UNKNOWN_INTERVAL_COLOR
+                : buildFlatlineGradient(ctx, flatStart, flatEnd, effInter);
+            ctx.lineWidth = 1;
+            ctx.shadowBlur = 3;
+            ctx.shadowColor = rawInter2 === null ? UNKNOWN_INTERVAL_COLOR : waitColor(effInter);
+            ctx.stroke();
+
+            // Waveform spike
+            ctx.beginPath();
+            ctx.moveTo(waveStart, baselineY);
+            for (var pi = 0; pi < wf.points.length; pi++) {
+                x += scale;
+                ctx.lineTo(x, baselineY + wf.points[pi] * vScale);
+            }
+            ctx.strokeStyle = segColor;
+            ctx.lineWidth = 1;
+            ctx.shadowBlur = 4;
+            ctx.shadowColor = segColor;
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+        } else {
+            x += wf.points.length * scale;
         }
 
-        ctx.strokeStyle = segColor;
-        ctx.lineWidth = 1;
-        ctx.shadowBlur = 4;
-        ctx.shadowColor = segColor;
-        ctx.stroke();
-        ctx.shadowBlur = 0;
-
-        hitRegions.push({ x1: waveStart, x2: x, block: wf.block, color: segColor });
+        hitRegions.push({
+            x1: waveStart,
+            x2: x,
+            block: wf.block,
+            color: segColor,
+            interBlockSeconds: rawInter2
+        });
     }
 
-    // Draw hour markers at the bottom
-    if (blocks.length > 1) {
-        var firstTs = blocks[0].timestamp;
-        var lastTs = blocks[blocks.length - 1].timestamp;
+    // Draw UTC hour markers interpolated between actual drawn block x-positions (A16)
+    if (ctx && hitRegions.length > 1) {
+        var firstTs = hitRegions[0].block.timestamp;
+        var lastTs = hitRegions[hitRegions.length - 1].block.timestamp;
         var spanHrs = (lastTs - firstTs) / 3600;
-        if (spanHrs > 1) {
+        if (firstTs && lastTs && spanHrs > 1) {
             ctx.fillStyle = 'rgba(255,255,255,0.15)';
             ctx.font = '9px monospace';
-            // Mark every ~4 hours
             var interval = spanHrs > 12 ? 4 : 2;
             var startHour = Math.ceil((firstTs / 3600)) * 3600;
             for (var ts = startHour; ts < lastTs; ts += interval * 3600) {
-                var frac = (ts - firstTs) / (lastTs - firstTs);
-                var mx = frac * w;
+                var mx = null;
+                for (var hi = 0; hi < hitRegions.length - 1; hi++) {
+                    var r0 = hitRegions[hi];
+                    var r1 = hitRegions[hi + 1];
+                    var t0 = r0.block.timestamp;
+                    var t1 = r1.block.timestamp;
+                    if (t0 <= ts && t1 >= ts) {
+                        var x0 = (r0.x1 + r0.x2) / 2;
+                        var x1 = (r1.x1 + r1.x2) / 2;
+                        mx = t1 > t0 ? x0 + ((ts - t0) / (t1 - t0)) * (x1 - x0) : x0;
+                        break;
+                    }
+                }
+                if (mx === null) continue;
                 ctx.fillRect(mx, 0, 0.5, h);
                 var d = new Date(ts * 1000);
                 var hourLabel = d.getUTCHours() + ':00';
@@ -235,29 +338,56 @@ export function renderRhythmStrip(canvasId, blocksJson) {
         }
     }
 
-    // ── Rhythm strip interactivity: hover tooltip + click to open ──
+    // ── Rhythm strip interactivity: hit regions + dynamic slider sync ──
     canvas._rhythmHitRegions = hitRegions;
 
+    var slider = document.getElementById('rhythm-strip-slider');
+    var detailEl = document.getElementById('rhythm-strip-detail');
+
+    if (slider && detailEl && !_skipSliderSync) {
+        var prevMax = parseInt(slider.max, 10);
+        var prevVal = parseInt(slider.value, 10);
+        var newMax = Math.max(0, blocks.length - 1);
+        var wasAtEnd = !canvas._rhythmHandlersSet || isNaN(prevVal) || isNaN(prevMax) || prevVal >= prevMax;
+        slider.max = String(newMax);
+        var targetIdx;
+        if (wasAtEnd) {
+            targetIdx = newMax;
+        } else {
+            var trackedHeight = (canvas._rhythmSelected && canvas._rhythmSelected.block)
+                ? canvas._rhythmSelected.block.height
+                : null;
+            var foundIdx = -1;
+            if (trackedHeight != null) {
+                for (var ti = 0; ti < blocks.length; ti++) {
+                    if (blocks[ti] && blocks[ti].height === trackedHeight) {
+                        foundIdx = ti;
+                        break;
+                    }
+                }
+            }
+            targetIdx = foundIdx >= 0 ? foundIdx : Math.min(Math.max(0, prevVal), newMax);
+        }
+        slider.value = String(targetIdx);
+        renderRhythmDetailDom(canvas, detailEl, targetIdx);
+    }
+
     // Draw highlight for slider-selected block (not mouse hover)
-    if (canvas._rhythmSelected) {
+    if (ctx && canvas._rhythmSelected) {
         var sel = canvas._rhythmSelected;
-        var selMid = (sel.x1 + sel.x2) / 2;
-        // Re-match against new hit regions (positions may shift on resize)
         for (var hri = 0; hri < hitRegions.length; hri++) {
             if (hitRegions[hri].block.height === sel.block.height) {
                 sel = hitRegions[hri];
                 canvas._rhythmSelected = sel;
-                selMid = (sel.x1 + sel.x2) / 2;
                 break;
             }
         }
-        // Subtle highlight line under the selected spike
         ctx.strokeStyle = sel.color;
         ctx.lineWidth = 2;
         ctx.globalAlpha = 0.6;
         ctx.beginPath();
-        ctx.moveTo(sel.x1, baseline + 4);
-        ctx.lineTo(sel.x2, baseline + 4);
+        ctx.moveTo(sel.x1, baselineY + 4);
+        ctx.lineTo(sel.x2, baselineY + 4);
         ctx.stroke();
         ctx.globalAlpha = 1;
     }
@@ -266,11 +396,12 @@ export function renderRhythmStrip(canvasId, blocksJson) {
     if (canvas._rhythmHandlersSet) return;
     canvas._rhythmHandlersSet = true;
 
-    // Click → open block detail modal
+    // Click -> open block detail modal
     canvas.addEventListener('click', function(e) {
         var r = canvas.getBoundingClientRect();
         var mx = e.clientX - r.left;
         var regions = canvas._rhythmHitRegions;
+        if (!regions) return;
         for (var ri = 0; ri < regions.length; ri++) {
             if (mx >= regions[ri].x1 && mx <= regions[ri].x2 && regions[ri].block.height) {
                 if (typeof window.showBlockDetail === 'function') {
@@ -287,10 +418,12 @@ export function renderRhythmStrip(canvasId, blocksJson) {
         var mx = e.clientX - r.left;
         var regions = canvas._rhythmHitRegions;
         var over = false;
-        for (var ri = 0; ri < regions.length; ri++) {
-            if (mx >= regions[ri].x1 && mx <= regions[ri].x2) {
-                over = true;
-                break;
+        if (regions) {
+            for (var ri = 0; ri < regions.length; ri++) {
+                if (mx >= regions[ri].x1 && mx <= regions[ri].x2) {
+                    over = true;
+                    break;
+                }
             }
         }
         canvas.style.cursor = over ? 'pointer' : '';
@@ -301,35 +434,12 @@ export function renderRhythmStrip(canvasId, blocksJson) {
     });
 
     // ── Slider scrubber for block selection ──────────────
-    var slider = document.getElementById('rhythm-strip-slider');
-    var detailEl = document.getElementById('rhythm-strip-detail');
     if (slider && detailEl) {
-        slider.max = Math.max(0, blocks.length - 1);
-        slider.value = blocks.length - 1;
-
         function updateSliderDetail(idx) {
-            var regions = canvas._rhythmHitRegions;
-            if (!regions || idx < 0 || idx >= regions.length) {
-                detailEl.innerHTML = '';
-                canvas._rhythmSelected = null;
-                renderRhythmStrip(canvasId, blocksJson);
-                return;
+            renderRhythmDetailDom(canvas, detailEl, idx);
+            if (canvas._rhythmBlocks) {
+                renderRhythmStrip(canvasId, canvas._rhythmBlocks, true);
             }
-            var r = regions[idx];
-            var b = r.block;
-            var feeBtc = ((b.total_fees || 0) / 1e8).toFixed(4);
-            var wait = formatDuration(b.inter_block_seconds || 600);
-            detailEl.innerHTML =
-                '<span style="color:' + r.color + '">Block #' + (b.height || 0).toLocaleString() + '</span>' +
-                '<span>' + (b.tx_count || 0).toLocaleString() + ' txs</span>' +
-                '<span>' + feeBtc + ' BTC fees</span>' +
-                '<span>' + wait + ' wait</span>' +
-                '<a onclick="if(window.showBlockDetail)window.showBlockDetail(' + (b.height || 0) + ')" ' +
-                'style="color:' + r.color + ';text-decoration:underline;text-underline-offset:2px;cursor:pointer">' +
-                'View Block Data</a>';
-            // Highlight on canvas
-            canvas._rhythmSelected = r;
-            renderRhythmStrip(canvasId, blocksJson);
         }
 
         slider.oninput = function() {
@@ -339,10 +449,10 @@ export function renderRhythmStrip(canvasId, blocksJson) {
         // On mobile: tap canvas selects nearest block via slider (no redirect)
         canvas.addEventListener('touchstart', function(e) {
             var touch = e.touches[0];
-            var rect = canvas.getBoundingClientRect();
-            var mx = touch.clientX - rect.left;
+            var rect2 = canvas.getBoundingClientRect();
+            var mx = touch.clientX - rect2.left;
             var regions = canvas._rhythmHitRegions;
-            if (!regions) return;
+            if (!regions || regions.length === 0) return;
             var bestIdx = 0, bestDist = Infinity;
             for (var ri = 0; ri < regions.length; ri++) {
                 var mid = (regions[ri].x1 + regions[ri].x2) / 2;
@@ -350,12 +460,9 @@ export function renderRhythmStrip(canvasId, blocksJson) {
                 if (d < bestDist) { bestDist = d; bestIdx = ri; }
             }
             e.preventDefault();
-            slider.value = bestIdx;
+            slider.value = String(bestIdx);
             updateSliderDetail(bestIdx);
         }, { passive: false });
-
-        // Show the last block by default
-        updateSliderDetail(blocks.length - 1);
     }
 }
 
@@ -364,10 +471,15 @@ export function renderRhythmStrip(canvasId, blocksJson) {
 export function heartbeatCenter() {
     var _hb = getState();
     if (!_hb) return;
+    if (_hb._viewMode === 'history' && typeof window !== 'undefined' && typeof window.hbV2ExitHistoryMode === 'function') {
+        window.hbV2ExitHistoryMode();
+        return;
+    }
     _hb.autoFollow = true;
     _hb.viewOffsetY = 0;
     _hb.viewOffset = _hb.virtualX - (_hb.width * HEAD_POSITION_FRAC) / _hb.zoom;
     _hb.hoveredBlock = null;
+    _hb.hoveredPendingBlock = null;
     _hb.hoveredBlip = null;
     _hb._pinnedBlip = null;
     _hb._pinnedTxid = null;
@@ -432,20 +544,23 @@ export function getOrganismStatus() {
     var _hb = getState();
     if (!_hb) return '{}';
     var now = Date.now() / 1000;
-    var elapsed = _hb.lastBlockTime > 0 ? now - _hb.lastBlockTime : 0;
-    var color = computeColor(elapsed, _hb.nextBlockFee, _hb.mempoolMB);
+    var elapsed = _hb.lastBlockTime > 0 ? Math.max(0, now - _hb.lastBlockTime) : 0;
+    var fee = _hb.nextBlockFee || 0;
+    var feeBoostSec = fee >= 30 ? Math.min(600, ((fee - 30) / 120) * 600) : 0;
+    var effectiveWait = elapsed + feeBoostSec;
+    var color = computeColor(elapsed, fee, _hb.mempoolMB);
 
     var condition, description;
-    if (color === COLORS.critical) {
+    if (effectiveWait >= 3600) {
         condition = 'Critical';
         description = 'Holding its breath. Waiting for the next block...';
-    } else if (color === COLORS.stressed) {
+    } else if (effectiveWait >= 1800) {
         condition = 'Stressed';
         description = 'Heavy breathing. Block space is scarce.';
-    } else if (color === COLORS.elevated) {
+    } else if (effectiveWait >= 1200) {
         condition = 'Elevated';
         description = 'Running warm. Activity is rising.';
-    } else if (color === COLORS.steady) {
+    } else if (effectiveWait >= 600) {
         condition = 'Steady';
         description = 'Holding pace. Some activity building.';
     } else {

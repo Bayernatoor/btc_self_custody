@@ -1,10 +1,10 @@
 // heartbeat-render.js: Main draw loop and all drawing helpers for the heartbeat canvas.
 
 import { getState, COLORS, BG_COLOR, GRID_COLOR, POINT_WIDTH, FLATLINE_PX_PER_SEC, HEAD_POSITION_FRAC, MAX_BLIPS_PER_SEGMENT } from './heartbeat-state.js';
-import { computeColor, lerpColor, drawGrid, hexToRgb, lerp, feeRateColor, PENDING_FEE_COLOR, feeBandLabel, formatFeeRate, cellRadiusForVsize, fmtBtc, formatDuration } from './heartbeat-timeline.js';
+import { computeColor, lerpColor, drawGrid, hexToRgb, lerp, feeRateColor, PENDING_FEE_COLOR, UNKNOWN_INTERVAL_COLOR, feeBandLabel, formatFeeRate, cellRadiusForVsize, brickHeightScale, fmtBtc, formatDuration, buildFlatlineGradient, waitColor, resolveInterBlockSeconds } from './heartbeat-timeline.js';
 import { canvasToVirtual, virtualToCanvas, blockAtVirtualX, flatlineAtVirtualX, blipAtCanvasXY } from './heartbeat-blips.js';
 import { stopMomentum } from './heartbeat-interaction.js';
-import { flushTxBatch, maybeClearRemovedTxids } from './heartbeat-sse.js';
+import { flushTxBatch, maybeClearRemovedTxids, compressSealedFlatline } from './heartbeat-sse.js';
 
 // ── Control bar constants ──────────────────────────────────────
 var CTRL_BTNS = [
@@ -34,67 +34,155 @@ function roundRect(ctx, x, y, w, h, r) {
 
 // ── Tooltip drawing ────────────────────────────────────────
 
-// Generic tooltip box: draws a rounded rect with lines of text.
+// Generic tooltip box: draws a rounded rect with lines of text, with 4-sided
+// and narrow-viewport clamping (truncating overly long lines cleanly with '...').
 // `anchorY` is the y position to place the box above; `borderColor` sets the border.
 export function drawTooltipBox(ctx, lines, canvasX, anchorY, borderColor, opts) {
     var _hb = getState();
     var padding = (opts && opts.padding) || 8;
     var lineH = (opts && opts.lineH) || 16;
     var fontSize = (opts && opts.fontSize) || '12px monospace';
+    var canvasW = _hb ? _hb.width : 800;
+    var canvasH = _hb ? _hb.height : 400;
+    var maxBoxW = Math.max(120, canvasW - 12);
+    var maxTextW = Math.max(40, maxBoxW - padding * 2);
 
     ctx.font = fontSize;
+    var fittedLines = new Array(lines.length);
     var maxW = 0;
     for (var i = 0; i < lines.length; i++) {
-        var m = ctx.measureText(lines[i]).width;
+        var rawEntry = lines[i];
+        var isObj = rawEntry && typeof rawEntry === 'object';
+        var line = String(isObj ? rawEntry.text : rawEntry);
+        var lineBold = isObj && !!rawEntry.bold;
+        ctx.font = lineBold ? ('bold ' + fontSize) : fontSize;
+        var m = ctx.measureText(line).width;
+        if (m > maxTextW) {
+            var ellipsis = '...';
+            var ellW = ctx.measureText(ellipsis).width;
+            var lo = 0, hi = line.length;
+            while (lo < hi) {
+                var mid = (lo + hi + 1) >> 1;
+                if (ctx.measureText(line.slice(0, mid)).width + ellW <= maxTextW) lo = mid;
+                else hi = mid - 1;
+            }
+            line = line.slice(0, Math.max(1, lo)) + ellipsis;
+            m = ctx.measureText(line).width;
+        }
+        fittedLines[i] = {
+            text: line,
+            color: (isObj && rawEntry.color) ? rawEntry.color : ((opts && opts.textColor) || 'rgba(255, 255, 255, 0.85)'),
+            bold: lineBold
+        };
         if (m > maxW) maxW = m;
     }
 
-    var boxW = maxW + padding * 2;
-    var boxH = lines.length * lineH + padding * 2;
+    var boxW = Math.min(maxBoxW, maxW + padding * 2);
+    var boxH = fittedLines.length * lineH + padding * 2;
     var boxX = canvasX - boxW / 2;
     var boxY = anchorY - boxH;
 
-    // Clamp to canvas bounds
-    if (boxX < 4) boxX = 4;
-    if (boxX + boxW > _hb.width - 4) boxX = _hb.width - boxW - 4;
-    if (boxY < 4) boxY = 4;
+    // 4-sided clamping within [6, canvasW/H - boxW/H - 6]
+    var maxX = Math.max(6, canvasW - boxW - 6);
+    var maxY = Math.max(6, canvasH - boxH - 6);
+    if (boxX < 6) boxX = 6;
+    if (boxX > maxX) boxX = maxX;
+    if (boxY < 6) boxY = 6;
+    if (boxY > maxY) boxY = maxY;
 
     // Background
-    ctx.fillStyle = 'rgba(10, 25, 41, 0.92)';
+    ctx.fillStyle = 'rgba(10, 25, 41, 0.94)';
     ctx.beginPath();
-    roundRect(ctx, boxX, boxY, boxW, boxH, 4);
+    roundRect(ctx, boxX, boxY, boxW, boxH, 5);
     ctx.fill();
 
     // Border
     ctx.strokeStyle = borderColor;
     ctx.lineWidth = 1;
     ctx.beginPath();
-    roundRect(ctx, boxX, boxY, boxW, boxH, 4);
+    roundRect(ctx, boxX, boxY, boxW, boxH, 5);
     ctx.stroke();
 
     // Text: always left-aligned
     ctx.textAlign = 'left';
-    ctx.fillStyle = (opts && opts.textColor) || 'rgba(255, 255, 255, 0.85)';
-    ctx.font = fontSize;
-    for (var i = 0; i < lines.length; i++) {
-        ctx.fillText(lines[i], boxX + padding, boxY + padding + (i + 1) * lineH - 3);
+    for (var fi = 0; fi < fittedLines.length; fi++) {
+        var fl = fittedLines[fi];
+        ctx.font = fl.bold ? ('bold ' + fontSize) : fontSize;
+        ctx.fillStyle = fl.color;
+        ctx.fillText(fl.text, boxX + padding, boxY + padding + (fi + 1) * lineH - 3);
     }
 }
 
+// Wrap a plain-text description into at most `maxLines` lines of ~`maxChars`
+// characters on word boundaries so landmark tooltips stay compact and readable.
+function wrapTooltipText(text, maxChars, maxLines) {
+    if (!text) return [];
+    var words = String(text).trim().split(/\s+/);
+    var out = [];
+    var cur = '';
+    for (var i = 0; i < words.length; i++) {
+        var w = words[i];
+        var cand = cur ? (cur + ' ' + w) : w;
+        if (cand.length <= maxChars) {
+            cur = cand;
+        } else {
+            if (cur) out.push(cur);
+            cur = w;
+            if (out.length >= maxLines - 1) {
+                var rest = words.slice(i).join(' ');
+                if (rest.length > maxChars) {
+                    rest = rest.slice(0, Math.max(1, maxChars - 1)).replace(/\s+\S*$/, '') + '\u2026';
+                }
+                out.push(rest);
+                return out;
+            }
+        }
+    }
+    if (cur && out.length < maxLines) out.push(cur);
+    return out;
+}
+
 export function drawTooltip(ctx, seg, canvasX, canvasY, baseline) {
+    var lmMap = (typeof window !== 'undefined' && window._hbLandmarks) ? window._hbLandmarks : null;
+    var lm = lmMap && seg.height != null ? lmMap[String(seg.height)] : null;
+    var heightLabel = seg.height != null ? seg.height.toLocaleString() : '?';
+
     var lines = [
-        'Block #' + seg.height,
-        'Txns: ' + seg.tx_count.toLocaleString(),
-        'Fees: ' + fmtBtc(seg.total_fees / 100000000) + ' BTC',
-        'Wait: ' + formatDuration(seg.inter_block_seconds)
+        { text: 'Block #' + heightLabel, color: '#ffffff', bold: true }
     ];
+    if (lm) {
+        lines.push({ text: '\u2605 ' + lm.title, color: lm.color || '#f7931a', bold: true });
+        var descLines = wrapTooltipText(lm.description, 40, 2);
+        for (var di = 0; di < descLines.length; di++) {
+            lines.push({ text: descLines[di], color: 'rgba(255, 255, 255, 0.72)' });
+        }
+    }
+    lines.push('Txns: ' + (seg.tx_count != null ? seg.tx_count.toLocaleString() : '0'));
+    lines.push('Fees: ' + fmtBtc((seg.total_fees || 0) / 100000000) + ' BTC');
+    lines.push('Wait: ' + formatDuration(resolveInterBlockSeconds(seg)));
     if (seg.timestamp) {
         var d = new Date(seg.timestamp * 1000);
-        lines.push(d.toISOString().replace('T', ' ').slice(0, 19) + ' UTC');
+        lines.push({ text: d.toISOString().replace('T', ' ').slice(0, 19) + ' UTC', color: 'rgba(255, 255, 255, 0.55)' });
     }
     var _hbt = getState();
-    if (_hbt && _hbt._isTouch) lines.push('→ Tap again to expand');
-    drawTooltipBox(ctx, lines, canvasX, canvasY - 12, seg.color);
+    if (_hbt && _hbt._isTouch) {
+        lines.push({ text: '\u2192 Tap again for full details', color: 'rgba(247, 147, 26, 0.85)' });
+    } else if (lm) {
+        lines.push({ text: 'Click spike for full story & details', color: 'rgba(247, 147, 26, 0.85)' });
+    }
+    drawTooltipBox(ctx, lines, canvasX, canvasY - 12, lm ? (lm.color || '#f7931a') : seg.color);
+}
+
+// Pending block reserved-slot tooltip
+export function drawPendingBlockTooltip(ctx, seg, canvasX, canvasY) {
+    var nowSec = Math.floor(Date.now() / 1000);
+    var ago = seg && seg.observed_at ? Math.max(0, nowSec - seg.observed_at) : 0;
+    var lines = [
+        'Pending Block',
+        'Observed ' + formatDuration(ago) + ' ago',
+        'Fetching block details...'
+    ];
+    drawTooltipBox(ctx, lines, canvasX, canvasY - 12, (seg && seg.color) || '#38bdf8');
 }
 
 // Blip tooltip: shows fee rate and tx info for a single blip/brick
@@ -191,7 +279,7 @@ export function drawBlipTooltip(ctx, blip, canvasX, baseline) {
         var cellCY = baseline - tubePos * tubeH;
         tipY = cellCY - cellR - 16;
     } else {
-        var heightScale = _hb.zoom > 4 ? 1 + (_hb.zoom - 4) * 0.15 : 1;
+        var heightScale = brickHeightScale(_hb.zoom);
         tipY = baseline - ((blip.stackY || 0) + (blip.brickH || blip.height)) * heightScale - 12;
     }
     tipY = Math.max(10, Math.min(tipY, _hb.height - 80));
@@ -203,23 +291,49 @@ export function drawBlipTooltip(ctx, blip, canvasX, baseline) {
 // Flatline tooltip: shows interval between surrounding blocks
 export function drawFlatlineTooltip(ctx, info, canvasX, baseline) {
     var lines = [];
-    if (info.prevBlock && info.nextBlock) {
-        var interval = info.nextBlock.timestamp - info.prevBlock.timestamp;
+    if (info.pendingNext) {
+        if (info.prevBlock) {
+            lines.push('After block #' + info.prevBlock.height);
+        }
+        lines.push('Pending block \u00b7 fetching details');
+        var pendingTxs = 0;
+        if (info.segment.blips) {
+            for (var pt = 0; pt < info.segment.blips.length; pt++) {
+                if (!info.segment.blips[pt]._removed && info.segment.blips[pt].fadeStart === 0) {
+                    pendingTxs += info.segment.blips[pt].txCount || 1;
+                }
+            }
+        }
+        if (pendingTxs > 0) lines.push('~' + pendingTxs.toLocaleString() + ' txs in pre-block mempool');
+    } else if (info.prevBlock && info.nextBlock) {
+        var interval = (info.prevBlock.timestamp && info.nextBlock.timestamp)
+            ? (info.nextBlock.timestamp - info.prevBlock.timestamp)
+            : resolveInterBlockSeconds(info.nextBlock);
         lines.push('Block #' + info.prevBlock.height + ' \u2192 #' + info.nextBlock.height);
         lines.push('Interval: ' + formatDuration(interval));
     } else if (info.prevBlock && !info.nextBlock) {
-        var elapsed = Math.floor(Date.now() / 1000 - info.prevBlock.timestamp);
+        var elapsed = info.prevBlock.timestamp
+            ? Math.max(0, Math.floor(Date.now() / 1000 - info.prevBlock.timestamp))
+            : null;
         var totalTxs = 0;
         if (info.segment.blips) {
             for (var t = 0; t < info.segment.blips.length; t++) {
-                totalTxs += info.segment.blips[t].txCount || 1;
+                if (!info.segment.blips[t]._removed && info.segment.blips[t].fadeStart === 0) {
+                    totalTxs += info.segment.blips[t].txCount || 1;
+                }
             }
         }
         lines.push('After block #' + info.prevBlock.height);
         lines.push('Waiting: ' + formatDuration(elapsed));
         if (totalTxs > 0) lines.push('~' + totalTxs.toLocaleString() + ' new txs in mempool');
     } else {
-        lines.push('Waiting for blocks...');
+        var segInter = resolveInterBlockSeconds(info.segment);
+        if (info.nextBlock && segInter !== null) {
+            lines.push('Before block #' + info.nextBlock.height);
+            lines.push('Interval: ' + formatDuration(segInter));
+        } else {
+            lines.push('Waiting for blocks...');
+        }
     }
     lines = lines.filter(function(l) { return l.length > 0; });
     drawTooltipBox(ctx, lines, canvasX, baseline - 20, 'rgba(255, 255, 255, 0.15)', {
@@ -331,7 +445,7 @@ var REVEAL_RELAY_RATE = 7000;   // bricks/sec laid down in the unfurl beat
 var REVEAL_RELAY_MIN = 4.0;     // unfurl beat clamps (seconds)
 var REVEAL_RELAY_MAX = 9.0;
 var REVEAL_HOLD_SECS = 2.0;     // hold on the whole timeline ("here's the size")
-var REVEAL_RETURN_SECS = 2.0;   // zoom back in to the head at the entry zoom
+var REVEAL_RETURN_SECS = 2.8;   // smooth unhurried exponential zoom back in to the live head
 var REVEAL_BANNER2_DELAY = 1.5; // how far into the unfurl the "remaining" banner appears
                                 // (keeps the "Block found" banner up a bit longer)
 var REVEAL_ZOOM = 1.0;          // close-up working zoom (only zooms IN from further out)
@@ -432,7 +546,10 @@ function startRevealHarvest(r, now) {
 }
 
 // Detach the faded leftovers from the old segment (keep the shattering confirmed
-// ones) and re-lay them on the new flatline, staggered over `staggerSecs`.
+// ones) and re-lay leftovers on the new flatline, staggered over `staggerSecs`.
+// Compression of `r.oldSeg` is intentionally deferred until reveal completion
+// (`return` end / `endBlockReveal`) so historical spikes never teleport onto the
+// left half of the viewport mid-reveal while `unfurl` is playing.
 function relayRevealLeftovers(_hb, r, staggerSecs) {
     if (r.laid) return;
     r.laid = true;
@@ -442,12 +559,23 @@ function relayRevealLeftovers(_hb, r, staggerSecs) {
         });
     }
     r._revealByTxid = null;
-    if (r.oldSeg) { r.oldSeg.blips = r.oldSeg.blips.filter(function(b) { return b && !b._removed && b.fadeStart > 0; }); r.oldSeg._revealFade = undefined; }
-    if (window._hbPlaceCarried) window._hbPlaceCarried(r.leftovers, staggerSecs);
+    if (r.oldSeg) {
+        r.oldSeg.blips = r.oldSeg.blips.filter(function(b) { return b && !b._removed && b.fadeStart > 0; });
+        r.oldSeg._revealFade = undefined;
+    }
+    if (r.leftovers && r.leftovers.length > 0 && window._hbPlaceCarried) {
+        window._hbPlaceCarried(r.leftovers, staggerSecs);
+    }
     // placeCarriedLeftovers sets _hb.virtualX = x_start + width SYNCHRONOUSLY (before
     // its RAF-chunked placement), so virtualX is already the final head here, that
     // synchronous commit is what makes this width read correct. Don't defer it there.
-    r.width = Math.max(1, _hb.virtualX - r.newSeg.x_start);
+    r.width = Math.max(1, _hb.virtualX - (r.newSeg ? r.newSeg.x_start : 0));
+}
+
+function finalizeRevealCompression(_hb, r) {
+    if (!r || !r.oldSeg || r.oldSeg._compressed) return;
+    var spikeIdx = r.spikeSeg ? _hb.timeline.indexOf(r.spikeSeg) : (_hb.timeline.indexOf(r.oldSeg) + 1);
+    compressSealedFlatline(_hb, r.oldSeg, spikeIdx, r.interBlock);
 }
 
 // End the reveal: make sure the harvest + leftover placement have actually
@@ -463,14 +591,26 @@ function endBlockReveal(_hb, restoreLiveCamera) {
     }
     startRevealHarvest(r, now);     // shatter confirmed if we hadn't yet
     relayRevealLeftovers(_hb, r, 0); // lay leftovers instantly if we hadn't yet
+    if (r.newSeg) r.newSeg._revealLineEnd = undefined;
+    finalizeRevealCompression(_hb, r);
     if (restoreLiveCamera && _hb.autoFollow && !_hb._pinnedTxid && r.entryZoom > 0 && _hb.width > 0) {
         _hb.zoom = r.entryZoom;
         _hb.viewOffset = _hb.virtualX - (_hb.width * HEAD_POSITION_FRAC) / _hb.zoom;
     }
     _hb._reveal = null;
+    _hb._postRevealTrickleUntil = now + 2.5;
     maybeClearRemovedTxids(_hb);
 }
 window._hbEndReveal = function(restoreLiveCamera) { var s = getState(); if (s) endBlockReveal(s, !!restoreLiveCamera); };
+
+// Exponential (geometric) zoom interpolation: constant perceptual zoom speed across
+// wide ratios (e.g. 1.6x <-> 0.04x) without the slam/whip of linear zoom lerps.
+function lerpZoomExp(fromZ, toZ, t) {
+    var a = Math.max(0.001, fromZ);
+    var b = Math.max(0.001, toZ);
+    if (Math.abs(a - b) < 1e-6) return b;
+    return a * Math.pow(b / a, t);
+}
 
 function runBlockReveal(_hb, dt, now, w) {
     var r = _hb._reveal;
@@ -483,12 +623,23 @@ function runBlockReveal(_hb, dt, now, w) {
         return false;
     }
     var elapsed = now - r.start;
-    var working = Math.min(_hb.maxZoom, Math.max(r.entryZoom, REVEAL_ZOOM)); // close-up zoom
+    // Frame the spike + shattering bricks at a crisp close-up working zoom (1.4x-2.2x)
+    // whether the viewer started zoomed way out (0.05x) or zoomed way in (12x).
+    var working = Math.min(_hb.maxZoom, Math.min(Math.max(r.entryZoom, 1.4), 2.2));
     if (r.fromZoom === undefined) { r.fromZoom = _hb.zoom; r.fromOffset = _hb.viewOffset; }
-    // Offset that puts a virtual x at the head position (~0.85) for a given zoom.
-    function headOff(vx, z) { return vx - (w * HEAD_POSITION_FRAC) / z; }
+    // Offset that puts a virtual x at a given viewport fraction for zoom z.
+    var liveFrac = _hb._liveHeadFrac || HEAD_POSITION_FRAC;
+    var spikeFrac = Math.min(liveFrac, 0.62); // frame the spike near center-right so left absorption & right unfurl both shine
+    function fracOff(vx, z, frac) { return vx - (w * frac) / z; }
+    function headOff(vx, z) { return fracOff(vx, z, liveFrac); }
 
     if (r.phase === 'form') {
+        // Keep the post-spike timeline cleanly hidden until unfurl eases it out.
+        if (r.newSeg) r.newSeg._revealLineEnd = r.newSeg.x_start;
+        // When already near the spike, give just enough time for the 0.75s strike + BAM
+        // (0.9s) before immediately sucking confirmed bricks in; when traveling from far
+        // zoom, glide smoothly onto the spike over 1.8s then fire the strike.
+        var formSecs = r._deferStrike ? 1.8 : 0.9;
         // "Block #X found" banner, timed to fade out as the harvest ends (the unfurl
         // then swaps in the remaining-count banner). Set once, on the first frame.
         if (!r._bannerBlockSet) {
@@ -502,16 +653,17 @@ function runBlockReveal(_hb, dt, now, w) {
                 start: now,
                 // Linger into the unfurl (by REVEAL_BANNER2_DELAY) so it fades out
                 // right as the "remaining" banner appears: no gap, no rush.
-                end: now + REVEAL_FORM_SECS + REVEAL_HARVEST_SECS + REVEAL_BANNER2_DELAY
+                end: now + formSecs + REVEAL_HARVEST_SECS + REVEAL_BANNER2_DELAY
             };
         }
-        // Zoom ONTO the head where the spike appeared: keep the spike AT the head
-        // (no leftward jog). In the 0.75: 2x range this is ~a no-op zoom.
-        var tf = smoothstep(elapsed / REVEAL_FORM_SECS);
-        _hb.zoom = r.fromZoom + (working - r.fromZoom) * tf;
-        _hb.viewOffset = r.fromOffset + (headOff(r.spikeVX, _hb.zoom) - r.fromOffset) * tf;
-        if (elapsed >= REVEAL_FORM_SECS) {
-            // Camera has arrived at the head. If the strike was deferred (we had to
+        // Exponential zoom + smooth glide onto the spike with zero camera swoop.
+        var tf = smoothstep(elapsed / formSecs);
+        _hb.zoom = lerpZoomExp(r.fromZoom, working, tf);
+        var startFocusVX = r.fromOffset + (w * spikeFrac) / Math.max(0.001, r.fromZoom);
+        var focusVX = startFocusVX + (r.spikeVX - startFocusVX) * tf;
+        _hb.viewOffset = fracOff(focusVX, _hb.zoom, spikeFrac);
+        if (elapsed >= formSecs) {
+            // Camera has arrived at the spike. If the strike was deferred (we had to
             // travel here), fire it NOW so the spike pops on arrival, then harvest.
             if (r._deferStrike && r.spikeSeg && !r.spikeSeg._strikeStart) {
                 r.spikeSeg._strikeStart = now;
@@ -520,32 +672,56 @@ function runBlockReveal(_hb, dt, now, w) {
             r.phase = 'harvest'; r.start = now; r.fromZoom = undefined;
         }
     } else if (r.phase === 'harvest') {
-        // Hold on the head while the confirmed bricks fly into the spike and the
-        // leftover mempool fades out in place.
-        var th = smoothstep(elapsed / REVEAL_HARVEST_SECS);
+        if (r.newSeg) r.newSeg._revealLineEnd = r.newSeg.x_start;
+        // Hold cleanly on the spike while confirmed bricks fly into it and the
+        // leftover mempool fades out in place. If the block had 0 confirmed bricks
+        // in our mempool (e.g. coinbase-only block), keep the beat crisp instead
+        // of holding 2 full seconds over an empty fade.
+        var harvestDur = (r.confirmed && r.confirmed.length > 0) ? REVEAL_HARVEST_SECS : 0.65;
+        var th = smoothstep(elapsed / harvestDur);
         _hb.zoom = working;
-        _hb.viewOffset = headOff(r.spikeVX, working);
+        _hb.viewOffset = fracOff(r.spikeVX, working, spikeFrac);
         if (r.oldSeg) r.oldSeg._revealFade = 1 - th;
-        if (elapsed >= REVEAL_HARVEST_SECS) {
+        if (elapsed >= harvestDur) {
             // Open the unfurl: re-lay the leftovers (staggered over a rate-based
             // duration) and compute the fit-zoom that frames the whole timeline.
-            var unfurlSecs = Math.max(REVEAL_RELAY_MIN, Math.min(REVEAL_RELAY_MAX, r.leftovers.length / REVEAL_RELAY_RATE));
-            relayRevealLeftovers(_hb, r, unfurlSecs); // sets r.width, virtualX = head
-            r.unfurlSecs = unfurlSecs;
-            var span = Math.max(1, (r.newSeg.x_start + r.width) - r.spikeVX);
-            r.fitZoom = Math.max(_hb.minZoom, Math.min(working, (w * REVEAL_FIT_MARGIN) / span));
-            r.phase = 'unfurl'; r.start = now; r.fromZoom = undefined;
+            // If leftovers is empty, skip 'unfurl' cleanly and glide back to live head.
+            var hasLeftovers = r.leftovers && r.leftovers.length > 0;
+            var unfurlSecs = hasLeftovers
+                ? Math.max(REVEAL_RELAY_MIN, Math.min(REVEAL_RELAY_MAX, r.leftovers.length / REVEAL_RELAY_RATE))
+                : 0;
+            relayRevealLeftovers(_hb, r, unfurlSecs); // lays leftovers, sets r.width, virtualX = head (oldSeg compression deferred to reveal end)
+            if (!r.leftovers || r.leftovers.length === 0) {
+                r.fitZoom = working;
+                r.phase = 'return';
+                r.start = now;
+                r.fromZoom = undefined;
+            } else {
+                r.unfurlSecs = unfurlSecs;
+                var span = Math.max(1, (r.newSeg.x_start + r.width) - r.spikeVX);
+                r.fitZoom = Math.max(_hb.minZoom, Math.min(working, (w * REVEAL_FIT_MARGIN) / span));
+                r.phase = 'unfurl'; r.start = now; r.fromZoom = undefined;
+            }
         }
     } else if (r.phase === 'unfurl') {
-        // Follow the falling-brick FRONT rightward while zooming OUT to frame the
-        // whole timeline. Early = bricks falling up close; end = the whole mempool.
-        // Ease the offset OUT from where harvest ended (r.fromOffset) so there's no
-        // pop as the framing shifts from the spike peak to the advancing front.
+        // Advance virtualX smoothly in real time once leftovers are laid so live
+        // post-block arrivals drop continuously with zero jump when return finishes.
+        if (dt > 0) _hb.virtualX += dt * FLATLINE_PX_PER_SEC;
+        // Follow the falling-brick FRONT rightward while exponentially zooming OUT
+        // at constant perceptual speed to frame the spike + entire carried mempool.
         var tu = elapsed / r.unfurlSecs; if (tu > 1) tu = 1;
-        var su = smootherstep(tu); // gentler glide on the big pan-out + zoom-out
-        _hb.zoom = working + (r.fitZoom - working) * su;
-        var frontVX = r.newSeg.x_start + tu * r.width;
-        _hb.viewOffset = r.fromOffset + (headOff(frontVX, _hb.zoom) - r.fromOffset) * su;
+        var su = smootherstep(tu);
+        // Ease the glowing flatline ribbon smoothly rightward from the spike just
+        // ahead of the raining brick wave instead of popping it in on frame 0.
+        if (r.newSeg) {
+            var lineT = smootherstep(Math.min(1, tu * 1.06));
+            r.newSeg._revealLineEnd = r.newSeg.x_start + (_hb.virtualX - r.newSeg.x_start) * lineT;
+        }
+        _hb.zoom = lerpZoomExp(working, r.fitZoom, su);
+        var targetEndVX = _hb.virtualX;
+        var frontVX = r.spikeVX + (targetEndVX - r.spikeVX) * su;
+        var unfurlFrac = spikeFrac + (0.88 - spikeFrac) * su;
+        _hb.viewOffset = fracOff(frontVX, _hb.zoom, unfurlFrac);
         // A bit into the unfurl, cross-fade to the remaining-count banner (same
         // style): the mempool after the harvest. r.leftovers is the exact carried
         // set (P5). Persists through the rest of the unfurl + hold, fades on return.
@@ -559,31 +735,37 @@ function runBlockReveal(_hb, dt, now, w) {
                 end: now + (r.unfurlSecs - elapsed) + REVEAL_HOLD_SECS + REVEAL_RETURN_SECS
             };
         }
-        if (elapsed >= r.unfurlSecs) { r.phase = 'hold'; r.start = now; r.fromZoom = undefined; }
+        if (elapsed >= r.unfurlSecs) {
+            if (r.newSeg) r.newSeg._revealLineEnd = undefined;
+            r.phase = 'hold'; r.start = now; r.fromZoom = undefined;
+        }
     } else if (r.phase === 'hold') {
+        if (r.newSeg) r.newSeg._revealLineEnd = undefined;
+        // Keep the live head gliding smoothly at real-time speed while holding.
+        if (dt > 0) _hb.virtualX += dt * FLATLINE_PX_PER_SEC;
         // Hold on the whole timeline: "here's the size of the mempool".
         _hb.zoom = r.fitZoom;
-        _hb.viewOffset = headOff(_hb.virtualX, r.fitZoom);
+        _hb.viewOffset = fracOff(_hb.virtualX, r.fitZoom, 0.88);
         if (elapsed >= REVEAL_HOLD_SECS) { r.phase = 'return'; r.start = now; r.fromZoom = undefined; }
     } else { // return
-        // Zoom back IN to the head at the ORIGINAL entry zoom, back where you were.
-        var tr = smootherstep(elapsed / REVEAL_RETURN_SECS); // gentle settle back to the head
-        _hb.zoom = r.fitZoom + (r.entryZoom - r.fitZoom) * tr;
-        _hb.viewOffset = headOff(_hb.virtualX, _hb.zoom);
+        if (r.newSeg) r.newSeg._revealLineEnd = undefined;
+        // Keep virtualX advancing smoothly at real-time speed right into LIVE handoff
+        // so there is zero leap or brick dump when the reveal concludes.
+        if (dt > 0) _hb.virtualX += dt * FLATLINE_PX_PER_SEC;
+        // Exponentially zoom back IN to the live tip at the ORIGINAL entry zoom.
+        var tr = smootherstep(elapsed / REVEAL_RETURN_SECS);
+        _hb.zoom = lerpZoomExp(r.fitZoom, r.entryZoom, tr);
+        var retFrac = 0.88 + (liveFrac - 0.88) * tr;
+        _hb.viewOffset = fracOff(_hb.virtualX, _hb.zoom, retFrac);
         if (elapsed >= REVEAL_RETURN_SECS) {
-            var postRevealElapsed = r.revealWallStart > 0
-                ? Math.max(0, Math.min(now - r.revealWallStart, 60))
-                : 0;
-            var basePostX = (r.newSeg && r.newSeg._carryEndX)
-                ? (r.newSeg._carryEndX + 10)
-                : _hb.virtualX;
-            var targetPostX = basePostX + postRevealElapsed * FLATLINE_PX_PER_SEC;
-            if (targetPostX > _hb.virtualX) {
-                _hb.virtualX = targetPostX;
-            }
+            // Now that the camera is back at entryZoom on the right-hand live head
+            // (with oldSeg off-screen to the left), compress oldSeg silently so zero
+            // pixels jump on screen while past live blocks keep progressive spacing.
+            finalizeRevealCompression(_hb, r);
             _hb.zoom = r.entryZoom;
             _hb.viewOffset = headOff(_hb.virtualX, r.entryZoom);
             _hb._reveal = null;
+            _hb._postRevealTrickleUntil = now + 2.5;
             maybeClearRemovedTxids(_hb);
             return false; // back at the head, entry zoom — normal follow resumes
         }
@@ -600,7 +782,7 @@ function runBlockReveal(_hb, dt, now, w) {
 // on any user takeover (autoFollow drops / drag / pinch / control press).
 var INTRO_HOLD_SECS = 3.5;    // let the raining brick cascade finish settling before zooming in
 var INTRO_ZOOM_SECS = 2.5;    // slow zoom to the head
-var INTRO_TARGET_ZOOM = 1.5;  // first-load resting zoom (also gated in placeHistoryTxs)
+var INTRO_TARGET_ZOOM = 1.6;  // first-load resting zoom (5 * 1.6 = 8px exact column pitch)
 function runIntro(_hb, dt, now, w) {
     var it = _hb._intro;
     if (!_hb.autoFollow || _hb.isDragging || _hb.paused || _hb._pinching) {
@@ -665,41 +847,46 @@ export function drawFrame(frameTime) {
     if (dt > 0.5) dt = 0.5; // clamp to avoid huge jumps on tab switch
     _hb.lastFrameTime = now;
 
+    var isHistory = _hb._viewMode === 'history';
+
     // Safety net: replay any block that arrived while the tab was hidden but
     // wasn't drained by visibilitychange (would otherwise strand, canvas stuck
     // on the old block while the header shows the new one). RAF only runs at full
     // rate when visible, so this catches up within a frame of the tab showing.
     // Cheap guard: the queue is empty in normal operation.
-    if (_hb._blockQueue && _hb._blockQueue.length > 0 && !document.hidden && window._hbDrainBlockQueue) {
+    if (!isHistory && _hb._blockQueue && _hb._blockQueue.length > 0 && !document.hidden && window._hbDrainBlockQueue) {
         window._hbDrainBlockQueue();
     }
 
     // ── Advance live flatline ──────────────────────────────
-    // Suppressed during a block reveal: the sequencer owns virtualX then (the form
-    // + harvest beats hold it at the spike, the relay beat advances it as the
-    // mempool re-lays).
-    var liveSeg = _hb.timeline.length > 0 ? _hb.timeline[_hb.timeline.length - 1] : null;
-    if (!_hb._reveal && liveSeg && liveSeg.type === 'flatline' && liveSeg.x_end === null) {
+    // Suppressed in history mode and during a block reveal: the sequencer owns
+    // virtualX then (the form + harvest beats hold it at the spike, the relay
+    // beat advances it as the mempool re-lays).
+    var liveSeg = (!isHistory && _hb.timeline.length > 0) ? _hb.timeline[_hb.timeline.length - 1] : null;
+    if (!isHistory && !_hb._reveal && liveSeg && liveSeg.type === 'flatline' && liveSeg.x_end === null) {
         _hb.virtualX += dt * FLATLINE_PX_PER_SEC;
     }
 
     // Lay down queued mempool-tx bricks once per frame (RAF-driven), spreading
     // the work across frames instead of a 200ms off-RAF burst that hitched the
     // scroll. Placed after the virtualX advance so bricks land at the live head.
-    // Suppressed during a block reveal so live txs queue up and flush afterward
-    // (they'd otherwise pile at the reveal's controlled head).
-    if (!_hb._reveal) flushTxBatch();
+    // Suppressed in history mode and during the form/harvest/unfurl/hold beats of a
+    // reveal; allowed during `return` so queued arrivals trickle smoothly onto the tip.
+    if (!isHistory && (!_hb._reveal || _hb._reveal.phase === 'return')) flushTxBatch();
 
     // Block-reveal sequencer takes precedence when armed, it drives virtualX,
-    // the leftover placement, zoom AND viewOffset (spike → relay). It returns
+    // the leftover placement, zoom AND viewOffset (spike -> relay). It returns
     // false when it finishes or the user takes over, falling through to normal
-    // handling in the same frame.
-    if (_hb._reveal && runBlockReveal(_hb, dt, now, w)) {
+    // handling in the same frame. In history mode, camera stays static under user control.
+    if (isHistory) {
+        // User owns panning/zooming in history mode; no auto-follow or play drift.
+    } else if (_hb._reveal && runBlockReveal(_hb, dt, now, w)) {
         // Sequencer owns the camera this frame.
     } else if (_hb._intro && runIntro(_hb, dt, now, w)) {
         // First-load intro owns the camera this frame.
     } else if (_hb.autoFollow && !_hb.isDragging) {
-        var targetOffset = _hb.virtualX - (w * HEAD_POSITION_FRAC) / _hb.zoom;
+        var activeHeadFrac = _hb._liveHeadFrac || HEAD_POSITION_FRAC;
+        var targetOffset = _hb.virtualX - (w * activeHeadFrac) / _hb.zoom;
         var offDiff = targetOffset - _hb.viewOffset;
         // Ease the head-follow so a post-block fast-forward (or a frame-hitch
         // catch-up) slides into place instead of lurching. Snap only for very
@@ -716,15 +903,21 @@ export function drawFrame(frameTime) {
     }
 
     // ── Compute current color from live state ──────────────
-    var elapsed = _hb.lastBlockTime > 0 ? now - _hb.lastBlockTime : 0;
+    var elapsed = _hb.lastBlockTime > 0 ? Math.max(0, now - _hb.lastBlockTime) : 0;
     var targetColor = computeColor(elapsed, _hb.nextBlockFee, _hb.mempoolMB);
-    // Check for color change BEFORE advancing lerp to avoid state corruption
+    var displayedColor = _hb.colorLerp < 1
+        ? lerpColor(_hb.prevColor, _hb.targetColor, _hb.colorLerp)
+        : _hb.currentColor;
+    // Start any new blend from the exact color currently displayed and advance by
+    // elapsed time (~0.85s) so low frame rates (<25 fps) never snap back.
     if (targetColor !== _hb.targetColor) {
-        _hb.prevColor = _hb.currentColor;
+        _hb.prevColor = displayedColor;
+        _hb.currentColor = displayedColor;
         _hb.targetColor = targetColor;
         _hb.colorLerp = 0;
-    } else {
-        _hb.colorLerp = Math.min(_hb.colorLerp + 0.02, 1);
+    } else if (_hb.colorLerp < 1) {
+        var stepT = (dt > 0 ? dt : (1 / 60)) / 0.85;
+        _hb.colorLerp = Math.min(_hb.colorLerp + stepT, 1);
         if (_hb.colorLerp >= 1) {
             _hb.currentColor = targetColor;
             _hb.prevColor = targetColor;
@@ -738,7 +931,7 @@ export function drawFrame(frameTime) {
     // big gap-recovery), so the veil covers the spikes + bricks as they stream in and
     // eases the whole timeline up from the bg over LOAD_FADE_SECS.
     var loadFade = 1;
-    if (_hb._loadFadeStart) {
+    if (!isHistory && _hb._loadFadeStart) {
         var lfe = now - _hb._loadFadeStart;
         if (lfe < LOAD_FADE_SECS) loadFade = smootherstep(lfe / LOAD_FADE_SECS);
     }
@@ -752,38 +945,114 @@ export function drawFrame(frameTime) {
     var viewLeft = _hb.viewOffset;
     var viewRight = _hb.viewOffset + w / _hb.zoom;
 
+    // ── Bidirectional lazy-loading of historical blocks ─────
+    if (window._hbMaybeFetchMoreBlocks) {
+        window._hbMaybeFetchMoreBlocks(_hb, viewLeft, viewRight);
+    }
+
     // ── Draw timeline segments ─────────────────────────────
     // No vertical tremor on long waits: the flatline color shift (via
     // computeColor on elapsed) + the "last block" timer already convey the
     // wait, and a heaving baseline added motion without information.
-    for (var si = 0; si < _hb.timeline.length; si++) {
-        var seg = _hb.timeline[si];
+    var spikeScreenW = 51 * POINT_WIDTH * _hb.zoom;
+    var lowDetailBlock = spikeScreenW < 14;
+    var skipGlow = _hb.zoom < 0.25;
+
+    // Binary-search first segment whose end >= viewLeft (O(log N) over thousands of loaded blocks)
+    var tl = _hb.timeline;
+    var bLo = 0, bHi = tl.length;
+    while (bLo < bHi) {
+        var bMid = (bLo + bHi) >> 1;
+        var bSeg = tl[bMid];
+        var bEnd = (bSeg.type === 'block' || bSeg.type === 'pending_block')
+            ? bSeg.x_end
+            : (bSeg.x_end !== null ? bSeg.x_end : _hb.virtualX);
+        if (bEnd < viewLeft) bLo = bMid + 1;
+        else bHi = bMid;
+    }
+
+    var lastBlockLabelRight = -Infinity;
+    var showBlockLabels = !lowDetailBlock && spikeScreenW >= 34;
+
+    for (var si = bLo; si < tl.length; si++) {
+        var seg = tl[si];
         var segStart = seg.x_start;
-        var segEnd = seg.type === 'block' ? seg.x_end
-                   : (seg.x_end !== null ? seg.x_end : _hb.virtualX);
+        var segEnd = (seg.type === 'block' || seg.type === 'pending_block')
+            ? seg.x_end
+            : (seg.x_end !== null ? seg.x_end : _hb.virtualX);
 
         if (segEnd < viewLeft) continue;   // before viewport
         if (segStart > viewRight) break;   // past viewport — all further segments are too
 
         if (seg.type === 'block') {
-            drawBlockSegment(ctx, seg, viewLeft, baseline, liveColor, now);
+            drawBlockSegment(ctx, seg, viewLeft, baseline, liveColor, now, lowDetailBlock, skipGlow);
+            // Subtle block-height timeline tick underneath each spike when zoom gives clean spacing
+            // (skipped on _historyTarget since it already draws its orange #height tag above the peak)
+            if (showBlockLabels && seg.height != null && !seg._historyTarget) {
+                var lmMapLbl = (typeof window !== 'undefined' && window._hbLandmarks) ? window._hbLandmarks : null;
+                var isLmLbl = !!(lmMapLbl && lmMapLbl[String(seg.height)]);
+                var lblMidX = virtualToCanvas((seg.x_start + seg.x_end) * 0.5);
+                var lblText = (isLmLbl ? '\u2605 #' : '#') + seg.height.toLocaleString();
+                var lblW = lblText.length * 6.2 + 10;
+                if (lblMidX - lblW * 0.5 > lastBlockLabelRight + 8) {
+                    var deepestY = seg._maxY != null ? seg._maxY : 24;
+                    var lblY = Math.min(h - 10, baseline + Math.max(26, deepestY + 14));
+                    var isHovLbl = _hb.hoveredBlock === seg || seg._historyTarget;
+                    ctx.save();
+                    ctx.font = ((isHovLbl || isLmLbl) ? 'bold 10px monospace' : '10px monospace');
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'alphabetic';
+                    ctx.fillStyle = isHovLbl
+                        ? (seg._historyTarget ? '#f7931a' : (seg.color || '#ffffff'))
+                        : (isLmLbl ? 'rgba(247, 147, 26, 0.78)' : 'rgba(255, 255, 255, 0.28)');
+                    ctx.fillText(lblText, lblMidX, lblY);
+                    ctx.restore();
+                    lastBlockLabelRight = lblMidX + lblW * 0.5;
+                }
+            }
+        } else if (seg.type === 'pending_block') {
+            drawPendingBlockSegment(ctx, seg, baseline, now);
         } else {
-            var flatColor = (seg.x_end === null) ? liveColor : (seg.color || COLORS.healthy);
-            drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, baseline, flatColor, seg.x_end === null, now);
+            var isOpenFlat = (seg.x_end === null);
+            var flatWaitSec;
+            var flatColor;
+            if (isOpenFlat) {
+                var feeBoost = (_hb.nextBlockFee || 0) >= 30
+                    ? Math.min(600, ((_hb.nextBlockFee - 30) / 120) * 600) : 0;
+                flatWaitSec = elapsed + feeBoost;
+                flatColor = liveColor;
+            } else {
+                var segInter = resolveInterBlockSeconds(seg);
+                if (segInter === null && si + 1 < tl.length && tl[si + 1].type === 'block') {
+                    segInter = resolveInterBlockSeconds(tl[si + 1]);
+                }
+                flatWaitSec = segInter === null ? null : Math.max(0, segInter);
+                flatColor = seg.color || (segInter === null ? UNKNOWN_INTERVAL_COLOR : waitColor(flatWaitSec));
+            }
+            var drawSegEnd = (typeof seg._revealLineEnd === 'number')
+                ? Math.min(segEnd, seg._revealLineEnd)
+                : segEnd;
+            drawFlatlineSegment(ctx, seg, drawSegEnd, viewLeft, viewRight, baseline, flatColor, isOpenFlat, now, flatWaitSec, skipGlow);
         }
     }
 
     // ── Draw tooltip if hovering ───────────────────────────
+    // Hover preview takes priority even while another tx is pinned in the HTML panel.
+    // Suppress redundant canvas tooltip for _pinnedBlip when __hbSelectTx is active.
     ctx.globalAlpha = 1;
     if (_hb.hoveredBlock) {
         var hSeg = _hb.hoveredBlock;
         var midX = virtualToCanvas((hSeg.x_start + hSeg.x_end) / 2);
         drawTooltip(ctx, hSeg, midX, baseline - 30, baseline);
-    } else if (_hb._pinnedBlip && !_hb._pinnedBlip._removed && _hb._pinnedBlip.x !== undefined) {
-        var pbx = virtualToCanvas(_hb._pinnedBlip.x);
-        drawBlipTooltip(ctx, _hb._pinnedBlip, pbx, baseline);
+    } else if (_hb.hoveredPendingBlock) {
+        var hpSeg = _hb.hoveredPendingBlock;
+        var hpMidX = virtualToCanvas((hpSeg.x_start + hpSeg.x_end) / 2);
+        drawPendingBlockTooltip(ctx, hpSeg, hpMidX, baseline - 30);
     } else if (_hb.hoveredBlip && !_hb.hoveredBlip._removed) {
         drawBlipTooltip(ctx, _hb.hoveredBlip, _hb.hoverCanvasX, baseline);
+    } else if (!isHistory && _hb._pinnedBlip && !_hb._pinnedBlip._removed && _hb._pinnedBlip.x !== undefined && typeof window.__hbSelectTx !== 'function') {
+        var pbx = virtualToCanvas(_hb._pinnedBlip.x);
+        drawBlipTooltip(ctx, _hb._pinnedBlip, pbx, baseline);
     } else if (_hb.hoveredFlatline) {
         drawFlatlineTooltip(ctx, _hb.hoveredFlatline, _hb.hoverCanvasX || w / 2, baseline);
     }
@@ -792,37 +1061,79 @@ export function drawFrame(frameTime) {
 
     // Jump to Live is now in the control bar
 
-    // ── Draw search highlight glow ────────────────────────
-    if (_hb._searchHighlight) {
+    // ── Draw search highlight reticle (locked onto the actual brick) ──
+    if (!isHistory && _hb._searchHighlight) {
         var sh = _hb._searchHighlight;
         var shElapsed = now - sh.start;
         if (shElapsed > sh.duration) {
             _hb._searchHighlight = null;
         } else {
-            var shCX = (sh.x - _hb.viewOffset) * _hb.zoom;
-            var shCY = (h < 350 ? h * 0.78 : h * 0.55) + (_hb.viewOffsetY || 0);
-            // Pulsing glow: alpha fades, radius breathes
-            var shFade = 1.0 - shElapsed / sh.duration;
-            var shPulse = 1.0 + 0.3 * Math.sin(shElapsed * 4);
-            var shRadius = 20 * _hb.zoom * shPulse;
+            // Resolve the live brick reference so coordinates stay exact even if columns restack
+            var targetBlip = (sh.txid && _hb._pinnedBlip && _hb._pinnedBlip.txid === sh.txid && !_hb._pinnedBlip._removed)
+                ? _hb._pinnedBlip
+                : (sh.blip && !sh.blip._removed ? sh.blip : null);
+            var shVirtX = targetBlip ? (targetBlip.x !== undefined ? targetBlip.x : sh.x) : sh.x;
+            var shCX = (shVirtX - _hb.viewOffset) * _hb.zoom;
+            var shHeightScale = brickHeightScale(_hb.zoom);
+            var shBW = targetBlip ? Math.max(4, (targetBlip.brickW || 4) * _hb.zoom) : Math.max(6, 4 * _hb.zoom);
+            var shBH = targetBlip ? Math.max(4, (targetBlip.brickH || targetBlip.height || 6) * shHeightScale) : 8;
+            var shSY = targetBlip ? (targetBlip.stackY || 0) * shHeightScale : 0;
+            var shLeft = shCX - shBW * 0.5;
+            var shTop = baseline - shSY - shBH;
+
+            // Smooth lock-in over first 0.45s, then gentle breathe & clean fade-out
+            var lockT = Math.min(1, shElapsed / 0.45);
+            var lockEase = 1 - Math.pow(1 - lockT, 3);
+            var fadeOut = shElapsed > (sh.duration - 1.2)
+                ? Math.max(0, (sh.duration - shElapsed) / 1.2)
+                : 1.0;
+            var breathe = 0.5 + 0.5 * Math.sin(shElapsed * 5.0);
+            var pad = (22 * (1 - lockEase)) + 5 + breathe * 1.8;
+
+            var bx1 = shLeft - pad;
+            var by1 = shTop - pad;
+            var bx2 = shLeft + shBW + pad;
+            var by2 = shTop + shBH + pad;
+            var cornerLen = Math.max(6, Math.min(13, Math.min(bx2 - bx1, by2 - by1) * 0.32));
+
             ctx.save();
-            ctx.beginPath();
-            ctx.arc(shCX, shCY, shRadius, 0, Math.PI * 2);
-            ctx.strokeStyle = 'rgba(0, 230, 118, ' + (shFade * 0.8) + ')';
+            // 1. Subtle vertical beacon column from baseline up above the target brick
+            var beaconTop = Math.max(12, shTop - 36);
+            var beaconGrad = ctx.createLinearGradient(0, beaconTop, 0, baseline);
+            beaconGrad.addColorStop(0, 'rgba(0, 230, 118, 0)');
+            beaconGrad.addColorStop(0.55, 'rgba(0, 230, 118, ' + (0.14 * fadeOut).toFixed(3) + ')');
+            beaconGrad.addColorStop(1, 'rgba(0, 230, 118, ' + (0.04 * fadeOut).toFixed(3) + ')');
+            ctx.fillStyle = beaconGrad;
+            ctx.fillRect(shLeft - 2, beaconTop, shBW + 4, Math.max(0, baseline - beaconTop));
+
+            // 2. Crisp 4-corner viewfinder brackets around the brick
+            ctx.strokeStyle = 'rgba(0, 230, 118, ' + (0.95 * fadeOut).toFixed(3) + ')';
             ctx.lineWidth = 2;
+            ctx.lineCap = 'round';
             ctx.shadowColor = '#00e676';
-            ctx.shadowBlur = 15 * shFade;
-            ctx.stroke();
-            // Inner crosshair
+            ctx.shadowBlur = 10 * fadeOut;
             ctx.beginPath();
-            ctx.moveTo(shCX - shRadius * 0.4, shCY);
-            ctx.lineTo(shCX + shRadius * 0.4, shCY);
-            ctx.moveTo(shCX, shCY - shRadius * 0.4);
-            ctx.lineTo(shCX, shCY + shRadius * 0.4);
-            ctx.strokeStyle = 'rgba(0, 230, 118, ' + (shFade * 0.5) + ')';
-            ctx.lineWidth = 1;
-            ctx.shadowBlur = 0;
+            // Top-left
+            ctx.moveTo(bx1, by1 + cornerLen); ctx.lineTo(bx1, by1); ctx.lineTo(bx1 + cornerLen, by1);
+            // Top-right
+            ctx.moveTo(bx2 - cornerLen, by1); ctx.lineTo(bx2, by1); ctx.lineTo(bx2, by1 + cornerLen);
+            // Bottom-left
+            ctx.moveTo(bx1, by2 - cornerLen); ctx.lineTo(bx1, by2); ctx.lineTo(bx1 + cornerLen, by2);
+            // Bottom-right
+            ctx.moveTo(bx2 - cornerLen, by2); ctx.lineTo(bx2, by2); ctx.lineTo(bx2, by2 - cornerLen);
             ctx.stroke();
+
+            // 3. Gently bobbing downward chevron directly above the brick
+            var chevY = by1 - 8 - breathe * 3.5;
+            if (chevY > 10) {
+                ctx.fillStyle = 'rgba(0, 230, 118, ' + (0.95 * fadeOut).toFixed(3) + ')';
+                ctx.beginPath();
+                ctx.moveTo(shCX, chevY + 5);
+                ctx.lineTo(shCX - 5, chevY - 2);
+                ctx.lineTo(shCX + 5, chevY - 2);
+                ctx.closePath();
+                ctx.fill();
+            }
             ctx.restore();
         }
     }
@@ -879,9 +1190,13 @@ export function drawFrame(frameTime) {
     }
 
     // ── Draw live indicator dot ────────────────────────────
-    if (liveSeg && liveSeg.x_end === null) {
-        var dotX = virtualToCanvas(_hb.virtualX);
-        if (dotX >= -10 && dotX <= w + 10) {
+    if (!isHistory && liveSeg && liveSeg.x_end === null) {
+        var dotVirtX = (typeof liveSeg._revealLineEnd === 'number')
+            ? Math.min(_hb.virtualX, liveSeg._revealLineEnd)
+            : _hb.virtualX;
+        var hideDotForReveal = (typeof liveSeg._revealLineEnd === 'number' && liveSeg._revealLineEnd <= liveSeg.x_start + 0.5);
+        var dotX = virtualToCanvas(dotVirtX);
+        if (!hideDotForReveal && dotX >= -10 && dotX <= w + 10) {
             var dotPulse = 0.5 + 0.5 * Math.sin(now * 3);
             // Outer glow ring
             ctx.beginPath();
@@ -994,11 +1309,11 @@ export function drawDisconnectedOverlay(ctx, w, h, nowSec) {
 }
 
 // Draw a single block waveform segment
-export function drawBlockSegment(ctx, seg, viewLeft, baseline, fallbackColor, now) {
+export function drawBlockSegment(ctx, seg, viewLeft, baseline, fallbackColor, now, lowDetail, skipGlow) {
     var _hb = getState();
     var pts = seg.points;
     var color = seg.color || fallbackColor;
-    var isHovered = (_hb.hoveredBlock === seg);
+    var isHovered = (_hb && _hb.hoveredBlock === seg);
 
     // Strike animation: for a live block's spike, scale the whole QRS from the
     // baseline up: a slow build then a snap with overshoot (spikeStrike). amp=1
@@ -1012,7 +1327,7 @@ export function drawBlockSegment(ctx, seg, viewLeft, baseline, fallbackColor, no
         // Reveal spike awaiting its strike. Stay flat only while an active reveal
         // still owns it (camera traveling to the head); otherwise it's orphaned
         // (reveal ended/never armed): strike it now so it can never stay flat.
-        if (_hb._reveal && _hb._reveal.spikeSeg === seg) {
+        if (_hb && _hb._reveal && _hb._reveal.spikeSeg === seg) {
             amp = 0;
         } else {
             seg._strikeStart = now;
@@ -1028,12 +1343,56 @@ export function drawBlockSegment(ctx, seg, viewLeft, baseline, fallbackColor, no
         if (we >= 0 && we < SPIKE_SHOCKWAVE_SECS) shockT = we / SPIKE_SHOCKWAVE_SECS;
     }
 
+    var isStriking = !!seg._strikePending
+        || !!(seg._strikeStart && (!now || (now - seg._strikeStart) < (SPIKE_STRIKE_SECS * SPIKE_BAM_AT + SPIKE_SHOCKWAVE_SECS)));
+
+    // Zoomed-out LOD: draw a crisp 4-point peak/trough polyline with zero blur
+    // instead of 51 sub-pixel vertices per spike.
+    if (lowDetail && !isHovered && !isStriking && !seg._historyTarget) {
+        var minY = seg._minY;
+        var minIdx = seg._minYIdx;
+        var maxY = seg._maxY;
+        var maxIdx = seg._maxYIdx;
+        if (minIdx === undefined || maxIdx === undefined) {
+            minY = 0; minIdx = 0; maxY = 0; maxIdx = 0;
+            for (var li = 0; li < pts.length; li++) {
+                if (pts[li] < minY) { minY = pts[li]; minIdx = li; }
+                if (pts[li] > maxY) { maxY = pts[li]; maxIdx = li; }
+            }
+            seg._minY = minY; seg._minYIdx = minIdx;
+            seg._maxY = maxY; seg._maxYIdx = maxIdx;
+        }
+        var lx1 = virtualToCanvas(seg.x_start);
+        var lx2 = virtualToCanvas(seg.x_end);
+        var lMinX = virtualToCanvas(seg.x_start + minIdx * POINT_WIDTH);
+        var lMaxX = virtualToCanvas(seg.x_start + maxIdx * POINT_WIDTH);
+        ctx.beginPath();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.25;
+        ctx.shadowBlur = 0;
+        ctx.moveTo(lx1, baseline);
+        if (minIdx <= maxIdx) {
+            ctx.lineTo(lMinX, baseline + minY * amp);
+            ctx.lineTo(lMaxX, baseline + maxY * amp);
+        } else {
+            ctx.lineTo(lMaxX, baseline + maxY * amp);
+            ctx.lineTo(lMinX, baseline + minY * amp);
+        }
+        ctx.lineTo(lx2, baseline);
+        ctx.stroke();
+        return;
+    }
+
     ctx.beginPath();
     ctx.strokeStyle = color;
     ctx.lineWidth = isHovered ? 3 : 2;
-    ctx.shadowColor = color;
-    // Flash: extra glow peaking at the BAM and decaying.
-    ctx.shadowBlur = (isHovered ? 24 : 14) + (shockT >= 0 ? (1 - shockT) * 34 : 0);
+    if (skipGlow && !isHovered && !isStriking) {
+        ctx.shadowBlur = 0;
+    } else {
+        ctx.shadowColor = color;
+        // Flash: extra glow peaking at the BAM and decaying.
+        ctx.shadowBlur = (isHovered ? 24 : 14) + (shockT >= 0 ? (1 - shockT) * 34 : 0);
+    }
 
     for (var i = 0; i < pts.length; i++) {
         var vx = seg.x_start + i * POINT_WIDTH;
@@ -1048,16 +1407,101 @@ export function drawBlockSegment(ctx, seg, viewLeft, baseline, fallbackColor, no
     ctx.stroke();
     ctx.shadowBlur = 0;
 
-    // Radiating shockwave from the peak, fired at the BAM. Peak scan only here (not
-    // per-frame for every settled/history spike).
+    // Radiating shockwave from the peak, fired at the BAM.
     if (shockT >= 0) {
-        var peakIdx = 0, peakY = 0;
-        for (var pk = 0; pk < pts.length; pk++) {
-            if (pts[pk] < peakY) { peakY = pts[pk]; peakIdx = pk; }
+        var peakIdx = seg._minYIdx;
+        var peakY = seg._minY;
+        if (peakIdx === undefined) {
+            peakIdx = 0; peakY = 0;
+            for (var pk = 0; pk < pts.length; pk++) {
+                if (pts[pk] < peakY) { peakY = pts[pk]; peakIdx = pk; }
+            }
         }
         var peakX = virtualToCanvas(seg.x_start + peakIdx * POINT_WIDTH);
         drawShockwave(ctx, peakX, baseline + peakY * amp, shockT, color);
     }
+
+    // Subtle amber/cyan target marker over the requested historical block spike
+    if (seg._historyTarget) {
+        var hPeakIdx = seg._minYIdx;
+        var hPeakY = seg._minY;
+        if (hPeakIdx === undefined) {
+            hPeakIdx = 0; hPeakY = 0;
+            for (var hpk = 0; hpk < pts.length; hpk++) {
+                if (pts[hpk] < hPeakY) { hPeakY = pts[hpk]; hPeakIdx = hpk; }
+            }
+        }
+        var hcx1 = virtualToCanvas(seg.x_start);
+        var hcx2 = virtualToCanvas(seg.x_end);
+        var hPeakX = virtualToCanvas(seg.x_start + hPeakIdx * POINT_WIDTH);
+        var hPeakScreenY = baseline + hPeakY * amp;
+        ctx.save();
+        ctx.fillStyle = 'rgba(247, 147, 26, 0.08)';
+        ctx.fillRect(hcx1, 8, Math.max(2, hcx2 - hcx1), (_hb ? _hb.height : 400) - 16);
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.85)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(hPeakX, hPeakScreenY, 6, 0, Math.PI * 2);
+        ctx.stroke();
+        var tagText = '#' + (seg.height || 0).toLocaleString();
+        ctx.font = 'bold 11px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#f7931a';
+        var tagY = Math.max(18, hPeakScreenY - 12);
+        ctx.fillText(tagText, hPeakX, tagY);
+        ctx.restore();
+    }
+}
+
+// Draw a reserved pending_block slot: always keep the EKG baseline level (no fake
+// provisional peak and no jarring cyan box on fast blocks). During the 2s grace period
+// it blends seamlessly into the live baseline; only on a genuinely slow block (>= 2s)
+// does it show a subtle pulsing ring on the baseline and quiet "Pending block" label.
+export function drawPendingBlockSegment(ctx, seg, baseline, nowSec) {
+    var _hb = getState();
+    var cx1 = virtualToCanvas(seg.x_start);
+    var cx2 = virtualToCanvas(seg.x_end);
+    var slotW = Math.max(2, cx2 - cx1);
+    var ageMs = seg.receivedWallMs ? (Date.now() - seg.receivedWallMs) : 0;
+    var showPendingCue = ageMs >= 2000;
+    var color = showPendingCue ? (seg.color || '#38bdf8') : ((_hb && _hb.currentColor) || COLORS.healthy);
+    var pulse = 0.5 + 0.5 * Math.sin((nowSec || Date.now() / 1000) * 3.0);
+
+    ctx.save();
+    // Level EKG baseline across the reserved slot (never a fake provisional spike)
+    ctx.beginPath();
+    ctx.moveTo(cx1, baseline);
+    ctx.lineTo(cx2, baseline);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = (_hb && _hb.hoveredPendingBlock === seg) ? 3 : 2;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = showPendingCue ? (8 + pulse * 4) : 8;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Quiet baseline cue ONLY after the 2s grace period (fast blocks never flash a box)
+    if (showPendingCue) {
+        var midX = (cx1 + cx2) / 2;
+        ctx.beginPath();
+        ctx.arc(midX, baseline, 4 + pulse * 2.5, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(56, 189, 248, ' + (0.45 + pulse * 0.45).toFixed(3) + ')';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(midX, baseline, 2.2, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+
+        if (slotW >= 24) {
+            ctx.font = '10px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = 'rgba(56, 189, 248, ' + (0.6 + pulse * 0.25).toFixed(3) + ')';
+            ctx.fillText('Pending block', midX, baseline + 20);
+            ctx.textAlign = 'left';
+        }
+    }
+    ctx.restore();
 }
 
 // LOD engages only when a segment has more than this many bricks (≈ the mempool
@@ -1153,17 +1597,23 @@ function drawFlatlineBricksBatched(ctx, _hb, seg, viewLeft, viewRight, baseline,
 
     var settledNorm = Object.create(null);
     var settledNotable = Object.create(null);
-    var enteringNorm = Object.create(null);
+    var enteringLow = Object.create(null);
+    var enteringMid = Object.create(null);
     var notableEdges = [];
     var absorbing = [];
-    // Below ~0.3x zoom, 5px columns are < 1.5 screen px wide; snapping rx/rw to
-    // integer pixels eliminates the sub-pixel moire wave that ripples across
-    // bricks while scrolling zoomed way out.
-    var subPixelZoom = (5 * zoom) < 1.5;
+    // Below ~0.56x zoom, 5px columns are < 2.8 screen px wide: draw bricks seamlessly
+    // at full column pitch (+0.35px overlap, zero gap) using smooth float coordinates
+    // so there are no sub-pixel seams to Moire-shimmer AND no per-column rounding jitter.
+    var colStep = 5 * zoom;
+    var seamlessZoom = colStep < 2.8;
 
     var _wStart = 0;
     var _wSorted = false;
-    if (seg.x_end !== null && blips.length > 512) {
+    var _isProtected = seg.x_end === null
+        || !!seg._pendingForHash
+        || (_hb._reveal && _hb._reveal.oldSeg === seg)
+        || (_hb._pendingReveal && _hb._pendingReveal.oldSeg === seg);
+    if (!_isProtected && blips.length > 512) {
         if (!seg._sortedByX) {
             blips.sort(function(a, b) { return (a.x || 0) - (b.x || 0); });
             seg._sortedByX = true;
@@ -1183,6 +1633,7 @@ function drawFlatlineBricksBatched(ctx, _hb, seg, viewLeft, viewRight, baseline,
         var bxVirt = blip.x;
         if (_wSorted && bxVirt > viewRight) break;
         if (bxVirt < viewLeft || bxVirt > viewRight) continue;
+        if (typeof seg._revealLineEnd === 'number' && bxVirt > seg._revealLineEnd) continue;
 
         if (blip.fadeStart > 0) {
             absorbing.push(blip);
@@ -1194,61 +1645,63 @@ function drawFlatlineBricksBatched(ctx, _hb, seg, viewLeft, viewRight, baseline,
         if (age < 0) continue;
 
         var isNotable = !!blip.notableType;
-        var fadeTime = isNotable ? 1.15 : 0.9;
+        var fadeTime = isNotable ? 1.45 : 1.15;
         var bw = (blip.brickW || 4) * zoom;
         var bh = blip.brickH || blip.height;
         var sy = blip.stackY || 0;
         var bx = (bxVirt - viewOffset) * zoom;
         var baseColor = (blip.feePending && !isNotable) ? PENDING_FEE_COLOR : (blip.color || PENDING_FEE_COLOR);
 
-        // Compute drop offset when falling: full-size bricks rain down from high
-        // above the baseline with a crisp ease-out + subtle landing bounce, and
-        // batch into the exact same single path per color as settled bricks (so
-        // zero opacity quantization bands and zero overdraw seam at landing).
+        // Compute drop offset when falling: smooth sky-to-baseline glide with a
+        // 2-tier soft opacity fade-in and gentle cushion settle (no abrupt pop).
         var dropOffset = 0;
-        var isEntering = false;
+        var enterTier = 0; // 0 = settled, 1 = softest entry, 2 = mid fade-in
         if (age < fadeTime) {
             var fadeIn = age / fadeTime;
-            var baseDrop = isNotable ? Math.min(220, Math.max(170, baseline * 0.55)) : Math.min(165, Math.max(125, baseline * 0.42));
+            var baseDrop = isNotable ? Math.min(200, Math.max(150, baseline * 0.50)) : Math.min(145, Math.max(105, baseline * 0.36));
             // Per-brick height variation (from uncorrelated bobPhase) breaks up
             // the solid carpet underside into individual falling raindrops.
-            var heightVar = 0.72 + ((blip.bobPhase || 0) / 6.2831853) * 0.56;
+            var heightVar = 0.70 + ((blip.bobPhase || 0) / 6.2831853) * 0.60;
             var dropHeight = baseDrop * heightVar;
             var inv = 1 - fadeIn;
-            var dropEase = inv * inv * inv;
-            var bounceAmt = isNotable ? 0.25 : 0.12;
-            var bounce = fadeIn > 0.78 ? Math.sin((fadeIn - 0.78) * (Math.PI / 0.22)) * bounceAmt * 0.05 : 0;
+            var dropEase = Math.pow(inv, 2.2);
+            var bounceAmt = isNotable ? 0.16 : 0.07;
+            var bounce = fadeIn > 0.80 ? Math.sin((fadeIn - 0.80) * (Math.PI / 0.20)) * bounceAmt * 0.05 : 0;
             dropOffset = (dropEase + bounce) * dropHeight;
-            isEntering = fadeIn < 0.22;
+            if (fadeIn < 0.16) enterTier = 1;
+            else if (fadeIn < 0.38) enterTier = 2;
         }
 
-        var minDim = bw < bh ? bw : bh;
-        var gap = minDim > 2.5 ? Math.min(Math.max(minDim * 0.13, 0.5), 1.1) : 0;
-        var rx = bx - bw * 0.5 + gap;
-        var ry = baseline - sy - bh + gap - dropOffset;
-        var rw = bw - gap * 2;
-        var rh = bh - gap * 2;
-        if (subPixelZoom) {
-            rx = Math.floor(rx);
-            ry = Math.floor(ry);
-            rw = Math.max(1, Math.ceil(rw));
-            rh = Math.max(1, Math.ceil(rh));
+        var rx, ry, rw, rh;
+        if (seamlessZoom) {
+            rx = bx - colStep * 0.5;
+            ry = baseline - sy - bh - dropOffset;
+            rw = Math.max(colStep + 0.35, 1.0);
+            rh = Math.max(bh + 0.2, 1.0);
         } else {
-            if (rw < 0.5) rw = 0.5;
-            if (rh < 0.5) rh = 0.5;
+            var minDim = bw < bh ? bw : bh;
+            var gap = minDim > 3.2 ? Math.min(Math.max(minDim * 0.13, 0.5), 1.1) : 0;
+            rx = bx - bw * 0.5 + gap;
+            ry = baseline - sy - bh + gap - dropOffset;
+            rw = Math.max(0.5, bw - gap * 2);
+            rh = Math.max(0.5, bh - gap * 2);
         }
 
         if (isNotable) {
             var nb = settledNotable[baseColor];
             if (!nb) nb = settledNotable[baseColor] = [];
             nb.push(rx, ry, rw, rh);
-            if (!subPixelZoom && rw >= 2.2 && rh >= 4) {
+            if (!seamlessZoom && rw >= 2.2 && rh >= 4) {
                 notableEdges.push(rx, ry, rw, rh);
             }
-        } else if (isEntering) {
-            var ea = enteringNorm[baseColor];
-            if (!ea) ea = enteringNorm[baseColor] = [];
-            ea.push(rx, ry, rw, rh);
+        } else if (enterTier === 1) {
+            var el = enteringLow[baseColor];
+            if (!el) el = enteringLow[baseColor] = [];
+            el.push(rx, ry, rw, rh);
+        } else if (enterTier === 2) {
+            var em = enteringMid[baseColor];
+            if (!em) em = enteringMid[baseColor] = [];
+            em.push(rx, ry, rw, rh);
         } else {
             var arr = settledNorm[baseColor];
             if (!arr) arr = settledNorm[baseColor] = [];
@@ -1260,15 +1713,25 @@ function drawFlatlineBricksBatched(ctx, _hb, seg, viewLeft, viewRight, baseline,
         }
     }
 
-    // 1. Batched normal bricks (high-sky entry fade + main settled/falling path;
-    // single beginPath+fill per color = zero overdraw seams and zero band chunks)
-    var enterAlpha = (0.42 * rf).toFixed(2);
-    for (var eKey in enteringNorm) {
-        var eCoords = enteringNorm[eKey];
-        ctx.fillStyle = eKey + enterAlpha + ')';
+    // 1. Batched normal bricks (2-stage soft entry fade + main settled/falling path;
+    // single beginPath+fill per color = zero overdraw seams and smooth visual glide)
+    var lowAlpha = (0.20 * rf).toFixed(2);
+    for (var elKey in enteringLow) {
+        var elCoords = enteringLow[elKey];
+        ctx.fillStyle = elKey + lowAlpha + ')';
         ctx.beginPath();
-        for (var eci = 0; eci < eCoords.length; eci += 4) {
-            ctx.rect(eCoords[eci], eCoords[eci + 1], eCoords[eci + 2], eCoords[eci + 3]);
+        for (var elci = 0; elci < elCoords.length; elci += 4) {
+            ctx.rect(elCoords[elci], elCoords[elci + 1], elCoords[elci + 2], elCoords[elci + 3]);
+        }
+        ctx.fill();
+    }
+    var midAlpha = (0.54 * rf).toFixed(2);
+    for (var emKey in enteringMid) {
+        var emCoords = enteringMid[emKey];
+        ctx.fillStyle = emKey + midAlpha + ')';
+        ctx.beginPath();
+        for (var emci = 0; emci < emCoords.length; emci += 4) {
+            ctx.rect(emCoords[emci], emCoords[emci + 1], emCoords[emci + 2], emCoords[emci + 3]);
         }
         ctx.fill();
     }
@@ -1366,7 +1829,7 @@ function drawFlatlineBricksBatched(ctx, _hb, seg, viewLeft, viewRight, baseline,
 }
 
 // Draw a flatline segment (with optional blips)
-export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, baseline, color, isLive, nowSec) {
+export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, baseline, color, isLive, nowSec, waitSec, skipGlow) {
     var _hb = getState();
     // Clamp to visible range
     var drawStart = Math.max(seg.x_start, viewLeft);
@@ -1376,26 +1839,43 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
 
     var cx1 = virtualToCanvas(drawStart);
     var cx2 = virtualToCanvas(drawEnd);
+    var fullCx1 = virtualToCanvas(seg.x_start);
+    var fullCx2 = virtualToCanvas(segEnd);
     var y = baseline;
+
+    // Anchor the progressive wait gradient to the full segment span so panning/zooming
+    // never slides the gradient with the viewport edge. Narrow flatlines (< 18px) use
+    // a solid color to avoid allocating hundreds of linear gradients per frame zoomed out.
+    var strokeStyle = ((fullCx2 - fullCx1) >= 18 && typeof waitSec === 'number' && isFinite(waitSec) && waitSec > 300)
+        ? buildFlatlineGradient(ctx, fullCx1, fullCx2, waitSec)
+        : color;
+
+    var noGlow = !!skipGlow && !isLive;
 
     // Draw the flatline
     ctx.beginPath();
     ctx.moveTo(cx1, y);
     ctx.lineTo(cx2, y);
-    ctx.strokeStyle = color;
+    ctx.strokeStyle = strokeStyle;
     ctx.lineWidth = 2;
-    ctx.shadowBlur = 8;
-    ctx.shadowColor = color;
+    if (noGlow) {
+        ctx.shadowBlur = 0;
+    } else {
+        ctx.shadowBlur = 8;
+        ctx.shadowColor = color;
+    }
     ctx.stroke();
     ctx.shadowBlur = 0;
 
-    // Subtle floor glow below baseline
-    ctx.globalAlpha = 0.06;
-    ctx.fillStyle = color;
-    ctx.fillRect(cx1, baseline + 1, cx2 - cx1, 8);
-    ctx.globalAlpha = 0.03;
-    ctx.fillRect(cx1, baseline + 9, cx2 - cx1, 6);
-    ctx.globalAlpha = 1;
+    // Subtle floor glow below baseline (skipped on non-live flatlines when zoomed way out)
+    if (!noGlow) {
+        ctx.globalAlpha = 0.06;
+        ctx.fillStyle = strokeStyle;
+        ctx.fillRect(cx1, baseline + 1, cx2 - cx1, 8);
+        ctx.globalAlpha = 0.03;
+        ctx.fillRect(cx1, baseline + 9, cx2 - cx1, 6);
+        ctx.globalAlpha = 1;
+    }
 
     // Vessel walls + atmosphere in bloodstream mode
     if (_hb.renderMode === 'bloodstream') {
@@ -1467,7 +1947,11 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
         // below is already cheap.
         var _wStart = 0;
         var _wSorted = false;
-        if (seg.x_end !== null && seg.blips.length > 512) {
+        var _isProtectedSeg = seg.x_end === null
+            || !!seg._pendingForHash
+            || (_hb._reveal && _hb._reveal.oldSeg === seg)
+            || (_hb._pendingReveal && _hb._pendingReveal.oldSeg === seg);
+        if (!_isProtectedSeg && seg.blips.length > 512) {
             if (!seg._sortedByX) {
                 seg.blips.sort(function(a, b) { return (a.x || 0) - (b.x || 0); });
                 seg._sortedByX = true;
@@ -1482,7 +1966,7 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
         }
         // Zoom-invariant per-frame constants, hoisted out of the per-brick loop
         // (recomputing these ~40k times/frame at a full zoomed-out mempool is waste).
-        var heightScale = zoom > 4 ? 1 + (zoom - 4) * 0.15 : 1;
+        var heightScale = brickHeightScale(zoom);
         var lw = zoom > 10 ? 1.5 : zoom > 6 ? 1 : 0.5;
         for (var bi = _wStart; bi < seg.blips.length; bi++) {
             var blip = seg.blips[bi];
@@ -1659,29 +2143,36 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
                 var bh = (blip.brickH || blipH) * heightScale;
                 var sy = (blip.stackY || 0) * heightScale;
 
-                // Fade-in: grow from 0. Notable txs get slower, more dramatic drop.
+                // Full-size sky-to-baseline drop at close zoom: fast opacity entry over
+                // the first 18% of the fall so incoming bricks stay clearly visible from
+                // high above, followed by a subtle landing bounce and brief edge glint.
                 var age = nowSec - blip.timestamp;
                 if (age < 0) continue; // staggered history brick not yet visible
                 var isNotable = !!blip.notableType;
-                // Fall duration: bumped a touch so the higher drop (below) reads as
-                // a graceful rain rather than a streak.
-                var fadeTime = isNotable ? 1.1 : 0.8;
+                var fadeTime = isNotable ? 1.15 : 0.85;
                 var fadeIn = age >= fadeTime ? 1 : age / fadeTime;
-                // Bouncy drop-in (cubic ease-out + a sin bounce near landing). Only
-                // computed while a brick is still FALLING: the settled majority (the
-                // bulk of the cost at a full zoomed-out mempool) skips the trig/cubic.
                 var dropOffset = 0;
+                var trailAlpha = 0;
+                var landingFlash = 0;
                 if (fadeIn < 1 && _hb.renderMode !== 'bloodstream') {
                     var inv = 1 - fadeIn;
-                    var dropEase = inv * inv * inv;
-                    if (fadeIn > 0.75) {
-                        var bounceAmt = isNotable ? 0.35 : 0.15;
-                        dropEase += bounceAmt * Math.sin((fadeIn - 0.75) * 4 * Math.PI) * 0.08;
+                    var dropEase = Math.pow(inv, 2.2);
+                    if (fadeIn > 0.78) {
+                        var bounceAmt = isNotable ? 0.30 : 0.14;
+                        dropEase += bounceAmt * Math.sin((fadeIn - 0.78) * (Math.PI / 0.22)) * 0.06;
                     }
-                    dropOffset = dropEase * (isNotable ? 220 : 120); // notable = higher drop
+                    var baseDrop = isNotable
+                        ? Math.min(340, Math.max(220, baseline * 0.65))
+                        : Math.min(260, Math.max(170, baseline * 0.50));
+                    var hVar = 0.82 + ((blip.bobPhase || 0) / 6.2831853) * 0.36;
+                    dropOffset = dropEase * baseDrop * hVar;
+                    if (fadeIn < 0.78) {
+                        trailAlpha = Math.sin((fadeIn / 0.78) * Math.PI) * 0.38;
+                    }
+                    bOpacity *= Math.min(1, fadeIn / 0.18);
+                } else if (age >= fadeTime && age < fadeTime + 0.28 && _hb.renderMode !== 'bloodstream') {
+                    landingFlash = 1 - (age - fadeTime) / 0.28;
                 }
-                bh *= fadeIn;
-                bOpacity *= fadeIn;
                 // During a block reveal, the old segment's leftovers fade out
                 // (harvest beat) before re-laying on the new flatline.
                 if (seg._revealFade !== undefined) bOpacity *= seg._revealFade;
@@ -1804,32 +2295,46 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
                     var rw = Math.max(bw - gap * 2, 0.5);
                     var rh = Math.max(bh - gap * 2, 0.5);
 
-                    var useRound = zoom > 6 && rw > 4 && rh > 4;
-                    var cornerR = useRound ? Math.min(3, rw * 0.12, rh * 0.12) : 0;
+                    var useRound = zoom >= 5 && rw > 4 && rh > 4;
+                    var cornerR = useRound ? Math.min(3.5, rw * 0.14, rh * 0.18) : 0;
+                    var isHoveredBlip = (_hb.hoveredBlip === blip);
 
-                    // At zoom > 8, use a vertical gradient for depth
-                    if (zoom > 8 && rh > 6) {
+                    // Subtle vertical motion-trail streak directly above a falling brick
+                    if (trailAlpha > 0.01 && rw >= 3) {
+                        var trailH = Math.min(44, Math.max(16, rh * 1.4));
+                        var trailTop = ry - trailH;
+                        var tGrad = ctx.createLinearGradient(rx, trailTop, rx, ry);
+                        tGrad.addColorStop(0, brickBaseColor + '0)');
+                        tGrad.addColorStop(1, brickBaseColor + (trailAlpha * bOpacity).toFixed(3) + ')');
+                        ctx.fillStyle = tGrad;
+                        ctx.fillRect(rx + rw * 0.15, trailTop, rw * 0.7, trailH);
+                    }
+
+                    // At zoom >= 5, use a subtle top-bevel vertical gradient for crisp tile depth
+                    var drawAlpha = isHoveredBlip ? Math.min(1, bOpacity + 0.18) : bOpacity;
+                    if (zoom >= 5 && rh > 5) {
                         var rgbMatch = brickBaseColor.match(/(\d+)\D+(\d+)\D+(\d+)/);
                         if (rgbMatch) {
                             var bR = parseInt(rgbMatch[1]);
                             var bG = parseInt(rgbMatch[2]);
                             var bB = parseInt(rgbMatch[3]);
-                            var topR = Math.min(bR + 25, 255);
-                            var topG = Math.min(bG + 20, 255);
-                            var topB = Math.min(bB + 15, 255);
-                            var botR = Math.max(bR - 30, 0);
-                            var botG = Math.max(bG - 25, 0);
-                            var botB = Math.max(bB - 20, 0);
+                            var hoverBoost = isHoveredBlip ? 24 : 0;
+                            var topR = Math.min(bR + 28 + hoverBoost, 255);
+                            var topG = Math.min(bG + 22 + hoverBoost, 255);
+                            var topB = Math.min(bB + 18 + hoverBoost, 255);
+                            var botR = Math.max(bR - 26 + Math.floor(hoverBoost * 0.5), 0);
+                            var botG = Math.max(bG - 22 + Math.floor(hoverBoost * 0.5), 0);
+                            var botB = Math.max(bB - 18 + Math.floor(hoverBoost * 0.5), 0);
                             var bGrad = ctx.createLinearGradient(rx, ry, rx, ry + rh);
-                            bGrad.addColorStop(0, 'rgba(' + topR + ',' + topG + ',' + topB + ',' + bOpacity + ')');
-                            bGrad.addColorStop(0.45, brickBaseColor + bOpacity + ')');
-                            bGrad.addColorStop(1, 'rgba(' + botR + ',' + botG + ',' + botB + ',' + bOpacity + ')');
+                            bGrad.addColorStop(0, 'rgba(' + topR + ',' + topG + ',' + topB + ',' + drawAlpha + ')');
+                            bGrad.addColorStop(0.45, 'rgba(' + Math.min(bR + hoverBoost, 255) + ',' + Math.min(bG + hoverBoost, 255) + ',' + Math.min(bB + hoverBoost, 255) + ',' + drawAlpha + ')');
+                            bGrad.addColorStop(1, 'rgba(' + botR + ',' + botG + ',' + botB + ',' + drawAlpha + ')');
                             ctx.fillStyle = bGrad;
                         } else {
-                            ctx.fillStyle = brickBaseColor + bOpacity + ')';
+                            ctx.fillStyle = brickBaseColor + drawAlpha + ')';
                         }
                     } else {
-                        ctx.fillStyle = brickBaseColor + bOpacity + ')';
+                        ctx.fillStyle = brickBaseColor + drawAlpha + ')';
                     }
 
                     // No shadowBlur. The glow was the dominant render cost (an
@@ -1926,8 +2431,40 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
                         }
                     }
 
-                    // At high zoom: show fee rate + value on brick face (clipped to brick)
-                    if (zoom > 8 && rw > 22 && rh > 10) {
+                    // Brief crisp top-edge glint right as a falling brick lands on its stack
+                    if (landingFlash > 0.02 && rw > 4 && rh > 3) {
+                        ctx.save();
+                        ctx.strokeStyle = 'rgba(255, 255, 255, ' + (landingFlash * 0.55).toFixed(3) + ')';
+                        ctx.lineWidth = 1.5;
+                        if (useRound) {
+                            ctx.beginPath();
+                            roundRect(ctx, rx + 0.75, ry + 0.75, Math.max(0.5, rw - 1.5), Math.max(0.5, rh - 1.5), Math.max(cornerR - 0.75, 0));
+                            ctx.stroke();
+                        } else {
+                            ctx.strokeRect(rx + 0.75, ry + 0.75, Math.max(0.5, rw - 1.5), Math.max(0.5, rh - 1.5));
+                        }
+                        ctx.restore();
+                    }
+
+                    // Tactile hover border + soft fee-color glow on the hovered brick
+                    if (isHoveredBlip && (!_hb._pinnedTxid || blip.txid !== _hb._pinnedTxid)) {
+                        ctx.save();
+                        ctx.strokeStyle = 'rgba(255, 255, 255, 0.92)';
+                        ctx.lineWidth = Math.max(1.5, Math.min(2.2, zoom * 0.2));
+                        ctx.shadowColor = brickBaseColor + '0.85)';
+                        ctx.shadowBlur = 10;
+                        if (useRound) {
+                            ctx.beginPath();
+                            roundRect(ctx, rx - 0.75, ry - 0.75, rw + 1.5, rh + 1.5, cornerR + 0.75);
+                            ctx.stroke();
+                        } else {
+                            ctx.strokeRect(rx - 0.75, ry - 0.75, rw + 1.5, rh + 1.5);
+                        }
+                        ctx.restore();
+                    }
+
+                    // At zoom >= 5: show fee rate + value on brick face (clipped to brick)
+                    if (zoom >= 5 && rw > 20 && rh > 11) {
                         ctx.save();
                         ctx.beginPath();
                         if (useRound) {
@@ -1936,17 +2473,20 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
                             ctx.rect(rx, ry, rw, rh);
                         }
                         ctx.clip();
-                        var padX = Math.max(6, rw * 0.1);
-                        var padY = Math.max(5, rh * 0.12);
-                        var fs = Math.min(Math.floor(rh * 0.28), Math.floor(rw * 0.2), 13);
+                        var padX = Math.max(3, Math.min(6, rw * 0.07));
+                        var padY = Math.max(3, rh * 0.11);
+                        var availW = Math.max(4, rw - padX * 2);
+                        var feeStr = blip.feePending
+                            ? 'pending'
+                            : (formatFeeRate(blip.feeRate) + ' s/vB');
+                        // Monospace glyphs average ~0.63*fs wide; fit feeStr inside availW with zero right-edge clip.
+                        var maxFsForWidth = Math.floor(availW / (Math.max(1, feeStr.length) * 0.64));
+                        var fs = Math.min(Math.floor(rh * 0.34), maxFsForWidth, 13);
                         if (fs >= 5) {
                             // Fee rate text
                             ctx.font = 'bold ' + fs + 'px monospace';
                             ctx.textAlign = 'left';
                             ctx.textBaseline = 'top';
-                            var feeStr = blip.feePending
-                                ? 'pending'
-                                : (formatFeeRate(blip.feeRate) + ' s/vB');
                             var textY = ry + padY;
                             // Dark text shadow for readability on any color
                             ctx.fillStyle = 'rgba(0,0,0,0.55)';
@@ -1955,10 +2495,7 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
                             ctx.fillText(feeStr, rx + padX, textY);
 
                             // Value text (second line)
-                            if (rh > 24 && fs > 6) {
-                                var valFs = fs - 1;
-                                ctx.font = valFs + 'px monospace';
-                                var valY = textY + fs + Math.max(3, rh * 0.08);
+                            if (rh > 23 && fs >= 6) {
                                 var valText = '';
                                 if (blip.value) {
                                     var btc = blip.value / 1e8;
@@ -1972,10 +2509,16 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
                                     valText = Math.round(blip.vsize) + ' vB';
                                 }
                                 if (valText) {
-                                    ctx.fillStyle = 'rgba(0,0,0,0.45)';
-                                    ctx.fillText(valText, rx + padX + 1, valY + 1);
-                                    ctx.fillStyle = 'rgba(255,255,255,0.8)';
-                                    ctx.fillText(valText, rx + padX, valY);
+                                    var maxValFs = Math.floor(availW / (valText.length * 0.64));
+                                    var valFs = Math.min(fs - 1, maxValFs);
+                                    if (valFs >= 5) {
+                                        ctx.font = valFs + 'px monospace';
+                                        var valY = textY + fs + Math.max(3, rh * 0.08);
+                                        ctx.fillStyle = 'rgba(0,0,0,0.45)';
+                                        ctx.fillText(valText, rx + padX + 1, valY + 1);
+                                        ctx.fillStyle = 'rgba(255,255,255,0.8)';
+                                        ctx.fillText(valText, rx + padX, valY);
+                                    }
                                 }
                             }
                         }
@@ -2018,18 +2561,24 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
         }
         } // end else (non-LOD per-blip draw)
 
-        // Prune blips: never prune the live (open) flatline so txs persist
-        // until the next block. Only prune closed (historical) segments.
-        var isLiveSeg = (seg.type === 'flatline' && seg.x_end === null);
+        // Prune blips: never prune the live (open) flatline, nor a flatline sealed
+        // by an unresolved pending_block or active reveal, so all mempool bricks
+        // persist until harvested and carried forward. Only prune finished historical segments.
+        var isLiveSeg = (seg.type === 'flatline') && (
+            seg.x_end === null
+            || !!seg._pendingForHash
+            || (_hb._reveal && _hb._reveal.oldSeg === seg)
+            || (_hb._pendingReveal && _hb._pendingReveal.oldSeg === seg)
+        );
         if (!isLiveSeg && seg.blips.length > MAX_BLIPS_PER_SEGMENT) {
             // This block reassigns/reorders seg.blips (the concat below is not
             // x-ordered), so invalidate the P3 sort cache, the next draw will
             // re-sort lazily before binary-searching.
             seg._sortedByX = false;
             var cutoff = nowSec;
-            // Always remove faded absorption particles
+            // Always remove faded absorption particles (after max ~6.01s flight finishes)
             seg.blips = seg.blips.filter(function(b) {
-                if (b.fadeStart > 0) return (cutoff - b.fadeStart) < 3;
+                if (b.fadeStart > 0) return (cutoff - b.fadeStart) < 6.5;
                 return true;
             });
             // If still over cap, only remove blips behind the viewport left edge
@@ -2055,7 +2604,7 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
             var cutoff2 = nowSec;
             var hasFaded = false;
             for (var fi = 0; fi < seg.blips.length; fi++) {
-                if (seg.blips[fi].fadeStart > 0 && (cutoff2 - seg.blips[fi].fadeStart) >= 3) {
+                if (seg.blips[fi].fadeStart > 0 && (cutoff2 - seg.blips[fi].fadeStart) >= 6.5) {
                     hasFaded = true; break;
                 }
             }
@@ -2064,7 +2613,7 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
                 for (var fl = 0; fl < seg.blips.length; fl++) {
                     var lb = seg.blips[fl];
                     if (!lb || lb._removed) continue;
-                    if (lb.fadeStart > 0 && (cutoff2 - lb.fadeStart) >= 3) continue;
+                    if (lb.fadeStart > 0 && (cutoff2 - lb.fadeStart) >= 6.5) continue;
                     lb._segIdx = keptLive.length;
                     keptLive.push(lb);
                 }

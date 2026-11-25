@@ -2,15 +2,48 @@
 // timeline segments in the Block Heartbeat engine.
 
 import { getState } from './heartbeat-state.js';
-import { cellRadiusForVsize } from './heartbeat-timeline.js';
+import { cellRadiusForVsize, brickHeightScale } from './heartbeat-timeline.js';
+
+// Binary-search the first timeline segment whose effective end is >= vx.
+// Segments are strictly ordered left-to-right by x_start/x_end.
+function findFirstSegIndexAtX(tl, vx, virtualX) {
+    var lo = 0, hi = tl.length;
+    while (lo < hi) {
+        var mid = (lo + hi) >> 1;
+        var seg = tl[mid];
+        var segEnd = seg.x_end !== null ? seg.x_end : virtualX;
+        if (segEnd < vx) lo = mid + 1;
+        else hi = mid;
+    }
+    return lo;
+}
 
 // ── Hit testing: find block segment under a virtual x position ──
 export function blockAtVirtualX(vx) {
     var _hb = getState();
-    if (!_hb) return null;
-    for (var i = 0; i < _hb.timeline.length; i++) {
-        var seg = _hb.timeline[i];
+    if (!_hb || !_hb.timeline || _hb.timeline.length === 0) return null;
+    var tl = _hb.timeline;
+    var i = findFirstSegIndexAtX(tl, vx, _hb.virtualX);
+    for (; i < tl.length; i++) {
+        var seg = tl[i];
+        if (seg.x_start > vx) break;
         if (seg.type === 'block' && vx >= seg.x_start && vx <= seg.x_end) {
+            return seg;
+        }
+    }
+    return null;
+}
+
+// Hit testing: find pending_block segment under a virtual x position
+export function pendingBlockAtVirtualX(vx) {
+    var _hb = getState();
+    if (!_hb || !_hb.timeline || _hb.timeline.length === 0) return null;
+    var tl = _hb.timeline;
+    var i = findFirstSegIndexAtX(tl, vx, _hb.virtualX);
+    for (; i < tl.length; i++) {
+        var seg = tl[i];
+        if (seg.x_start > vx) break;
+        if (seg.type === 'pending_block' && vx >= seg.x_start && vx <= seg.x_end) {
             return seg;
         }
     }
@@ -20,20 +53,26 @@ export function blockAtVirtualX(vx) {
 // Find flatline segment under a virtual x position, with context
 export function flatlineAtVirtualX(vx) {
     var _hb = getState();
-    if (!_hb) return null;
-    for (var i = 0; i < _hb.timeline.length; i++) {
-        var seg = _hb.timeline[i];
+    if (!_hb || !_hb.timeline || _hb.timeline.length === 0) return null;
+    var tl = _hb.timeline;
+    var i = findFirstSegIndexAtX(tl, vx, _hb.virtualX);
+    for (; i < tl.length; i++) {
+        var seg = tl[i];
+        if (seg.x_start > vx) break;
         var xEnd = seg.x_end !== null ? seg.x_end : _hb.virtualX;
         if (seg.type === 'flatline' && vx >= seg.x_start && vx <= xEnd) {
-            // Find surrounding blocks for interval display
-            var prevBlock = null, nextBlock = null;
+            // Find surrounding blocks (or an immediately following pending_block) for interval display
+            var prevBlock = null, nextBlock = null, pendingNext = null;
+            if (i + 1 < tl.length && tl[i + 1].type === 'pending_block') {
+                pendingNext = tl[i + 1];
+            }
             for (var j = i - 1; j >= 0; j--) {
-                if (_hb.timeline[j].type === 'block') { prevBlock = _hb.timeline[j]; break; }
+                if (tl[j].type === 'block') { prevBlock = tl[j]; break; }
             }
-            for (var j = i + 1; j < _hb.timeline.length; j++) {
-                if (_hb.timeline[j].type === 'block') { nextBlock = _hb.timeline[j]; break; }
+            for (var j = i + 1; j < tl.length; j++) {
+                if (tl[j].type === 'block') { nextBlock = tl[j]; break; }
             }
-            return { segment: seg, prevBlock: prevBlock, nextBlock: nextBlock };
+            return { segment: seg, prevBlock: prevBlock, nextBlock: nextBlock, pendingNext: pendingNext };
         }
     }
     return null;
@@ -56,17 +95,19 @@ export function virtualToCanvas(vx) {
 // Find nearest blip within hitRadius virtual pixels
 export function blipAtVirtualX(vx, hitRadius) {
     var _hb = getState();
-    if (!_hb) return null;
+    if (!_hb || !_hb.timeline || _hb.timeline.length === 0) return null;
     var best = null, bestDist = hitRadius;
     var viewLeft = _hb.viewOffset;
     var viewRight = _hb.viewOffset + _hb.width / _hb.zoom;
     var nowSec = Date.now() / 1000;
-    for (var i = 0; i < _hb.timeline.length; i++) {
-        var seg = _hb.timeline[i];
+    var tl = _hb.timeline;
+    var startIdx = findFirstSegIndexAtX(tl, viewLeft, _hb.virtualX);
+    for (var i = startIdx; i < tl.length; i++) {
+        var seg = tl[i];
+        if (seg.x_start > viewRight) break;
         if (seg.type !== 'flatline' || !seg.blips) continue;
-        // Skip segments outside visible range
         var segEnd = seg.x_end !== null ? seg.x_end : _hb.virtualX;
-        if (segEnd < viewLeft || seg.x_start > viewRight) continue;
+        if (segEnd < viewLeft) continue;
         for (var bi = 0; bi < seg.blips.length; bi++) {
             var blip = seg.blips[bi];
             if (!blip || blip._removed || blip.fadeStart > 0 || blip.timestamp > nowSec) continue;
@@ -83,16 +124,26 @@ export function blipAtVirtualX(vx, hitRadius) {
 // 2D hit test: find which brick/cell the cursor is inside (canvas coords)
 export function blipAtCanvasXY(cx, cy, baseline) {
     var _hb = getState();
-    if (!_hb) return null;
+    if (!_hb || !_hb.timeline || _hb.timeline.length === 0) return null;
     var zoom = _hb.zoom;
     var isBs = _hb.renderMode === 'bloodstream';
-    var heightScale = zoom > 4 ? 1 + (zoom - 4) * 0.15 : 1;
+    var heightScale = brickHeightScale(zoom);
     var viewLeft = _hb.viewOffset;
     var viewRight = _hb.viewOffset + _hb.width / zoom;
     var nowSec = Date.now() / 1000;
+    var tl = _hb.timeline;
+    var startIdx = findFirstSegIndexAtX(tl, viewLeft, _hb.virtualX);
+    // Binary-search last segment with x_start <= viewRight
+    var lo = startIdx, hi = tl.length;
+    while (lo < hi) {
+        var mid = (lo + hi) >> 1;
+        if (tl[mid].x_start <= viewRight) lo = mid + 1;
+        else hi = mid;
+    }
+    var endIdx = lo - 1;
 
-    for (var i = _hb.timeline.length - 1; i >= 0; i--) {
-        var seg = _hb.timeline[i];
+    for (var i = endIdx; i >= startIdx; i--) {
+        var seg = tl[i];
         if (seg.type !== 'flatline' || !seg.blips) continue;
         var segEnd = seg.x_end !== null ? seg.x_end : _hb.virtualX;
         if (segEnd < viewLeft || seg.x_start > viewRight) continue;
