@@ -136,12 +136,6 @@ impl TestApp {
             Duration::from_secs(60),
             &[CacheTag::OnNewBlock],
         );
-        let heartbeat_history_cache = cb.cache::<(), std::sync::Arc<str>>(
-            "heartbeat_history",
-            Duration::from_secs(3),
-            &[],
-        );
-
         let state = Arc::new(StatsState {
             db: pool,
             rpc,
@@ -162,7 +156,6 @@ impl TestApp {
             heartbeat_store,
             heartbeat_blocks: Default::default(),
             sse_connections: AtomicUsize::new(0),
-            heartbeat_history_cache,
         });
 
         let router = build_api_router(Arc::clone(&state));

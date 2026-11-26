@@ -44,7 +44,6 @@ use axum::http::header;
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::Json;
 use futures::stream::Stream;
-use futures::StreamExt;
 use serde::Deserialize;
 
 /// Wrap a JSON value with a `Cache-Control: public, max-age=N` header.
@@ -148,14 +147,6 @@ pub struct StatsState {
     pub(crate) heartbeat_blocks: super::zmq_subscriber::BlockJobs,
     /// Active SSE connection count (guard against connection exhaustion).
     pub sse_connections: AtomicUsize,
-    /// Cached heartbeat history payload (the big initial mempool-fill JSON, up to
-    /// HEARTBEAT_HISTORY_LIMIT txs). Shared across concurrent SSE connects via the
-    /// cache's singleflight + short TTL: a burst of page loads during congestion
-    /// builds it ONCE (one DB read + serialize) and hands out `Arc<str>` clones
-    /// (shared buffer), instead of each connect re-querying and re-serializing tens
-    /// of MB. TTL-only: the mempool view is intentionally approximate, so a few
-    /// seconds of staleness on the initial fill is invisible (live txs stream after).
-    pub heartbeat_history_cache: Arc<Cache<(), Arc<str>>>,
 }
 
 impl StatsState {
@@ -247,21 +238,6 @@ pub(crate) const MAX_SSE_CONNECTIONS: usize = 256;
 /// Largest height span `/op-returns` will serve. Matches its own default
 /// window, so it clamps only explicitly over-wide requests.
 const MAX_OP_RETURN_SPAN: u64 = 10_000;
-
-/// How many recent unconfirmed mempool txs to send as the heartbeat history
-/// (the initial brick fill on connect/refresh), newest-first from the last 2h.
-/// The client places all of them, bounded only by its per-column density cap, so
-/// this is effectively "how many bricks a fresh load shows". Set as a CEILING for
-/// full-mempool coverage even during congestion: the point of the mempool-as-
-/// timeline. It must sit ABOVE the client's LOD threshold (LOD_MIN_BLIPS=60k) so a
-/// mempool over 60k actually loads in full and LOD (density columns) engages, instead
-/// of being clipped to exactly 60k (which left LOD unreachable). This is a cap, not
-/// a fixed size: the payload scales with the ACTUAL mempool, so a normal 40-60k
-/// mempool is unaffected; only genuine congestion approaches the ceiling (~1.5-2MB
-/// of SSE payload per 10k txs). The client fills these in chunks across RAF frames
-/// (placeHistoryTxs) so a big load doesn't stall, renders them via LOD above 60k,
-/// and its cull threshold is set above this so the shown mempool isn't evicted.
-const HEARTBEAT_HISTORY_LIMIT: u64 = 150_000;
 
 /// Arc-wrapped stats state, used as Axum extractor in all handlers.
 pub type SharedStatsState = Arc<StatsState>;
@@ -1006,180 +982,6 @@ pub async fn get_tx_detail(
             Err((axum::http::StatusCode::NOT_FOUND, "Transaction not found"))
         }
     }
-}
-
-/// SSE endpoint for real-time heartbeat events (mempool txs + blocks).
-/// On connect: sends recent tx history from DB, then streams live events.
-pub async fn get_heartbeat_sse(
-    State(state): State<SharedStatsState>,
-) -> Result<
-    (
-        [(header::HeaderName, String); 1],
-        Sse<impl Stream<Item = Result<Event, Infallible>>>,
-    ),
-    (axum::http::StatusCode, &'static str),
-> {
-    // Reject if too many concurrent SSE connections
-    let prev = state.sse_connections.fetch_add(1, Ordering::Relaxed);
-    if prev >= MAX_SSE_CONNECTIONS {
-        state.sse_connections.fetch_sub(1, Ordering::Relaxed);
-        return Err((
-            axum::http::StatusCode::SERVICE_UNAVAILABLE,
-            "Too many connections",
-        ));
-    }
-    // Guard decrements connection count on drop (panic safety + client disconnect)
-    let guard = SseConnectionGuard(Arc::clone(&state));
-
-    let rx = state.heartbeat_tx.subscribe();
-
-    // Big initial mempool-fill payload: built ONCE and shared across concurrent
-    // connects via the cache (singleflight + short TTL), so a burst of page loads
-    // during congestion doesn't re-query + re-serialize tens of MB per connection.
-    // The cached value is an Arc<str>, so concurrent connects share one buffer.
-    let history_data: Arc<str> = state
-        .heartbeat_history_cache
-        .get_or_compute((), || async {
-            let data: Arc<str> = match state.db.get() {
-                Ok(conn) => {
-                    let block_ts = db::max_height(&conn)
-                        .ok()
-                        .flatten()
-                        .and_then(|h| {
-                            db::query_block_timestamp(&conn, h).ok().flatten()
-                        })
-                        .unwrap_or(0);
-                    // No first_seen floor (0): the mempool reconcile keeps
-                    // mempool_txs' unconfirmed rows == the node's live mempool, so
-                    // confirmed_height IS NULL alone is correct. A time floor here
-                    // wrongly hid long-resident low-fee txs that are still in the
-                    // mempool. ORDER BY first_seen DESC LIMIT caps the payload to
-                    // the newest HEARTBEAT_HISTORY_LIMIT.
-                    let txs = db::query_recent_mempool_txs(
-                        &conn,
-                        0,
-                        HEARTBEAT_HISTORY_LIMIT,
-                    )
-                    .unwrap_or_default();
-                    let s = if txs.is_empty() {
-                        format!("{{\"txs\":[],\"last_block_ts\":{block_ts}}}")
-                    } else {
-                        let txs_json =
-                            serde_json::to_string(&txs).unwrap_or_default();
-                        format!("{{\"txs\":{txs_json},\"last_block_ts\":{block_ts}}}")
-                    };
-                    // One line per actual (re)build: gated by the cache's TTL +
-                    // singleflight, so a burst of connects should log this ONCE, not
-                    // once per connect. Also surfaces the payload size (the droplet
-                    // memory concern: ~KB scales with the mempool).
-                    tracing::info!(
-                        "heartbeat history built: {} txs, {} KB",
-                        txs.len(),
-                        s.len() / 1024
-                    );
-                    Arc::from(s)
-                }
-                Err(_) => Arc::from("{\"txs\":[],\"last_block_ts\":0}"),
-            };
-            Ok::<Arc<str>, std::convert::Infallible>(data)
-        })
-        .await
-        .unwrap_or_else(|_| Arc::from("{\"txs\":[],\"last_block_ts\":0}"));
-
-    // Recent notable txs (last 24h, up to 200) for the whale-watch feed. Small, so
-    // fetched per connect (not cached). notable_txs holds confirmed too, unlike mempool_txs.
-    let notable_history = {
-        let twenty_four_hours_ago = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs()
-            .saturating_sub(86400);
-        match state.db.get() {
-            Ok(conn) => {
-                let filter = db::NotableFilter {
-                    since: Some(twenty_four_hours_ago),
-                    ..Default::default()
-                };
-                db::query_notable_txs(&conn, &filter, 200, 0)
-                    .unwrap_or_default()
-            }
-            Err(_) => vec![],
-        }
-    };
-
-    // State machine: history → notable history → live events
-    enum Phase {
-        History(Arc<str>, Vec<db::NotableTx>),
-        NotableHistory(Vec<db::NotableTx>),
-        Live,
-    }
-
-    let stream = futures::stream::unfold(
-        (Phase::History(history_data, notable_history), rx),
-        |(phase, mut rx)| async move {
-            match phase {
-                Phase::History(data, notables) => Some((
-                    Ok(Event::default().event("history").data(data)),
-                    (Phase::NotableHistory(notables), rx),
-                )),
-                Phase::NotableHistory(notables) => {
-                    let data = serde_json::to_string(&notables)
-                        .unwrap_or_else(|_| "[]".to_string());
-                    Some((
-                        Ok(Event::default()
-                            .event("notable_history")
-                            .data(data)),
-                        (Phase::Live, rx),
-                    ))
-                }
-                Phase::Live => match rx.recv().await {
-                    Ok(event) => {
-                        let event_type = match &event {
-                            super::zmq_subscriber::HeartbeatEvent::Tx { .. } => "tx",
-                            super::zmq_subscriber::HeartbeatEvent::Block { .. } => "block",
-                            super::zmq_subscriber::HeartbeatEvent::BlockTxids { .. } => "block_txids",
-                            super::zmq_subscriber::HeartbeatEvent::BlockDisconnected { .. } => "block_disconnected",
-                            super::zmq_subscriber::HeartbeatEvent::BlockMining => "block_mining",
-                            super::zmq_subscriber::HeartbeatEvent::TxRemoved { .. } => "tx_removed",
-                        };
-                        let data =
-                            serde_json::to_string(&event).unwrap_or_default();
-                        Some((
-                            Ok(Event::default().event(event_type).data(data)),
-                            (Phase::Live, rx),
-                        ))
-                    }
-                    Err(broadcast::error::RecvError::Lagged(n)) => {
-                        tracing::debug!(
-                            "SSE client lagged, skipped {n} events"
-                        );
-                        Some((
-                            Ok(Event::default()
-                                .event("lag")
-                                .data(format!("{{\"skipped\":{n}}}"))),
-                            (Phase::Live, rx),
-                        ))
-                    }
-                    Err(broadcast::error::RecvError::Closed) => None,
-                },
-            }
-        },
-    );
-
-    let guarded_stream = stream.chain(futures::stream::once(async move {
-        drop(guard);
-        Ok(Event::default().comment(""))
-    }));
-
-    // X-Accel-Buffering: no tells nginx to not buffer this response (required for SSE)
-    Ok((
-        [(
-            header::HeaderName::from_static("x-accel-buffering"),
-            "no".to_string(),
-        )],
-        Sse::new(guarded_stream)
-            .keep_alive(KeepAlive::new().interval(Duration::from_secs(15))),
-    ))
 }
 
 /// Query parameters for `GET /api/stats/heartbeat/v2`.

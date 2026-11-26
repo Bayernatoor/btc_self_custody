@@ -122,23 +122,46 @@ with tempfile.TemporaryDirectory(dir=base_tmp, prefix="hb-smoke-") as tmp, conte
                 raise
             time.sleep(0.15)
 
+    # Retired legacy v1 route must answer 404.
+    try:
+        urllib.request.urlopen(base + "/api/stats/heartbeat", timeout=5)
+        raise AssertionError("legacy /api/stats/heartbeat should return 404")
+    except urllib.error.HTTPError as exc:
+        assert exc.code == 404, f"expected 404 on retired v1 route, got {exc.code}"
+
     events = queue.Queue()
+    stop_sse = threading.Event()
 
-    def read_sse():
+    def fetch_snapshot():
+        with urllib.request.urlopen(base + "/api/stats/heartbeat/snapshot", timeout=15) as resp:
+            assert resp.status == 200
+            return json.loads(resp.read().decode())
+
+    def read_sse_v2():
         try:
-            with urllib.request.urlopen(base + "/api/stats/heartbeat", timeout=60) as response:
-                assert response.status == 200
-                label = ""
-                for raw in response:
-                    line = raw.decode().strip()
-                    if line.startswith("event:"):
-                        label = line.partition(":")[2].strip()
-                    if line.startswith("data:"):
-                        events.put((label, json.loads(line.partition(":")[2])))
+            while not stop_sse.is_set():
+                snap = fetch_snapshot()
+                events.put(("snapshot", snap))
+                url = f"{base}/api/stats/heartbeat/v2?epoch={snap['stream_epoch']}&after={snap['seq']}"
+                with urllib.request.urlopen(url, timeout=60) as response:
+                    assert response.status == 200
+                    label = ""
+                    for raw in response:
+                        if stop_sse.is_set():
+                            return
+                        line = raw.decode().strip()
+                        if line.startswith("event:"):
+                            label = line.partition(":")[2].strip()
+                        if line.startswith("data:"):
+                            payload = json.loads(line.partition(":")[2])
+                            events.put((label, payload))
+                            if label == "resync_required":
+                                break
         except Exception as exc:
-            events.put(("error", repr(exc)))
+            if not stop_sse.is_set():
+                events.put(("error", repr(exc)))
 
-    threading.Thread(target=read_sse, daemon=True).start()
+    threading.Thread(target=read_sse_v2, daemon=True).start()
 
     def until(predicate, seconds=50):
         limit = time.monotonic() + seconds
@@ -148,17 +171,26 @@ with tempfile.TemporaryDirectory(dir=base_tmp, prefix="hb-smoke-") as tmp, conte
             if predicate(event, data):
                 return
 
-    until(lambda e, d: e == "history")
+    until(lambda e, d: e == "snapshot")
     a = cli("sendtoaddress", addr, 1)
     b = cli("sendtoaddress", addr, 2)
     seen = set()
 
     def arrivals(e, d):
-        if e == "tx":
-            seen.add(d["txid"])
+        if e == "snapshot":
+            for tx in d.get("transactions", []):
+                if isinstance(tx, list) and tx:
+                    seen.add(tx[0])
+        elif e == "delta":
+            kind = d.get("kind", {})
+            if kind.get("type") == "membership_add":
+                seen.add(kind["txid"])
+            elif kind.get("type") == "tx_details":
+                seen.add(kind["tx"]["txid"])
         return {a, b} <= seen
 
-    until(arrivals)
+    if not poll_only:
+        until(arrivals)
 
     def stored(predicate):
         limit = time.monotonic() + 10
@@ -179,13 +211,28 @@ with tempfile.TemporaryDirectory(dir=base_tmp, prefix="hb-smoke-") as tmp, conte
     kinds = set()
 
     def inclusion(e, d):
-        if e in {"block", "block_txids"} and d.get("hash") == mined:
-            assert d["height"] == expected["height"]
-            if e == "block_txids":
-                assert set(expected["tx"]) == set(d["txids"]) and b not in d["txids"]
-            if e == "block":
-                assert d["size"] == expected["size"] and d["weight"] == expected["weight"]
-            kinds.add(e)
+        if e == "delta":
+            kind = d.get("kind", {})
+            ktype = kind.get("type")
+            if ktype == "block_inclusion" and kind.get("hash") == mined:
+                assert kind["height"] == expected["height"]
+                assert set(expected["tx"]) == set(kind["txids"]) and b not in kind["txids"]
+                kinds.add("block_inclusion")
+            elif ktype == "block_details" and kind.get("hash") == mined:
+                assert kind["height"] == expected["height"]
+                assert kind["size"] == expected["size"] and kind["weight"] == expected["weight"]
+                kinds.add("block_details")
+        elif e == "snapshot":
+            for rc in d.get("recent_confirmations", []):
+                if rc.get("hash") == mined:
+                    assert rc["height"] == expected["height"]
+                    assert a in rc["txids"] and b not in rc["txids"]
+                    kinds.add("block_inclusion")
+            for rb in d.get("recent_blocks", []):
+                if rb.get("hash") == mined:
+                    assert rb["height"] == expected["height"]
+                    assert rb["size"] == expected["size"] and rb["weight"] == expected["weight"]
+                    kinds.add("block_details")
         return len(kinds) == 2
 
     until(inclusion)
@@ -199,10 +246,13 @@ with tempfile.TemporaryDirectory(dir=base_tmp, prefix="hb-smoke-") as tmp, conte
         seen_events = []
 
         def changes(e, d):
-            if e in {"block_disconnected", "block", "block_txids"}:
-                seen_events.append((e, d["hash"]))
+            if e == "delta":
+                kind = d.get("kind", {})
+                ktype = kind.get("type")
+                if ktype in {"block_disconnected", "block_details", "block_inclusion"}:
+                    seen_events.append((ktype, kind["hash"]))
             return ("block_disconnected", mined) in seen_events and all(
-                ("block", h) in seen_events and ("block_txids", h) in seen_events
+                ("block_details", h) in seen_events and ("block_inclusion", h) in seen_events
                 for h in new_hashes
             )
 
@@ -212,14 +262,21 @@ with tempfile.TemporaryDirectory(dir=base_tmp, prefix="hb-smoke-") as tmp, conte
             raise AssertionError(f"missing poll fork events: {seen_events}") from None
         print(
             "Hashblock and sequence disabled: poll retracted old tip and delivered "
-            "both canonical blocks and exact IDs across forward reorg."
+            "both canonical blocks and exact IDs over v2 across forward reorg."
         )
     else:
-        until(lambda e, d: e == "block_disconnected" and d["hash"] == mined)
+        def disconnected(e, d):
+            if e != "delta":
+                return False
+            kind = d.get("kind", {})
+            return kind.get("type") == "block_disconnected" and kind.get("hash") == mined
 
+        until(disconnected)
+
+    stop_sse.set()
     assert a in json.loads(cli("getrawmempool"))
     stored(lambda row: row is None or row == (None,))
     print(
-        "HTTP 200, 2 real SSE txs, exact block hash/height/txids/whole size/weight "
+        "HTTP 200 v2 snapshot+SSE (v1 retired 404), 2 real txs, exact block hash/height/txids/whole size/weight "
         "verified without hashblock; other tx stayed in Core."
     )

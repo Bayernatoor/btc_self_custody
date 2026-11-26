@@ -69,6 +69,7 @@ probe 400 "/op-returns over-wide"  "$BASE/api/stats/op-returns?from=0&to=$TIP"
 probe 400 "/daily reversed range"  "$BASE/api/stats/aggregates/daily?from=1710000000&to=1700000000"
 probe 400 "/tx bad txid"           "$BASE/api/stats/tx/nothex"
 probe 404 "/tx unknown txid"       "$BASE/api/stats/tx/$(printf '0%.0s' {1..64})"
+probe 404 "/heartbeat v1 retired"   "$BASE/api/stats/heartbeat"
 probe 400 "/heartbeat/v2 no cursor" "$BASE/api/stats/heartbeat/v2"
 probe 400 "/heartbeat/tx bad txid" "$BASE/api/stats/heartbeat/tx/not-a-txid"
 probe 400 "/heartbeat/block bad"   "$BASE/api/stats/heartbeat/block/not-a-block"
@@ -123,11 +124,18 @@ probe 200 "notable_top"            -X POST "$(sfn notable_top)"                -
 note "notable_txs (bracket form)"  -X POST "$(sfn notable_txs)" -d 'filter[confirmed_only]=false&filter[unconfirmed_only]=false&limit=5&offset=0'
 note "notable_txs (flat form)"     -X POST "$(sfn notable_txs)" -d 'confirmed_only=false&unconfirmed_only=false&limit=5&offset=0'
 
-# SSE: streams until disconnected, so cap it and confirm only that it opens and
-# the first frame is the history event. The 256-connection limit lives here too.
-hb_body=$(curl -s -m 3 "$BASE/api/stats/heartbeat" 2>/dev/null | head -c 60 | tr -d '\n')
-hb_code=$(curl -s -m 3 -o /dev/null -w '%{http_code}' "$BASE/api/stats/heartbeat" 2>/dev/null)
-printf '??  %-3s %-45s %s\n' "$hb_code" "/heartbeat (SSE, 3s cap)" "$hb_body"
+# SSE v2: fetch the current (stream_epoch, seq) cursor from /snapshot, then open
+# /heartbeat/v2 for 3s to confirm 200 OK and event-stream headers.
+hb_snap=$(curl -s "$BASE/api/stats/heartbeat/snapshot" 2>/dev/null)
+hb_epoch=$(printf '%s' "$hb_snap" | sed -n 's/.*"stream_epoch":"\([^"]*\)".*/\1/p')
+hb_seq=$(printf '%s' "$hb_snap" | sed -n 's/.*"seq":"\([0-9]*\)".*/\1/p')
+if [ -n "$hb_epoch" ] && [ -n "$hb_seq" ]; then
+  hb_code=$(curl -s -m 3 -o /dev/null -w '%{http_code}' "$BASE/api/stats/heartbeat/v2?epoch=$hb_epoch&after=$hb_seq" 2>/dev/null)
+  printf '??  %-3s %-45s epoch=%s after=%s\n' "$hb_code" "/heartbeat/v2 (SSE, 3s cap)" "${hb_epoch:0:8}" "$hb_seq"
+else
+  printf '!!  --- %-45s could not parse snapshot cursor\n' "/heartbeat/v2 (SSE, 3s cap)"
+  fail=$((fail + 1))
+fi
 
 echo
 # Server fns are expected to answer 500 even for a client mistake, and that is

@@ -106,7 +106,7 @@ pub async fn init() -> Option<(
     }
 
     // Broadcast channel for heartbeat events (ZMQ → SSE). 4096 buffer handles bursts.
-    let (heartbeat_tx, _) = broadcast::channel(4096);
+    let (heartbeat_tx, _) = broadcast::channel(16);
 
     // Every cache built through StatsStateBuilder is auto-registered
     // with the invalidation registry under each provided tag. Adding
@@ -179,13 +179,6 @@ pub async fn init() -> Option<(
         Duration::from_secs(60),
         &[CacheTag::OnNewBlock],
     );
-    // Short TTL: shares one built payload across a burst of connects (singleflight),
-    // rebuilt at most every few seconds. TTL-only: a stale initial fill is fine.
-    let heartbeat_history_cache = cb.cache::<(), std::sync::Arc<str>>(
-        "heartbeat_history",
-        Duration::from_secs(3),
-        &[],
-    );
 
     let state = Arc::new(StatsState {
         db: pool,
@@ -207,7 +200,6 @@ pub async fn init() -> Option<(
         heartbeat_store: Arc::new(super::heartbeat_state::HeartbeatStore::new()),
         heartbeat_blocks: Default::default(),
         sse_connections: std::sync::atomic::AtomicUsize::new(0),
-        heartbeat_history_cache,
     });
 
     let router = build_api_router(Arc::clone(&state));
@@ -237,7 +229,6 @@ pub(crate) fn build_api_router(state: Arc<StatsState>) -> Router {
         .route("/aggregates/daily", get(api::get_daily_aggregates))
         .route("/signaling", get(api::get_signaling))
         .route("/signaling/periods", get(api::get_signaling_periods))
-        .route("/heartbeat", get(api::get_heartbeat_sse))
         .route("/heartbeat/snapshot", get(api::get_heartbeat_snapshot))
         .route("/heartbeat/v2", get(api::get_heartbeat_v2_sse))
         .route("/heartbeat/tx/{txid}", get(api::get_heartbeat_tx_lookup))
