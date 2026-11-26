@@ -1198,11 +1198,16 @@ pub fn HeartbeatPage() -> impl IntoView {
                                     .vsize
                                     .map(|v| format!("{} vB", super::helpers::format_number(u64::from(v))))
                                     .unwrap_or_else(|| "Pending...".to_string());
-                                let weight_inline = tx
+                                let weight_text = tx
                                     .deep
                                     .as_ref()
                                     .and_then(|d| d.weight)
-                                    .map(|w| format!(" \u{00b7} {} WU", super::helpers::format_number(w)));
+                                    .map(|w| format!("{} WU", super::helpers::format_number(w)))
+                                    .unwrap_or_else(|| {
+                                        tx.vsize
+                                            .map(|v| format!("~{} WU", super::helpers::format_number(u64::from(v) * 4)))
+                                            .unwrap_or_else(|| "--".to_string())
+                                    });
                                 let value_text = tx
                                     .value
                                     .map(|sats| format!("{:.8} BTC", sats as f64 / 1e8))
@@ -1329,7 +1334,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                                                     };
                                                     view! {
                                                         <span
-                                                            title=tip
+                                                            data-tip=tip
                                                             class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold tracking-wide border"
                                                             style=format!("color:{fg};border-color:{border};background:{bg}")
                                                         >
@@ -1371,31 +1376,36 @@ pub fn HeartbeatPage() -> impl IntoView {
 
                                         // Body
                                         <div class="px-3.5 py-3 space-y-3">
-                                            // Compact TXID line + Copy
-                                            <div class="flex items-center justify-between gap-2 pb-2 border-b border-white/[0.08]">
-                                                <span class="text-xs text-white/90 truncate select-all" title=txid_full.clone()>
-                                                    {txid_short}
-                                                </span>
-                                                <button
-                                                    type="button"
-                                                    class="px-2 py-0.5 rounded bg-white/[0.08] hover:bg-white/15 text-[11px] text-white/85 cursor-pointer transition-colors shrink-0"
-                                                    on:click=move |_| {
-                                                        #[cfg(feature = "hydrate")]
-                                                        {
-                                                            if let Some(win) = leptos::web_sys::window() {
-                                                                let clipboard = win.navigator().clipboard();
-                                                                let _ = clipboard.write_text(&txid_copy);
-                                                                set_copied_txid.set(true);
-                                                                leptos::prelude::set_timeout(
-                                                                    move || set_copied_txid.set(false),
-                                                                    std::time::Duration::from_millis(1500),
-                                                                );
+                                            // Labeled TXID + Copy
+                                            <div class="pb-2 border-b border-white/10 space-y-1">
+                                                <div class="text-[10px] lg:text-[11px] text-white/80 font-medium tracking-wide uppercase">
+                                                    "Transaction ID"
+                                                </div>
+                                                <div class="flex items-center justify-between gap-2">
+                                                    <span class="text-xs text-white font-medium truncate select-all" data-tip=txid_full.clone()>
+                                                        {txid_short}
+                                                    </span>
+                                                    <button
+                                                        type="button"
+                                                        class="px-2 py-0.5 rounded bg-white/10 hover:bg-white/20 text-[11px] text-white/95 cursor-pointer transition-colors shrink-0"
+                                                        on:click=move |_| {
+                                                            #[cfg(feature = "hydrate")]
+                                                            {
+                                                                if let Some(win) = leptos::web_sys::window() {
+                                                                    let clipboard = win.navigator().clipboard();
+                                                                    let _ = clipboard.write_text(&txid_copy);
+                                                                    set_copied_txid.set(true);
+                                                                    leptos::prelude::set_timeout(
+                                                                        move || set_copied_txid.set(false),
+                                                                        std::time::Duration::from_millis(1500),
+                                                                    );
+                                                                }
                                                             }
                                                         }
-                                                    }
-                                                >
-                                                    {move || if copied_txid.get() { "Copied" } else { "Copy" }}
-                                                </button>
+                                                    >
+                                                        {move || if copied_txid.get() { "Copied" } else { "Copy" }}
+                                                    </button>
+                                                </div>
                                             </div>
 
                                             // Queue position hero readout while unconfirmed
@@ -1405,17 +1415,17 @@ pub fn HeartbeatPage() -> impl IntoView {
                                                     None => (
                                                         "Awaiting fee details".to_string(),
                                                         String::new(),
-                                                        "#cbd5e1",
+                                                        "#e2e8f0",
                                                     ),
                                                 };
                                                 view! {
                                                     <div
-                                                        class="rounded-lg bg-white/[0.04] border border-white/10 border-l-2 px-3 py-2"
+                                                        class="rounded-lg bg-white/[0.05] border border-white/15 border-l-2 px-3 py-2"
                                                         style=format!("border-left-color: {q_color}")
-                                                        title="Estimated from solo fee rate (sat/vB) across observed mempool transactions. CPFP packages and miner policy can move a transaction ahead or behind."
+                                                        data-tip="Estimated from solo fee rate (sat/vB) across observed mempool transactions.\nCPFP packages and miner policy can move a transaction ahead or behind."
                                                     >
                                                         <div class="flex items-baseline justify-between gap-2">
-                                                            <span class="text-[10px] lg:text-[11px] text-white/75 font-medium tracking-wide uppercase">
+                                                            <span class="text-[10px] lg:text-[11px] text-white/85 font-medium tracking-wide uppercase">
                                                                 "Queue Position (est.)"
                                                             </span>
                                                             <span
@@ -1426,7 +1436,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                                                             </span>
                                                         </div>
                                                         {(!detail.is_empty()).then(|| view! {
-                                                            <div class="text-[11px] text-white/75 tabular-nums mt-0.5">
+                                                            <div class="text-[11px] text-white/90 tabular-nums mt-0.5">
                                                                 {detail}
                                                             </div>
                                                         })}
@@ -1434,10 +1444,10 @@ pub fn HeartbeatPage() -> impl IntoView {
                                                 }
                                             })}
 
-                                            // Balanced 2x2 Key Metrics Grid (Fee Rate | Fee Paid, Output Value | Size & Weight)
+                                            // Clean aligned 3x2 Key Metrics Grid
                                             <div class="grid grid-cols-2 gap-x-4 gap-y-2.5 text-xs lg:text-[13px]">
-                                                <div title=fee_rate_tip>
-                                                    <div class="text-[10px] lg:text-[11px] text-white/70 font-medium tracking-wide uppercase">"Fee Rate"</div>
+                                                <div data-tip=fee_rate_tip>
+                                                    <div class="text-[10px] lg:text-[11px] text-white/80 font-medium tracking-wide uppercase">"Fee Rate"</div>
                                                     <div class="flex items-center gap-1.5 text-white font-semibold tabular-nums mt-0.5">
                                                         <span
                                                             class="w-2 h-2 rounded-full shrink-0"
@@ -1447,28 +1457,25 @@ pub fn HeartbeatPage() -> impl IntoView {
                                                     </div>
                                                 </div>
                                                 <div>
-                                                    <div class="text-[10px] lg:text-[11px] text-white/70 font-medium tracking-wide uppercase">"Fee Paid"</div>
+                                                    <div class="text-[10px] lg:text-[11px] text-white/80 font-medium tracking-wide uppercase">"Fee Paid"</div>
                                                     <div class="text-white font-semibold tabular-nums mt-0.5">{fee_paid_text}</div>
                                                 </div>
                                                 <div>
-                                                    <div class="text-[10px] lg:text-[11px] text-white/70 font-medium tracking-wide uppercase">"Output Value"</div>
+                                                    <div class="text-[10px] lg:text-[11px] text-white/80 font-medium tracking-wide uppercase">"Output Value"</div>
                                                     <div class="text-white font-semibold tabular-nums mt-0.5">{value_text}</div>
                                                 </div>
                                                 <div>
-                                                    <div class="text-[10px] lg:text-[11px] text-white/70 font-medium tracking-wide uppercase">"Size"</div>
-                                                    <div class="text-white font-semibold tabular-nums mt-0.5">
-                                                        <span>{size_text}</span>
-                                                        {weight_inline.map(|w| view! {
-                                                            <span class="text-[11px] text-white/60 font-normal">{w}</span>
-                                                        })}
-                                                    </div>
+                                                    <div class="text-[10px] lg:text-[11px] text-white/80 font-medium tracking-wide uppercase">"Size"</div>
+                                                    <div class="text-white font-semibold tabular-nums mt-0.5">{size_text}</div>
                                                 </div>
-                                            </div>
-
-                                            // Compact First Observed row
-                                            <div class="flex items-center justify-between gap-2 pt-2 border-t border-white/[0.08] text-[11px] lg:text-xs">
-                                                <span class="text-white/70 uppercase tracking-wide font-medium">"First Observed"</span>
-                                                <span class="text-white/95 font-medium tabular-nums">{first_seen_text}</span>
+                                                <div>
+                                                    <div class="text-[10px] lg:text-[11px] text-white/80 font-medium tracking-wide uppercase">"First Observed"</div>
+                                                    <div class="text-white font-semibold tabular-nums mt-0.5">{first_seen_text}</div>
+                                                </div>
+                                                <div>
+                                                    <div class="text-[10px] lg:text-[11px] text-white/80 font-medium tracking-wide uppercase">"Weight"</div>
+                                                    <div class="text-white font-semibold tabular-nums mt-0.5">{weight_text}</div>
+                                                </div>
                                             </div>
 
                                             // OP_RETURN text (strictly text nodes, never inner_html)
@@ -1498,15 +1505,15 @@ pub fn HeartbeatPage() -> impl IntoView {
                                                         {has_io_items.then(|| {
                                                             let open = io_expanded.get();
                                                             view! {
-                                                                <div class="rounded-lg bg-white/[0.03] border border-white/10 overflow-hidden">
+                                                                <div class="rounded-lg bg-white/[0.04] border border-white/15 overflow-hidden">
                                                                     <button
                                                                         type="button"
                                                                         aria-expanded=move || if io_expanded.get() { "true" } else { "false" }
-                                                                        class="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 text-[11px] font-mono text-white/85 hover:text-white hover:bg-white/[0.05] cursor-pointer transition-colors"
+                                                                        class="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 text-[11px] font-mono text-white/95 hover:text-white hover:bg-white/[0.06] cursor-pointer transition-colors"
                                                                         on:click=move |_| set_io_expanded.update(|v| *v = !*v)
                                                                     >
                                                                         <span>{io_toggle_label}</span>
-                                                                        <span class="text-[10px] text-white/60">
+                                                                        <span class="text-[10px] text-white/80">
                                                                             {if open { "\u{25BE}" } else { "\u{25B8}" }}
                                                                         </span>
                                                                     </button>
@@ -1514,7 +1521,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                                                                         <div class="px-2.5 pb-2.5 pt-1 border-t border-white/10 max-h-52 overflow-y-auto space-y-2.5 text-[10px] lg:text-[11px]">
                                                                             {(!in_items.is_empty()).then(|| view! {
                                                                                 <div class="space-y-1">
-                                                                                    <div class="text-[10px] text-white/70 font-semibold uppercase tracking-wider">
+                                                                                    <div class="text-[10px] text-white/85 font-semibold uppercase tracking-wider">
                                                                                         {format!("Inputs ({})", super::helpers::format_number(total_in))}
                                                                                     </div>
                                                                                     {in_items.iter().enumerate().map(|(idx, entry)| {
@@ -1535,7 +1542,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                                                                                                     view! {
                                                                                                         <button
                                                                                                             type="button"
-                                                                                                            title=tip
+                                                                                                            data-tip=tip
                                                                                                             class="group inline-flex items-center gap-1.5 text-left text-white/80 hover:text-white truncate min-w-0 cursor-pointer transition-colors"
                                                                                                             on:click=move |_| {
                                                                                                                 #[cfg(feature = "hydrate")]
@@ -1570,7 +1577,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                                                                                                                     }.into_any()
                                                                                                                 } else {
                                                                                                                     view! {
-                                                                                                                        <svg class="w-3 h-3 shrink-0 text-white/40 group-hover:text-white/85 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                                                                                                                        <svg class="w-3 h-3 shrink-0 text-white/65 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
                                                                                                                             <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
                                                                                                                             <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
                                                                                                                         </svg>
@@ -1597,7 +1604,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                                                                             })}
                                                                             {(!out_items.is_empty()).then(|| view! {
                                                                                 <div class="space-y-1">
-                                                                                    <div class="text-[10px] text-white/70 font-semibold uppercase tracking-wider">
+                                                                                    <div class="text-[10px] text-white/85 font-semibold uppercase tracking-wider">
                                                                                         {format!("Outputs ({})", super::helpers::format_number(total_out))}
                                                                                     </div>
                                                                                     {out_items.iter().enumerate().map(|(idx, entry)| {
@@ -1618,7 +1625,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                                                                                                     view! {
                                                                                                         <button
                                                                                                             type="button"
-                                                                                                            title=tip
+                                                                                                            data-tip=tip
                                                                                                             class="group inline-flex items-center gap-1.5 text-left text-white/80 hover:text-white truncate min-w-0 cursor-pointer transition-colors"
                                                                                                             on:click=move |_| {
                                                                                                                 #[cfg(feature = "hydrate")]
@@ -1653,7 +1660,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                                                                                                                     }.into_any()
                                                                                                                 } else {
                                                                                                                     view! {
-                                                                                                                        <svg class="w-3 h-3 shrink-0 text-white/40 group-hover:text-white/85 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                                                                                                                        <svg class="w-3 h-3 shrink-0 text-white/65 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
                                                                                                                             <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
                                                                                                                             <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
                                                                                                                         </svg>
@@ -1774,9 +1781,9 @@ pub fn HeartbeatPage() -> impl IntoView {
                                                 href=mempool_url
                                                 target="_blank"
                                                 rel="noopener noreferrer"
-                                                class="text-[11px] lg:text-xs 2xl:text-sm text-white/55 hover:text-[#f7931a] transition-colors"
+                                                class="text-[11px] lg:text-xs text-white/80 hover:text-[#f7931a] transition-colors"
                                             >
-                                                "mempool.space ->"
+                                                "mempool.space \u{2192}"
                                             </a>
                                         </div>
                                     </div>
@@ -1881,7 +1888,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                             {move || format_arrival_rate(arrival_rate.get()).map(|rate_str| view! {
                                 <span
                                     class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-[#38bdf8]/15 border border-[#38bdf8]/45 text-xs sm:text-sm font-bold text-[#7dd3fc] shadow-sm"
-                                    title="Rolling 60-second live mempool admission rate observed by my node"
+                                    data-tip="Rolling 60-second live mempool admission rate observed by my node."
                                 >
                                     <span class="w-1.5 h-1.5 rounded-full bg-[#38bdf8] animate-pulse shrink-0"></span>
                                     <span>{rate_str}</span>
@@ -2039,7 +2046,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                             <button
                                 type="button"
                                 aria-pressed=move || if spotlight_band.get() == Some(idx) { "true" } else { "false" }
-                                title=move || {
+                                data-tip=move || {
                                     let stat = fee_bands.get().bands[idx];
                                     format_band_chip_tooltip(band_label, stat, spotlight_band.get() == Some(idx))
                                 }
@@ -2272,7 +2279,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                                         <h2 class="text-sm sm:text-base font-semibold text-white">
                                             "Landmark Blocks"
                                         </h2>
-                                        <p class="text-[11px] sm:text-xs text-white/55 mt-0.5">
+                                        <p class="text-xs text-white/80 mt-0.5">
                                             "Jump the Heartbeat EKG to any curated block from The Archives."
                                         </p>
                                     </div>
@@ -2280,7 +2287,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                                         id="heartbeat-landmarks-close"
                                         type="button"
                                         aria-label="Close landmark blocks browser"
-                                        class="w-7 h-7 rounded-lg bg-white/5 hover:bg-white/15 border border-white/10 text-white/65 hover:text-white flex items-center justify-center cursor-pointer transition-colors shrink-0"
+                                        class="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 border border-white/15 text-white/80 hover:text-white flex items-center justify-center cursor-pointer transition-colors shrink-0"
                                         on:click=move |_| set_show_landmarks.set(false)
                                     >
                                         "\u{2715}"
@@ -2289,7 +2296,7 @@ pub fn HeartbeatPage() -> impl IntoView {
 
                                 // Featured quick-jump highlights inside the modal
                                 <div class="flex items-center gap-1.5 overflow-x-auto [scrollbar-width:none] pb-0.5">
-                                    <span class="text-[10px] font-mono font-semibold text-white/55 uppercase tracking-wider shrink-0">"Featured:"</span>
+                                    <span class="text-[11px] font-mono font-semibold text-white/80 uppercase tracking-wider shrink-0">"Featured:"</span>
                                     {[
                                         ("Genesis", 0u64, "#0", "Genesis block (Jan 3, 2009)"),
                                         ("Pizza", 57_043, "#57,043", "Bitcoin Pizza Day block (May 22, 2010)"),
@@ -2305,7 +2312,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                                         view! {
                                             <button
                                                 type="button"
-                                                title=tip
+                                                data-tip=tip
                                                 class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/[0.06] hover:bg-[#f7931a]/20 border border-white/15 hover:border-[#f7931a]/60 text-[10px] font-mono text-white/90 hover:text-white whitespace-nowrap shrink-0 cursor-pointer transition-colors"
                                                 on:click=move |_| {
                                                     set_show_landmarks.set(false);
@@ -2334,7 +2341,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                                         type="text"
                                         id="heartbeat-landmarks-filter"
                                         placeholder="Filter by event, year, category, or block height..."
-                                        class="w-full pl-3 pr-8 py-1.5 rounded-lg bg-[#0d2137] border border-white/15 text-xs sm:text-sm font-mono text-white placeholder-white/40 focus:outline-none focus:border-[#f7931a]/60"
+                                        class="w-full pl-3 pr-8 py-1.5 rounded-lg bg-[#0d2137] border border-white/20 text-xs sm:text-sm font-mono text-white placeholder-white/60 focus:outline-none focus:border-[#f7931a]/60"
                                         prop:value=move || landmark_filter.get()
                                         on:input=move |ev| set_landmark_filter.set(event_target_value(&ev))
                                         on:keydown=move |ev| {
@@ -2379,7 +2386,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                                             let cls = if is_active {
                                                 "inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-mono font-semibold border cursor-pointer transition-colors"
                                             } else {
-                                                "inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-mono text-white/70 hover:text-white bg-white/[0.04] hover:bg-white/10 border border-white/10 cursor-pointer transition-colors"
+                                                "inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-mono text-white/85 hover:text-white bg-white/[0.05] hover:bg-white/10 border border-white/15 cursor-pointer transition-colors"
                                             };
                                             view! {
                                                 <button
@@ -2389,7 +2396,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                                                     on:click=move |_| set_landmark_cat.set(cat_opt)
                                                 >
                                                     <span>{label}</span>
-                                                    <span class="opacity-65 tabular-nums">{format!("({count})")}</span>
+                                                    <span class="opacity-85 tabular-nums">{format!("({count})")}</span>
                                                 </button>
                                             }
                                         }).collect_view()
@@ -2410,7 +2417,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                                     if items.is_empty() {
                                         view! {
                                             <div class="py-10 text-center space-y-2">
-                                                <p class="text-xs sm:text-sm text-white/55 font-mono">
+                                                <p class="text-xs sm:text-sm text-white/80 font-mono">
                                                     "No landmark blocks match that filter."
                                                 </p>
                                                 <button
@@ -2462,17 +2469,17 @@ pub fn HeartbeatPage() -> impl IntoView {
                                                                     ></span>
                                                                     {cat_label}
                                                                 </span>
-                                                                <span class="text-white/45 tabular-nums">{item.date}</span>
+                                                                <span class="text-white/80 tabular-nums">{item.date}</span>
                                                             </div>
                                                             <div class="flex items-start justify-between gap-2">
-                                                                <span class="text-xs sm:text-[13px] font-semibold text-white/95 group-hover:text-white leading-snug">
+                                                                <span class="text-xs sm:text-[13px] font-semibold text-white leading-snug">
                                                                     {item.title}
                                                                 </span>
                                                                 <span class="px-1.5 py-0.5 rounded bg-[#f7931a]/15 border border-[#f7931a]/35 text-[10px] sm:text-[11px] font-mono font-semibold text-[#f7931a] tabular-nums shrink-0">
                                                                     {height_tag}
                                                                 </span>
                                                             </div>
-                                                            <p class="text-[11px] text-white/60 leading-relaxed line-clamp-2">
+                                                            <p class="text-xs text-white/80 leading-relaxed line-clamp-2">
                                                                 {item.description}
                                                             </p>
                                                         </button>
@@ -2485,8 +2492,8 @@ pub fn HeartbeatPage() -> impl IntoView {
                             </div>
 
                             // Footer
-                            <div class="px-4 sm:px-5 py-2.5 border-t border-white/10 bg-[#071320]/90 flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono shrink-0">
-                                <span class="text-white/50 tabular-nums">
+                            <div class="px-4 sm:px-5 py-2.5 border-t border-white/10 bg-[#071320]/90 flex flex-wrap items-center justify-between gap-2 text-xs font-mono shrink-0">
+                                <span class="text-white/80 tabular-nums">
                                     {move || {
                                         let cat = landmark_cat.get();
                                         let q = landmark_filter.get();
@@ -2497,7 +2504,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                                 </span>
                                 <a
                                     href="/observatory/archives"
-                                    class="text-[#f7931a]/85 hover:text-[#f7931a] transition-colors"
+                                    class="text-[#f7931a] hover:text-[#ffb347] font-medium transition-colors"
                                 >
                                     "Browse full stories in The Archives \u{2192}"
                                 </a>

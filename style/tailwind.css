@@ -323,9 +323,13 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 
 /* ── Custom tooltips (replaces native title) ────────── */
 
-/* Bitcoin cursor on tooltip elements */
+/* Bitcoin cursor on non-interactive tooltip elements; keep pointer on buttons/links */
 [data-tip]:not([data-tip=""]) {
   cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='20'%3E%3Ctext x='8' y='17' text-anchor='middle' fill='%23f7931a' font-size='20' font-weight='700' font-family='Arial,sans-serif' stroke='%23000' stroke-width='0.5'%3E%3F%3C/text%3E%3C/svg%3E") 8 10, help;
+}
+button[data-tip]:not([data-tip=""]),
+a[data-tip]:not([data-tip=""]) {
+  cursor: pointer;
 }
 
 /* Suppress focus ring on tooltip elements */
@@ -359,6 +363,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   letter-spacing: normal;
   white-space: pre-line;
   text-wrap: pretty;
+  overflow-wrap: anywhere;
 }
 #btc-tooltip.visible {
   opacity: 1;

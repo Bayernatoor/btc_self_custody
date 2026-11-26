@@ -1011,9 +1011,7 @@ pub async fn get_tx_detail(
                                             format!(
                                                 "{prefix}\u{2026}:{prev_vout}"
                                             ),
-                                            Some(format!(
-                                                "{prev_tx}:{prev_vout}"
-                                            )),
+                                            Some(prev_tx.to_string()),
                                         ))
                                     })
                                     .unwrap_or_else(|| {

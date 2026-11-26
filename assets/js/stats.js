@@ -1639,9 +1639,27 @@
             }, { passive: true });
         }
 
+        // After any click, hide if the hovered element was removed (e.g. closing a
+        // panel/modal) or refresh its text if `data-tip` changed (e.g. toggling spotlight).
+        document.addEventListener('click', function() {
+            if (!activeEl) return;
+            setTimeout(function() {
+                if (!activeEl) return;
+                if (!activeEl.isConnected) { hide(); return; }
+                var nextText = activeEl.getAttribute('data-tip');
+                if (!nextText) { hide(); return; }
+                if (tip.textContent !== nextText) {
+                    tip.textContent = nextText;
+                    position(activeEl);
+                }
+            }, 0);
+        }, true);
+
         // Reposition on scroll
         document.addEventListener('scroll', function() {
-            if (activeEl) position(activeEl);
+            if (!activeEl) return;
+            if (!activeEl.isConnected) { hide(); return; }
+            position(activeEl);
         }, { passive: true });
     })();
 
