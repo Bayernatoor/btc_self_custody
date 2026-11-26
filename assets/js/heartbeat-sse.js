@@ -2607,8 +2607,12 @@ export function flushTxBatch(nowMsOverride) {
     }
     // virtualX is advanced ONLY by drawFrame (single smooth 60fps clock) during
     // normal live streaming so bursts never hitch or jump the camera forward.
-    // Only allow rightward head extension on massive (>200-tx) sleep/wake dumps.
+    // Allow rightward overflow only on massive (>200-tx) sleep/wake dumps OR when
+    // a narrow post-carry pinch (<60px past _carryEndX) would otherwise stack bricks
+    // into a 30-brick skyscraper because only 2-3 columns exist.
     var isMassiveWakeDump = batch.length > 200;
+    var tightPostCarry = !!(liveSeg._carryEndX && (headGridX - liveMinX) < 60);
+    var allowFlushExtend = isMassiveWakeDump || tightPostCarry;
     if (isMassiveWakeDump) {
         var neededBatchSpan = Math.ceil(batch.length / 8) * 5;
         if (headGridX - liveMinX < neededBatchSpan) {
@@ -2667,7 +2671,7 @@ export function flushTxBatch(nowMsOverride) {
         var blip = buildBlip(tx, gridX, gridX, 0, dropStamp, animateDrop);
         var fSlot = findColumnWithRoom(
             _hb, liveSeg, gridX, liveMinX, headGridX, blip.brickH,
-            liveSoftMax, liveHardMax, Math.max(60, spreadCols), isMassiveWakeDump
+            liveSoftMax, liveHardMax, Math.max(60, spreadCols), allowFlushExtend
         );
         headGridX = fSlot.maxGx;
         blip.x = fSlot.gx;

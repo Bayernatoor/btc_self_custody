@@ -891,12 +891,16 @@ window.pushHeartbeatBlocks = function(json, replay) {
             // Show block arrival announcement on the instant path (reveal owns its own banners).
             if (!isReplay && !revealPending && !_hb._suppressAnnounce && b.height) {
                 var feeBtc2 = (b.total_fees || 0) / 100000000;
-                var feePart2 = feeBtc2 > 0 ? (feeBtc2.toFixed(4) + ' BTC fees \u00b7 ') : '';
                 var heightStr2 = b.height.toLocaleString();
+                var confStr2 = (b.tx_count || 0).toLocaleString() + ' confirmed';
+                var remainPart2 = (harvestLive && carriedLeftovers && carriedLeftovers.length > 0)
+                    ? (' \u00b7 ' + carriedLeftovers.length.toLocaleString() + ' remaining')
+                    : '';
+                var feePart2 = feeBtc2 > 0 ? (' \u00b7 ' + feeBtc2.toFixed(4) + ' BTC fees') : '';
                 var nowAnn2 = Date.now() / 1000;
                 _hb._announcement = {
                     title: 'Block #' + heightStr2 + ' found',
-                    subtitle: feePart2 + (b.tx_count || 0).toLocaleString() + ' txs',
+                    subtitle: confStr2 + remainPart2 + feePart2,
                     color: blockSeg.color || _hb.currentColor || COLORS.healthy,
                     start: nowAnn2,
                     end: nowAnn2 + 11.0

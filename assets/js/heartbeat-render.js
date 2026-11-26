@@ -647,8 +647,8 @@ function runBlockReveal(_hb, dt, now, w) {
             var feeBtc = (r.blockFees || 0) / 100000000;
             _hb._announcement = {
                 title: 'Block #' + r.height.toLocaleString() + ' found',
-                subtitle: (feeBtc > 0 ? feeBtc.toFixed(4) + ' BTC fees · ' : '')
-                    + (r.blockTxCount || 0).toLocaleString() + ' txs',
+                subtitle: (r.blockTxCount || 0).toLocaleString() + ' txs confirmed'
+                    + (feeBtc > 0 ? ' \u00b7 ' + feeBtc.toFixed(4) + ' BTC fees' : ''),
                 color: r.blockColor || COLORS.healthy,
                 start: now,
                 // Linger into the unfurl (by REVEAL_BANNER2_DELAY) so it fades out
@@ -727,9 +727,14 @@ function runBlockReveal(_hb, dt, now, w) {
         // set (P5). Persists through the rest of the unfurl + hold, fades on return.
         if (!r._bannerRemainSet && elapsed >= REVEAL_BANNER2_DELAY) {
             r._bannerRemainSet = true;
+            var confirmedBlockN = r.blockTxCount || (r.confirmed ? r.confirmed.length : 0);
+            var clearedLocalN = r.confirmed ? r.confirmed.length : 0;
+            var remainN = r.leftovers ? r.leftovers.length : 0;
             _hb._announcement = {
-                title: r.leftovers.length.toLocaleString() + ' unconfirmed',
-                subtitle: 'transactions remaining in my mempool',
+                title: confirmedBlockN.toLocaleString() + ' confirmed \u00b7 ' + remainN.toLocaleString() + ' remaining',
+                subtitle: clearedLocalN > 0
+                    ? clearedLocalN.toLocaleString() + ' cleared from my mempool'
+                    : 'transactions remaining in my mempool',
                 color: r.blockColor || COLORS.healthy,
                 start: now,
                 end: now + (r.unfurlSecs - elapsed) + REVEAL_HOLD_SECS + REVEAL_RETURN_SECS
