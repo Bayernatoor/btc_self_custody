@@ -959,10 +959,108 @@ pub async fn get_tx_detail(
                 features.push("RBF");
             }
 
+            // Cap preview lists to 25 entries each so 500-input consolidations or
+            // 200-output fan-outs stay fast and lightweight on the droplet and UI.
+            const MAX_IO_PREVIEW: usize = 25;
+            // Returns `(display_label, copy_value)` where `copy_value` is `Some`
+            // only for concrete addresses (never generic script types).
+            let script_label =
+                |spk: &serde_json::Value| -> Option<(String, Option<String>)> {
+                    if let Some(addr) = spk["address"].as_str() {
+                        if !addr.is_empty() {
+                            return Some((
+                                addr.to_string(),
+                                Some(addr.to_string()),
+                            ));
+                        }
+                    }
+                    let kind = match spk["type"].as_str()? {
+                        "nulldata" => "OP_RETURN",
+                        "witness_v1_taproot" => "Taproot",
+                        "witness_v0_keyhash" => "SegWit",
+                        "witness_v0_scripthash" => "SegWit script",
+                        "scripthash" => "P2SH",
+                        "pubkeyhash" => "P2PKH",
+                        "pubkey" => "P2PK",
+                        "anchor" => "Anchor",
+                        other => other,
+                    };
+                    Some((kind.to_string(), None))
+                };
+            let input_items: Vec<serde_json::Value> = vin
+                .map(|inputs| {
+                    inputs
+                        .iter()
+                        .take(MAX_IO_PREVIEW)
+                        .map(|i| {
+                            if !i["coinbase"].is_null() {
+                                return serde_json::json!({
+                                    "label": "Coinbase",
+                                    "value": serde_json::Value::Null,
+                                    "copy": serde_json::Value::Null,
+                                });
+                            }
+                            let (label, copy) =
+                                script_label(&i["prevout"]["scriptPubKey"])
+                                    .or_else(|| {
+                                        let prev_tx = i["txid"].as_str()?;
+                                        let prev_vout = i["vout"].as_u64()?;
+                                        let prefix =
+                                            prev_tx.get(..8).unwrap_or(prev_tx);
+                                        Some((
+                                            format!(
+                                                "{prefix}\u{2026}:{prev_vout}"
+                                            ),
+                                            Some(format!(
+                                                "{prev_tx}:{prev_vout}"
+                                            )),
+                                        ))
+                                    })
+                                    .unwrap_or_else(|| {
+                                        ("Input".to_string(), None)
+                                    });
+                            let val_sats = i["prevout"]["value"]
+                                .as_f64()
+                                .map(|v| (v * 100_000_000.0).round() as u64);
+                            serde_json::json!({
+                                "label": label,
+                                "value": val_sats,
+                                "copy": copy,
+                            })
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            let output_items: Vec<serde_json::Value> = vout
+                .map(|outputs| {
+                    outputs
+                        .iter()
+                        .take(MAX_IO_PREVIEW)
+                        .map(|o| {
+                            let (label, copy) =
+                                script_label(&o["scriptPubKey"])
+                                    .unwrap_or_else(|| {
+                                        ("Output".to_string(), None)
+                                    });
+                            let val_sats = o["value"]
+                                .as_f64()
+                                .map(|v| (v * 100_000_000.0).round() as u64);
+                            serde_json::json!({
+                                "label": label,
+                                "value": val_sats,
+                                "copy": copy,
+                            })
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+
             Ok(Json(serde_json::json!({
                 "txid": txid,
                 "inputs": input_count,
                 "outputs": output_count,
+                "input_items": input_items,
+                "output_items": output_items,
                 "size": size,
                 "vsize": vsize,
                 "weight": weight,

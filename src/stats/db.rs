@@ -1195,6 +1195,7 @@ pub struct BlockRow {
     pub p2pk_value: u64,
     pub p2tr_value: u64,
     pub multisig_value: u64,
+    pub miner: String,
 }
 
 impl From<DailyRow> for super::types::DailyAggregate {
@@ -1327,6 +1328,7 @@ impl From<BlockRow> for super::types::BlockSummary {
             p2pk_value: r.p2pk_value,
             p2tr_value: r.p2tr_value,
             multisig_value: r.multisig_value,
+            miner: r.miner,
         }
     }
 }
@@ -1356,7 +1358,7 @@ pub fn query_blocks(
                 legacy_tx_count, segwit_tx_count, taproot_tx_count,
                 coinbase_text, fee_rate_p25, fee_rate_p75,
                 coinbase_output_count, unspendable_output_count, p2a_count,
-                brc20_bytes, p2pk_value, p2tr_value, multisig_value
+                brc20_bytes, p2pk_value, p2tr_value, multisig_value, miner
          FROM blocks WHERE height >= ?1 AND height <= ?2 ORDER BY height ASC",
     )?;
     let rows = stmt.query_map(params![from, to], |row| {
@@ -1423,6 +1425,7 @@ pub fn query_blocks(
             p2tr_value: row.get(60)?,
             multisig_value: row.get(61)?,
             p2a_count: row.get(57)?,
+            miner: row.get::<_, Option<String>>(62)?.unwrap_or_default(),
         })
     })?;
     rows.collect()
@@ -1460,7 +1463,7 @@ pub fn query_blocks_by_ts(
                 legacy_tx_count, segwit_tx_count, taproot_tx_count,
                 coinbase_text, fee_rate_p25, fee_rate_p75,
                 coinbase_output_count, unspendable_output_count, p2a_count,
-                brc20_bytes, p2pk_value, p2tr_value, multisig_value
+                brc20_bytes, p2pk_value, p2tr_value, multisig_value, miner
          FROM blocks WHERE timestamp >= ?1 AND timestamp <= ?2 ORDER BY height ASC LIMIT ?3",
     )?;
     let rows = stmt.query_map(params![from_ts, to_ts, limit], |row| {
@@ -1527,6 +1530,7 @@ pub fn query_blocks_by_ts(
             p2tr_value: row.get(60)?,
             multisig_value: row.get(61)?,
             p2a_count: row.get(57)?,
+            miner: row.get::<_, Option<String>>(62)?.unwrap_or_default(),
         })
     })?;
     rows.collect()
@@ -3810,6 +3814,8 @@ pub struct HeartbeatBlockWindowRow {
     pub size: u64,
     pub weight: u64,
     pub inter_block_seconds: Option<i64>,
+    #[serde(default)]
+    pub miner: String,
 }
 
 /// Look up a block height by its 64-character hex hash (case-insensitive).
@@ -3846,7 +3852,7 @@ pub fn query_heartbeat_block_range(
     let fetch_from = from.saturating_sub(1);
 
     let mut stmt = conn.prepare_cached(
-        "SELECT height, hash, timestamp, tx_count, total_fees, size, weight
+        "SELECT height, hash, timestamp, tx_count, total_fees, size, weight, miner
          FROM blocks
          WHERE height >= ?1 AND height <= ?2
          ORDER BY height ASC",
@@ -3864,6 +3870,8 @@ pub fn query_heartbeat_block_range(
         let total_fees: u64 = row.get(4)?;
         let size: u64 = row.get(5)?;
         let weight: u64 = row.get(6)?;
+        let miner: String =
+            row.get::<_, Option<String>>(7)?.unwrap_or_default();
 
         let inter_block_seconds = prev.and_then(|(prev_height, prev_ts)| {
             if prev_height.checked_add(1) == Some(height) {
@@ -3885,6 +3893,7 @@ pub fn query_heartbeat_block_range(
                 size,
                 weight,
                 inter_block_seconds,
+                miner,
             });
         }
     }

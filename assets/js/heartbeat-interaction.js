@@ -2,7 +2,7 @@
 import { getState, HEAD_POSITION_FRAC, FLATLINE_PX_PER_SEC } from './heartbeat-state.js';
 import { canvasToVirtual, virtualToCanvas, blockAtVirtualX, pendingBlockAtVirtualX, flatlineAtVirtualX, blipAtCanvasXY, blipAtVirtualX } from './heartbeat-blips.js';
 import { brickHeightScale } from './heartbeat-timeline.js';
-import { isSoundEnabled, toggleSound } from './heartbeat-audio.js';
+import { isSoundEnabled, toggleSound, unlockAudioOnGesture } from './heartbeat-audio.js';
 
 // Clamp vertical pan (viewOffsetY shifts the baseline DOWN when positive).
 // Allows freely panning up/down so that even at 30x+ zoom (where brick stacks
@@ -186,7 +186,7 @@ function handleCanvasTap(mx, my) {
     if (tapped) {
         if (_hb.hoveredBlock === tapped) {
             // Second tap on the same spike -> open the block detail modal.
-            if (tapped.height > 0 && typeof window.showBlockDetail === 'function') {
+            if (tapped.height != null && tapped.height >= 0 && typeof window.showBlockDetail === 'function') {
                 window.showBlockDetail(tapped.height);
             }
             _hb.hoveredBlock = null;
@@ -381,8 +381,8 @@ export function setupInputHandlers(canvas) {
         // Click on a brick -> pin it and notify live PinnedTxPanel (or fallback detail modal)
         if (_hb.hoveredBlip && _hb.hoveredBlip.txid) {
             selectBrick(_hb, _hb.hoveredBlip);
-        } else if (_hb.hoveredBlock && _hb.hoveredBlock.height > 0 && typeof window.showBlockDetail === 'function') {
-            // Clicking a block spike -> open block detail modal
+        } else if (_hb.hoveredBlock && _hb.hoveredBlock.height != null && _hb.hoveredBlock.height >= 0 && typeof window.showBlockDetail === 'function') {
+            // Clicking a block spike -> open block detail modal (including Genesis #0)
             window.showBlockDetail(_hb.hoveredBlock.height);
         } else if (!_hb.hoveredPendingBlock) {
             // Click on empty canvas space -> dismiss hover tooltips & pinned tx selection
@@ -626,7 +626,9 @@ function syncSoundButton(on) {
 }
 
 export function initSoundButton() {
-    syncSoundButton(isSoundEnabled());
+    var on = isSoundEnabled();
+    syncSoundButton(on);
+    if (on) unlockAudioOnGesture();
 }
 
 export function handleControlClick(id) {

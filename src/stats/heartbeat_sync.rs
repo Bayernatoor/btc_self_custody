@@ -143,6 +143,9 @@ pub struct CanonicalBlock {
     pub size: u64,
     pub weight: u64,
     pub observed_at: u64,
+    /// Identified mining pool or solo miner from coinbase, when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub miner: Option<String>,
 }
 
 /// Notable-transaction bitmask stored in a single `u8`.
@@ -672,6 +675,66 @@ pub enum MirrorTxMatch {
         block_hash: String,
         block_height: u64,
     },
+}
+
+/// Estimated queue depth ahead of an unconfirmed mempool transaction, computed
+/// strictly from solo fee rates (`fee / vsize`) across enriched mempool members.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct QueuePosition {
+    /// Unconfirmed transactions with a strictly higher solo fee rate.
+    pub txs_ahead: u64,
+    /// Total virtual bytes of those higher-fee transactions.
+    pub vbytes_ahead: u64,
+    /// Estimated confirmation target in blocks (`>= 1`, 1,000,000 vB/block),
+    /// counting `(vbytes_ahead + tx_vsize)` so boundary overflows round up honestly.
+    pub est_blocks: u64,
+    /// Unconfirmed transactions currently missing fee/vsize (excluded from the
+    /// higher-fee count so callers can surface the caveat transparently).
+    pub unenriched_count: u64,
+}
+
+/// Number of fixed fee-rate bands rendered on the Heartbeat canvas & legend:
+/// `0 = Pending`, `1 = < 1`, `2 = 1-2`, `3 = 2-5`, `4 = 5-15`, `5 = 15-50`, `6 = 50+`.
+pub const FEE_BAND_COUNT: usize = 7;
+
+/// Per-band mempool transaction count and virtual-byte total.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct FeeBandStat {
+    pub tx_count: u64,
+    pub vbytes: u64,
+}
+
+/// Live breakdown of the mirrored mempool across the 7 fixed canvas fee bands.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct FeeBandSummary {
+    pub bands: [FeeBandStat; FEE_BAND_COUNT],
+}
+
+/// Classify `(fee, vsize)` into one of the 7 fixed canvas fee bands using exact
+/// integer arithmetic so boundary values (`1.0`, `2.0`, `5.0`, `15.0`, `50.0`)
+/// never suffer floating-point drift.
+pub fn fee_band_index(fee: Option<u64>, vsize: Option<u32>) -> usize {
+    let (Some(f), Some(v)) = (fee, vsize) else {
+        return 0;
+    };
+    if v == 0 {
+        return 0;
+    }
+    let f = u128::from(f);
+    let v = u128::from(v);
+    if f < v {
+        1
+    } else if f < 2 * v {
+        2
+    } else if f < 5 * v {
+        3
+    } else if f < 15 * v {
+        4
+    } else if f < 50 * v {
+        5
+    } else {
+        6
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1378,6 +1441,83 @@ impl HeartbeatMirror {
         })
     }
 
+    /// Estimate queue depth ahead of an unconfirmed mempool member using exact
+    /// `u128` cross-multiplied solo fee rates (zero floating-point drift).
+    /// Returns `None` if `txid` is not in the mempool or lacks fee/vsize.
+    pub fn queue_position(&self, txid: &str) -> Option<QueuePosition> {
+        let target = self.members.get(txid)?;
+        self.queue_position_for_rate(
+            target.tx.fee?,
+            target.tx.vsize?,
+            Some(txid),
+        )
+    }
+
+    /// Estimate queue depth ahead of a hypothetical or server-looked-up
+    /// unconfirmed transaction with `(fee, vsize)`.
+    pub fn queue_position_for_rate(
+        &self,
+        fee: u64,
+        vsize: u32,
+        exclude_txid: Option<&str>,
+    ) -> Option<QueuePosition> {
+        if vsize == 0 {
+            return None;
+        }
+        const BLOCK_VBYTES: u64 = 1_000_000;
+        let tx_fee = u128::from(fee);
+        let tx_vsize = u128::from(vsize);
+
+        let mut txs_ahead: u64 = 0;
+        let mut vbytes_ahead: u64 = 0;
+        let mut unenriched_count: u64 = 0;
+
+        for (id, member) in &self.members {
+            if exclude_txid.is_some_and(|ex| id == ex) {
+                continue;
+            }
+            match (member.tx.fee, member.tx.vsize) {
+                (Some(other_fee), Some(other_vsize)) if other_vsize > 0 => {
+                    if u128::from(other_fee) * tx_vsize
+                        > tx_fee * u128::from(other_vsize)
+                    {
+                        txs_ahead += 1;
+                        vbytes_ahead =
+                            vbytes_ahead.saturating_add(u64::from(other_vsize));
+                    }
+                }
+                _ => {
+                    unenriched_count += 1;
+                }
+            }
+        }
+
+        let total_with_self = vbytes_ahead.saturating_add(u64::from(vsize));
+        let est_blocks = total_with_self.div_ceil(BLOCK_VBYTES).max(1);
+
+        Some(QueuePosition {
+            txs_ahead,
+            vbytes_ahead,
+            est_blocks,
+            unenriched_count,
+        })
+    }
+
+    /// Aggregate live mempool transaction counts and virtual bytes into the 7
+    /// fixed canvas fee bands (`0 = Pending`, `1 = < 1`, ..., `6 = 50+`).
+    pub fn fee_band_summary(&self) -> FeeBandSummary {
+        let mut summary = FeeBandSummary::default();
+        for member in self.members.values() {
+            let idx = fee_band_index(member.tx.fee, member.tx.vsize);
+            summary.bands[idx].tx_count += 1;
+            if let Some(v) = member.tx.vsize {
+                summary.bands[idx].vbytes =
+                    summary.bands[idx].vbytes.saturating_add(u64::from(v));
+            }
+        }
+        summary
+    }
+
     fn tick(&mut self) -> u64 {
         self.clock = self
             .clock
@@ -1520,6 +1660,7 @@ mod tests {
             size: 1_500_000,
             weight: 3_990_000,
             observed_at: 1_700_000_000 + height,
+            miner: None,
         }
     }
 
@@ -2394,6 +2535,7 @@ mod tests {
                 size: 10_000,
                 weight: 40_000,
                 observed_at: 1_700_000_000 + i,
+                miner: None,
             };
             assert_eq!(
                 mirror
@@ -3316,6 +3458,179 @@ mod tests {
                 tx_t1_b.as_str(),
                 tx_t2.as_str(),
             ]
+        );
+    }
+
+    #[test]
+    fn queue_position_ranks_by_exact_fee_rate_handles_ties_zero_and_block_boundaries(
+    ) {
+        let mut mirror = HeartbeatMirror::default();
+        let tx_high = hex_id(0x01); // 10 sat/vB, 400_000 vB
+        let tx_mid_a = hex_id(0x02); // 5 sat/vB, 600_000 vB
+        let tx_mid_b = hex_id(0x03); // 5 sat/vB (tie with mid_a), 200 vB
+        let tx_low = hex_id(0x04); // 1 sat/vB, 200 vB
+        let tx_zero = hex_id(0x05); // 0 sat/vB (TRUC), 150 vB
+        let tx_pending = hex_id(0x06); // fee/vsize unknown
+
+        let make_tx = |id: String, first_seen: u64, fee: u64, vsize: u32| {
+            let mut t = CompactTx::pending(id, first_seen);
+            t.fee = Some(fee);
+            t.vsize = Some(vsize);
+            t
+        };
+        let snap = base_snapshot(
+            1,
+            vec![
+                make_tx(tx_high.clone(), 100, 4_000_000, 400_000),
+                make_tx(tx_mid_a.clone(), 101, 3_000_000, 600_000),
+                make_tx(tx_mid_b.clone(), 102, 1_000, 200),
+                make_tx(tx_low.clone(), 103, 200, 200),
+                make_tx(tx_zero.clone(), 104, 0, 150),
+                CompactTx::pending(tx_pending.clone(), 105),
+            ],
+        );
+        mirror.install_snapshot(snap).unwrap();
+
+        // Top fee rate: 0 ahead, ~next block, 1 unenriched excluded.
+        assert_eq!(
+            mirror.queue_position(&tx_high),
+            Some(QueuePosition {
+                txs_ahead: 0,
+                vbytes_ahead: 0,
+                est_blocks: 1,
+                unenriched_count: 1,
+            })
+        );
+
+        // Mid tier (5 sat/vB): only tx_high (400k vB) is strictly ahead;
+        // tie tx_mid_a is NOT counted ahead. 400_000 + 200 <= 1_000_000 -> 1 block.
+        assert_eq!(
+            mirror.queue_position(&tx_mid_b),
+            Some(QueuePosition {
+                txs_ahead: 1,
+                vbytes_ahead: 400_000,
+                est_blocks: 1,
+                unenriched_count: 1,
+            })
+        );
+
+        // Low tier (1 sat/vB): high (400k) + mid_a (600k) + mid_b (200) = 1_000_200 vB ahead
+        // + 200 vB self = 1_000_400 vB -> crosses 1 vMB boundary into ~2 blocks.
+        assert_eq!(
+            mirror.queue_position(&tx_low),
+            Some(QueuePosition {
+                txs_ahead: 3,
+                vbytes_ahead: 1_000_200,
+                est_blocks: 2,
+                unenriched_count: 1,
+            })
+        );
+
+        // 0-sat TRUC tx: all 4 positive-fee txs ahead.
+        assert_eq!(
+            mirror.queue_position(&tx_zero),
+            Some(QueuePosition {
+                txs_ahead: 4,
+                vbytes_ahead: 1_000_400,
+                est_blocks: 2,
+                unenriched_count: 1,
+            })
+        );
+
+        // Pending-fee tx and absent tx return None.
+        assert_eq!(mirror.queue_position(&tx_pending), None);
+        assert_eq!(mirror.queue_position(&hex_id(0xff)), None);
+    }
+
+    #[test]
+    fn fee_band_summary_classifies_exact_boundaries_and_sums_vbytes() {
+        assert_eq!(fee_band_index(None, Some(200)), 0);
+        assert_eq!(fee_band_index(Some(500), None), 0);
+        assert_eq!(fee_band_index(Some(500), Some(0)), 0);
+        assert_eq!(fee_band_index(Some(0), Some(200)), 1);
+        assert_eq!(fee_band_index(Some(199), Some(200)), 1);
+        assert_eq!(fee_band_index(Some(200), Some(200)), 2); // exact 1.0 sat/vB -> 1-2
+        assert_eq!(fee_band_index(Some(399), Some(200)), 2);
+        assert_eq!(fee_band_index(Some(400), Some(200)), 3); // exact 2.0 sat/vB -> 2-5
+        assert_eq!(fee_band_index(Some(999), Some(200)), 3);
+        assert_eq!(fee_band_index(Some(1_000), Some(200)), 4); // exact 5.0 sat/vB -> 5-15
+        assert_eq!(fee_band_index(Some(2_999), Some(200)), 4);
+        assert_eq!(fee_band_index(Some(3_000), Some(200)), 5); // exact 15.0 sat/vB -> 15-50
+        assert_eq!(fee_band_index(Some(9_999), Some(200)), 5);
+        assert_eq!(fee_band_index(Some(10_000), Some(200)), 6); // exact 50.0 sat/vB -> 50+
+
+        let make = |seed: u8, fee: Option<u64>, vsize: Option<u32>| {
+            let mut t = CompactTx::pending(hex_id(seed), 100);
+            t.fee = fee;
+            t.vsize = vsize;
+            t
+        };
+        let mut mirror = HeartbeatMirror::default();
+        mirror
+            .install_snapshot(base_snapshot(
+                1,
+                vec![
+                    make(1, None, None),              // band 0 (pending)
+                    make(2, Some(100), Some(200)),    // band 1 (< 1)
+                    make(3, Some(250), Some(200)),    // band 2 (1-2)
+                    make(4, Some(600), Some(200)),    // band 3 (2-5)
+                    make(5, Some(1_500), Some(150)),  // band 4 (5-15)
+                    make(6, Some(4_000), Some(200)),  // band 5 (15-50)
+                    make(7, Some(20_000), Some(300)), // band 6 (50+)
+                    make(8, Some(15_000), Some(100)), // band 6 (50+)
+                ],
+            ))
+            .expect("install");
+
+        let s = mirror.fee_band_summary();
+        assert_eq!(
+            s.bands[0],
+            FeeBandStat {
+                tx_count: 1,
+                vbytes: 0
+            }
+        );
+        assert_eq!(
+            s.bands[1],
+            FeeBandStat {
+                tx_count: 1,
+                vbytes: 200
+            }
+        );
+        assert_eq!(
+            s.bands[2],
+            FeeBandStat {
+                tx_count: 1,
+                vbytes: 200
+            }
+        );
+        assert_eq!(
+            s.bands[3],
+            FeeBandStat {
+                tx_count: 1,
+                vbytes: 200
+            }
+        );
+        assert_eq!(
+            s.bands[4],
+            FeeBandStat {
+                tx_count: 1,
+                vbytes: 150
+            }
+        );
+        assert_eq!(
+            s.bands[5],
+            FeeBandStat {
+                tx_count: 1,
+                vbytes: 200
+            }
+        );
+        assert_eq!(
+            s.bands[6],
+            FeeBandStat {
+                tx_count: 2,
+                vbytes: 400
+            }
         );
     }
 }

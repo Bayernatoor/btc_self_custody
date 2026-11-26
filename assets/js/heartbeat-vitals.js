@@ -144,6 +144,7 @@ function renderRhythmDetailDom(canvas, detailEl, idx) {
 
     var hSpan = document.createElement('span');
     hSpan.style.color = r.color;
+    hSpan.style.fontWeight = '600';
     hSpan.textContent = 'Block #' + (b.height || 0).toLocaleString();
     detailEl.appendChild(hSpan);
 
@@ -163,6 +164,7 @@ function renderRhythmDetailDom(canvas, detailEl, idx) {
     btn.type = 'button';
     btn.textContent = 'View Block Data';
     btn.style.color = r.color;
+    btn.style.fontWeight = '600';
     btn.style.textDecoration = 'underline';
     btn.style.textUnderlineOffset = '2px';
     btn.style.cursor = 'pointer';
@@ -201,7 +203,7 @@ export function renderRhythmStrip(canvasId, blocksJson, _skipSliderSync) {
     // never close over a stale initial-load snapshot.
     canvas._rhythmBlocks = blocks;
 
-    var dpr = window.devicePixelRatio || 1;
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
     var rect = canvas.getBoundingClientRect();
     var w = rect.width || 600;
     var h = rect.height || 80;
@@ -311,8 +313,8 @@ export function renderRhythmStrip(canvasId, blocksJson, _skipSliderSync) {
         var lastTs = hitRegions[hitRegions.length - 1].block.timestamp;
         var spanHrs = (lastTs - firstTs) / 3600;
         if (firstTs && lastTs && spanHrs > 1) {
-            ctx.fillStyle = 'rgba(255,255,255,0.15)';
-            ctx.font = '9px monospace';
+            ctx.fillStyle = 'rgba(255,255,255,0.52)';
+            ctx.font = '10px monospace';
             var interval = spanHrs > 12 ? 4 : 2;
             var startHour = Math.ceil((firstTs / 3600)) * 3600;
             for (var ts = startHour; ts < lastTs; ts += interval * 3600) {
@@ -403,7 +405,7 @@ export function renderRhythmStrip(canvasId, blocksJson, _skipSliderSync) {
         var regions = canvas._rhythmHitRegions;
         if (!regions) return;
         for (var ri = 0; ri < regions.length; ri++) {
-            if (mx >= regions[ri].x1 && mx <= regions[ri].x2 && regions[ri].block.height) {
+            if (mx >= regions[ri].x1 && mx <= regions[ri].x2 && regions[ri].block.height != null && regions[ri].block.height >= 0) {
                 if (typeof window.showBlockDetail === 'function') {
                     window.showBlockDetail(regions[ri].block.height);
                 }

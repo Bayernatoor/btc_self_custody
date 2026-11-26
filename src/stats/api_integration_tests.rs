@@ -1129,6 +1129,7 @@ async fn heartbeat_v2_continuous_vs_rejoining_client_equivalence() {
             size: 1_000,
             weight: 4_000,
             observed_at: 1_700_000_010,
+            miner: Some("TestMiner".to_string()),
         });
     app.state
         .heartbeat_store

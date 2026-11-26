@@ -171,3 +171,85 @@ fn observe_block_serialization_cannot_publish_after_retire() {
         serde_json::from_slice(&store.snapshot().json).expect("valid snapshot");
     assert!(snap.pending_blocks.is_empty());
 }
+
+#[tokio::test]
+async fn polled_seed_unblocks_stalled_block_ids_and_fees_waiters() {
+    let hash = "77".repeat(32);
+    let cb_txid = "88".repeat(32);
+    let spend_txid = "99".repeat(32);
+    let server_hash = hash.clone();
+
+    let app = Router::new().route(
+        "/",
+        post(move |Json(req): Json<Value>| {
+            let h = server_hash.clone();
+            async move {
+                let method = req["method"].as_str().unwrap_or("");
+                let result = match method {
+                    "getblockhash" => json!(h),
+                    "getblock" => {
+                        // Simulate a stalled ZMQ `getblock(hash, 1)` RPC.
+                        tokio::time::sleep(Duration::from_secs(10)).await;
+                        json!({})
+                    }
+                    _ => json!(null),
+                };
+                Json(json!({ "result": result, "error": null }))
+            }
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    let rpc = BitcoinRpc::new(format!("http://{addr}"), "u".into(), "p".into());
+    let jobs = Arc::new(BlockJobs::default());
+    let job = jobs.entry(&hash).unwrap();
+
+    let seed = PolledBlockSeed {
+        ids: BlockTxids {
+            hash: hash.clone(),
+            height: 977_709,
+            confirmations: 1,
+            timestamp: 1_764_000_000,
+            size: 1_650_000,
+            weight: 3_992_000,
+            tx_count: 2,
+            txids: vec![cb_txid.clone(), spend_txid.clone()],
+        },
+        exact_fees: Some(42_500),
+        miner: Some("Foundry USA".to_string()),
+    };
+
+    let jobs_bg = Arc::clone(&jobs);
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(25)).await;
+        jobs_bg.seed_polled(seed);
+    });
+
+    let started = Instant::now();
+    let (ids_res, fees_val) =
+        tokio::time::timeout(Duration::from_secs(2), async {
+            tokio::join!(job.accepted_ids(&rpc), job.wait_polled_fees())
+        })
+        .await
+        .expect("polled seed must unblock stalled RPCs well before 2s");
+
+    let ids = ids_res.expect("accepted_ids resolved via polled seed");
+    assert_eq!(ids.height, 977_709);
+    assert_eq!(ids.txids, vec![cb_txid, spend_txid]);
+    assert_eq!(fees_val, 42_500);
+    assert_eq!(
+        job.polled_miner.get().map(String::as_str),
+        Some("Foundry USA")
+    );
+    assert!(
+        started.elapsed() < Duration::from_secs(1),
+        "expected sub-second wakeup, took {:?}",
+        started.elapsed()
+    );
+
+    server.abort();
+}

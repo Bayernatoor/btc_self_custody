@@ -240,9 +240,9 @@ pub(crate) async fn poll_new_blocks(
     let results: Vec<Result<Block, _>> = stream::iter(start..=tip)
         .map(|height| async move {
             if live_batch {
-                let (block, ids) = rpc.fetch_polled_block(height).await?;
-                if let Some(ids) = ids {
-                    state.heartbeat_blocks.seed_polled(ids);
+                let (block, seed) = rpc.fetch_polled_block(height).await?;
+                if let Some(seed) = seed {
+                    state.heartbeat_blocks.seed_polled(seed);
                 }
                 Ok(block)
             } else {

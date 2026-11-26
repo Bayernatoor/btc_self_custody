@@ -183,6 +183,9 @@ pub struct BlockSummary {
     /// it from `inscription_envelope_bytes`, which is whole-item bytes and a
     /// different level.
     pub brc20_bytes: u64,
+    /// Identified mining pool or solo miner name (empty when unknown/unpopulated).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub miner: String,
 }
 
 /// Full block detail for the single-block detail page. Includes coinbase

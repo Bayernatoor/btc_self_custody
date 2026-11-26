@@ -1799,6 +1799,80 @@ runScenario('19. Reveal return trickle (B2), multi-pending/post-slot sweep (B3),
     assert(snapBacks === 0, `expected 0 RGB snap-backs at 20fps, got ${snapBacks}`);
 });
 
+// ── Scenario 20: Disconnected virtualX freeze, resync gap backfill & adaptive tip pacing ──
+runScenario('20. Disconnected virtualX freeze, resync gap backfill & quiet recovery without empty voids', () => {
+    const nowSec = Math.floor(Date.now() / 1000);
+
+    // 20a. Disconnected/syncing freezes virtualX; live mode paces adaptively (1.1 px/s quiet -> 5.0 px/s full).
+    resetState({ virtualX: 500, zoom: 1.0, height: 600, autoFollow: true, _v2ConnState: 'disconnected' });
+    const s20 = state.getState();
+    const seg20a = s20.timeline[s20.timeline.length - 1];
+    assert(render.computeLiveAdvanceRate(s20, seg20a) === 0, 'rate must be 0 while disconnected');
+    s20._v2ConnState = 'syncing';
+    assert(render.computeLiveAdvanceRate(s20, seg20a) === 0, 'rate must be 0 while syncing');
+
+    // Quiet live tip (avgTipH = 0) -> 0.22 * 5.0 = 1.1 px/s.
+    s20._v2ConnState = 'live';
+    const quietRate = render.computeLiveAdvanceRate(s20, seg20a);
+    assert(Math.abs(quietRate - 1.1) < 1e-6, `quiet tip should pace 1.1 px/s, got ${quietRate}`);
+
+    // Full live tip (avgTipH >= 65) -> full 5.0 px/s.
+    const baseTip = Math.floor(s20.virtualX / 5) * 5;
+    for (let tc = 0; tc < 5; tc++) seg20a._colHeights[baseTip - tc * 5] = 80;
+    const fullRate = render.computeLiveAdvanceRate(s20, seg20a);
+    assert(Math.abs(fullRate - 5.0) < 1e-6, `full tip should pace 5.0 px/s, got ${fullRate}`);
+
+    // 20b. isResync with >100 newTxs backfills directly after the last real brick column
+    //      in chronological first_seen order instead of stranding a gap + detached right island.
+    resetState({ virtualX: 400, zoom: 1.0, height: 600, autoFollow: true, _v2ConnState: 'live' });
+    const initTxs = [];
+    for (let i = 0; i < 60; i++) {
+        initTxs.push([txid(90000 + i), nowSec - 1800 + i, 500, 200, 10000, 0, '', i + 1]);
+    }
+    sse.hbV2InstallSnapshot(JSON.stringify({ recent_blocks: [], transactions: initTxs }), false);
+    drainRafs();
+    const seg20 = state.getState().timeline[state.getState().timeline.length - 1];
+    let lastInitGx = 0;
+    for (const k of Object.keys(seg20._colHeights)) {
+        if (seg20._colHeights[k] > 0 && Number(k) > lastInitGx) lastInitGx = Number(k);
+    }
+    // Simulate a wide empty stretch behind virtualX before resync arrives.
+    state.getState().virtualX = lastInitGx + 600;
+    const earlyId = txid(91000);
+    const lateId = txid(91149);
+    const resyncTxs = initTxs.slice();
+    // Push in reverse timestamp order to prove isResync sorts chronologically.
+    for (let j = 149; j >= 0; j--) {
+        resyncTxs.push([txid(91000 + j), nowSec - 1500 + j * 10, 600, 200, 10000, 0, '', 100 + j]);
+    }
+    sse.hbV2InstallSnapshot(JSON.stringify({ recent_blocks: [], transactions: resyncTxs }), true);
+    const earlyBlip = seg20._blipsByTxid.get(earlyId);
+    const lateBlip = seg20._blipsByTxid.get(lateId);
+    assert(earlyBlip && lateBlip, 'resync must place both early and late recovered txs');
+    assert(
+        earlyBlip.gridX <= lastInitGx + 100,
+        `early recovered tx should backfill right after lastInitGx (${lastInitGx}), landed at ${earlyBlip.gridX}`
+    );
+    assert(
+        earlyBlip.gridX < lateBlip.gridX,
+        `resync must preserve chronological order (early=${earlyBlip.gridX} < late=${lateBlip.gridX})`
+    );
+
+    // 20c. Quiet 20m hidden tab with only 20 arrivals must NOT carve a 1,500px empty desert.
+    resetState({ virtualX: 500, zoom: 1.0, height: 600, autoFollow: true });
+    document.hidden = true;
+    for (let k = 0; k < 20; k++) {
+        const id = txid(92000 + k);
+        const ts = nowSec - 1200 + k * 60;
+        sse.hbV2ApplyEffect(JSON.stringify({ type: 'membership_add', txid: id, first_seen: ts }));
+        sse.hbV2ApplyEffect(JSON.stringify({ type: 'tx_details', tx: [id, ts, 400, 200, 50000, 0, '', 0] }));
+    }
+    document.hidden = false;
+    window._hbRecoverTimeline(1200);
+    const deltaX = state.getState().virtualX - 500;
+    assert(deltaX <= 120, `quiet 20-tx hidden tab carved too wide a desert: deltaX=${deltaX}px`);
+});
+
 if (failures.length > 0) {
     console.error(`\nFAIL (${failures.length} of ${passed + failures.length} scenarios failed)`);
     process.exit(1);

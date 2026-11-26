@@ -1,7 +1,7 @@
 // heartbeat-render.js: Main draw loop and all drawing helpers for the heartbeat canvas.
 
 import { getState, COLORS, BG_COLOR, GRID_COLOR, POINT_WIDTH, FLATLINE_PX_PER_SEC, HEAD_POSITION_FRAC, MAX_BLIPS_PER_SEGMENT } from './heartbeat-state.js';
-import { computeColor, lerpColor, drawGrid, hexToRgb, lerp, feeRateColor, PENDING_FEE_COLOR, UNKNOWN_INTERVAL_COLOR, feeBandLabel, formatFeeRate, cellRadiusForVsize, brickHeightScale, fmtBtc, formatDuration, buildFlatlineGradient, waitColor, resolveInterBlockSeconds } from './heartbeat-timeline.js';
+import { computeColor, lerpColor, drawGrid, hexToRgb, lerp, feeRateColor, PENDING_FEE_COLOR, UNKNOWN_INTERVAL_COLOR, feeBandLabel, feeBandIndex, formatFeeRate, cellRadiusForVsize, brickHeightScale, fmtBtc, formatDuration, buildFlatlineGradient, waitColor, resolveInterBlockSeconds } from './heartbeat-timeline.js';
 import { canvasToVirtual, virtualToCanvas, blockAtVirtualX, flatlineAtVirtualX, blipAtCanvasXY } from './heartbeat-blips.js';
 import { stopMomentum } from './heartbeat-interaction.js';
 import { flushTxBatch, maybeClearRemovedTxids, compressSealedFlatline } from './heartbeat-sse.js';
@@ -157,7 +157,14 @@ export function drawTooltip(ctx, seg, canvasX, canvasY, baseline) {
             lines.push({ text: descLines[di], color: 'rgba(255, 255, 255, 0.72)' });
         }
     }
+    if (seg.miner && seg.miner !== 'Unknown') {
+        lines.push({ text: 'Miner: ' + seg.miner, color: '#38bdf8' });
+    }
     lines.push('Txns: ' + (seg.tx_count != null ? seg.tx_count.toLocaleString() : '0'));
+    if (seg.weight && seg.weight > 0) {
+        var fullPct = Math.min(100, (seg.weight / 4000000) * 100);
+        lines.push('Fullness: ' + fullPct.toFixed(1) + '%');
+    }
     lines.push('Fees: ' + fmtBtc((seg.total_fees || 0) / 100000000) + ' BTC');
     lines.push('Wait: ' + formatDuration(resolveInterBlockSeconds(seg)));
     if (seg.timestamp) {
@@ -244,7 +251,18 @@ export function drawBlipTooltip(ctx, blip, canvasX, baseline) {
     }
     if (blip.firstSeen && blip.firstSeen > 0) {
         var d = new Date(blip.firstSeen * 1000);
-        lines.push('First seen: ' + d.toLocaleTimeString());
+        var nowD = new Date();
+        var sameDay = d.getFullYear() === nowD.getFullYear()
+            && d.getMonth() === nowD.getMonth()
+            && d.getDate() === nowD.getDate();
+        if (sameDay) {
+            lines.push('First seen: ' + d.toLocaleTimeString());
+        } else {
+            var dateOpts = d.getFullYear() === nowD.getFullYear()
+                ? { month: 'short', day: 'numeric' }
+                : { month: 'short', day: 'numeric', year: 'numeric' };
+            lines.push('First seen: ' + d.toLocaleDateString(undefined, dateOpts) + ', ' + d.toLocaleTimeString());
+        }
     } else {
         lines.push('First seen: Already waiting (time unknown)');
     }
@@ -822,6 +840,33 @@ function runIntro(_hb, dt, now, w) {
 // seconds: so this only fires on a genuine background/sleep gap.
 var GAP_RECOVERY_SECS = 5;
 
+// Adaptive live flatline advance rate (virtual px/sec).
+// Returns 0 while in history mode, during a block reveal, or while SSE is
+// disconnected/syncing so server restarts or network drops never carve empty
+// voids. During calm traffic, paces smoothly from 1.1 px/s (quiet tip) up to
+// full 5.0 px/s once tip columns reach ~65px so live streaming flows cleanly
+// out of a carried/snapshot skyline instead of dropping off a 10x density cliff.
+export function computeLiveAdvanceRate(_hb, liveSeg) {
+    if (!_hb || !liveSeg || liveSeg.type !== 'flatline' || liveSeg.x_end !== null) return 0;
+    if (_hb._viewMode === 'history' || _hb._reveal) return 0;
+    if (_hb._v2ConnState === 'disconnected' || _hb._v2ConnState === 'syncing') return 0;
+    var tipGx = Math.floor(_hb.virtualX / 5) * 5;
+    var minTipGx = Math.ceil(liveSeg.x_start / 5) * 5;
+    var tipSum = 0;
+    var tipCols = 0;
+    if (liveSeg._colHeights) {
+        for (var tc = 0; tc < 5; tc++) {
+            var cx = tipGx - tc * 5;
+            if (cx < minTipGx) break;
+            tipSum += (liveSeg._colHeights[cx] || 0);
+            tipCols++;
+        }
+    }
+    var avgTipH = tipCols > 0 ? (tipSum / tipCols) : 0;
+    var fillRatio = Math.min(1, avgTipH / 65);
+    return FLATLINE_PX_PER_SEC * (0.22 + 0.78 * fillRatio);
+}
+
 export function drawFrame(frameTime) {
     var _hb = getState();
     if (!_hb) return;
@@ -864,12 +909,10 @@ export function drawFrame(frameTime) {
     }
 
     // ── Advance live flatline ──────────────────────────────
-    // Suppressed in history mode and during a block reveal: the sequencer owns
-    // virtualX then (the form + harvest beats hold it at the spike, the relay
-    // beat advances it as the mempool re-lays).
     var liveSeg = (!isHistory && _hb.timeline.length > 0) ? _hb.timeline[_hb.timeline.length - 1] : null;
-    if (!isHistory && !_hb._reveal && liveSeg && liveSeg.type === 'flatline' && liveSeg.x_end === null) {
-        _hb.virtualX += dt * FLATLINE_PX_PER_SEC;
+    var liveRatePx = computeLiveAdvanceRate(_hb, liveSeg);
+    if (liveRatePx > 0) {
+        _hb.virtualX += dt * liveRatePx;
     }
 
     // Lay down queued mempool-tx bricks once per frame (RAF-driven), spreading
@@ -902,9 +945,9 @@ export function drawFrame(frameTime) {
         } else {
             _hb.viewOffset += offDiff * Math.min(1, dt * 8);
         }
-    } else if (!_hb.paused && !_hb.isDragging && !_hb._pinching) {
-        // Play mode: scroll at the same rate as time (don't jump to head)
-        _hb.viewOffset += dt * FLATLINE_PX_PER_SEC;
+    } else if (!_hb.paused && !_hb.isDragging && !_hb._pinching && liveRatePx > 0) {
+        // Play mode: scroll at the same rate as the live head (don't jump to head)
+        _hb.viewOffset += dt * liveRatePx;
     }
 
     // ── Compute current color from live state ──────────────
@@ -1535,6 +1578,7 @@ export function drawFlatlineBlipsLOD(ctx, seg, viewLeft, viewRight, baseline, zo
     // Virtual buckets are stable under panning; apply the view offset once, here.
     var offPx = _hb.viewOffset * zoom;
     var colW = Math.max(1, 5 * zoom); // grid pitch in canvas px, floored at 1
+    var spotBand = (typeof _hb._spotlightBand === 'number' && _hb._spotlightBand >= 0) ? _hb._spotlightBand : -1;
     var cols = {};                    // stable virtual bucket -> aggregate
     for (var i = 0; i < blips.length; i++) {
         var b = blips[i];
@@ -1550,8 +1594,12 @@ export function drawFlatlineBlipsLOD(ctx, seg, viewLeft, viewRight, baseline, zo
         var k = (vx * zoom) | 0;
         var top = (b.height || b.brickH || 4) * fadeIn;
         var c = cols[k];
-        if (!c) c = cols[k] = { h: 0, notable: false, ncolor: null, counts: {}, topN: 0, topColor: null };
+        if (!c) c = cols[k] = { h: 0, notable: false, ncolor: null, counts: {}, topN: 0, topColor: null, spotMatch: false, spotColor: null };
         if (top > c.h) c.h = top;
+        if (spotBand >= 0 && feeBandIndex(b.feeRate, b.feePending) === spotBand) {
+            c.spotMatch = true;
+            if (!c.spotColor) c.spotColor = (b.feePending && !b.notableType) ? PENDING_FEE_COLOR : (b.color || feeRateColor(b.feeRate));
+        }
         if (b.notableType) {
             if (!c.notable) { c.notable = true; c.ncolor = b.color; }
         } else {
@@ -1568,8 +1616,20 @@ export function drawFlatlineBlipsLOD(ctx, seg, viewLeft, viewRight, baseline, zo
     for (var key in cols) {
         var col = cols[key];
         // blip.color is an "rgba(r, g, b, " prefix awaiting an alpha + ")".
-        var color = col.notable ? col.ncolor : (col.topColor || PENDING_FEE_COLOR);
-        ctx.fillStyle = color + (col.notable ? 0.95 : 0.72) * rf + ')';
+        var color, alpha;
+        if (spotBand >= 0) {
+            if (col.spotMatch) {
+                color = col.spotColor || col.topColor || PENDING_FEE_COLOR;
+                alpha = 0.95 * rf;
+            } else {
+                color = col.topColor || PENDING_FEE_COLOR;
+                alpha = 0.10 * rf;
+            }
+        } else {
+            color = col.notable ? col.ncolor : (col.topColor || PENDING_FEE_COLOR);
+            alpha = (col.notable ? 0.95 : 0.72) * rf;
+        }
+        ctx.fillStyle = color + alpha + ')';
         ctx.fillRect(Number(key) - offPx, baseline - col.h, colW, col.h);
     }
     // Keep the pinned brick visibly marked even when LOD is active.
@@ -1599,7 +1659,9 @@ function drawFlatlineBricksBatched(ctx, _hb, seg, viewLeft, viewRight, baseline,
     var viewOffset = _hb.viewOffset;
     var pinnedTxid = _hb._pinnedTxid;
     var pinnedRect = null;
+    var spotBand = (typeof _hb._spotlightBand === 'number' && _hb._spotlightBand >= 0) ? _hb._spotlightBand : -1;
 
+    var dimmedNorm = Object.create(null);
     var settledNorm = Object.create(null);
     var settledNotable = Object.create(null);
     var enteringLow = Object.create(null);
@@ -1692,7 +1754,14 @@ function drawFlatlineBricksBatched(ctx, _hb, seg, viewLeft, viewRight, baseline,
             rh = Math.max(0.5, bh - gap * 2);
         }
 
-        if (isNotable) {
+        var isPinnedHere = !!(pinnedTxid && blip.txid === pinnedTxid);
+        var dimmedBySpot = spotBand >= 0 && !isPinnedHere && feeBandIndex(blip.feeRate, blip.feePending) !== spotBand;
+
+        if (dimmedBySpot) {
+            var dm = dimmedNorm[baseColor];
+            if (!dm) dm = dimmedNorm[baseColor] = [];
+            dm.push(rx, ry, rw, rh);
+        } else if (isNotable) {
             var nb = settledNotable[baseColor];
             if (!nb) nb = settledNotable[baseColor] = [];
             nb.push(rx, ry, rw, rh);
@@ -1713,8 +1782,22 @@ function drawFlatlineBricksBatched(ctx, _hb, seg, viewLeft, viewRight, baseline,
             arr.push(rx, ry, rw, rh);
         }
 
-        if (pinnedTxid && blip.txid === pinnedTxid) {
+        if (isPinnedHere) {
             pinnedRect = [rx, ry, rw, rh];
+        }
+    }
+
+    // 0. Dimmed background bricks when a fee-band spotlight is active
+    if (spotBand >= 0) {
+        var dimAlpha = (0.10 * rf).toFixed(2);
+        for (var dmKey in dimmedNorm) {
+            var dmCoords = dimmedNorm[dmKey];
+            ctx.fillStyle = dmKey + dimAlpha + ')';
+            ctx.beginPath();
+            for (var dmci = 0; dmci < dmCoords.length; dmci += 4) {
+                ctx.rect(dmCoords[dmci], dmCoords[dmci + 1], dmCoords[dmci + 2], dmCoords[dmci + 3]);
+            }
+            ctx.fill();
         }
     }
 
@@ -2316,7 +2399,13 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
                     }
 
                     // At zoom >= 5, use a subtle top-bevel vertical gradient for crisp tile depth
+                    var spotBandZoom = (typeof _hb._spotlightBand === 'number' && _hb._spotlightBand >= 0) ? _hb._spotlightBand : -1;
+                    var isPinnedZoom = !!(_hb._pinnedTxid && blip.txid === _hb._pinnedTxid);
+                    var dimmedZoom = spotBandZoom >= 0 && !isPinnedZoom && feeBandIndex(blip.feeRate, blip.feePending) !== spotBandZoom;
                     var drawAlpha = isHoveredBlip ? Math.min(1, bOpacity + 0.18) : bOpacity;
+                    if (dimmedZoom) {
+                        drawAlpha = Math.max(0.06, drawAlpha * 0.14);
+                    }
                     if (zoom >= 5 && rh > 5) {
                         var rgbMatch = brickBaseColor.match(/(\d+)\D+(\d+)\D+(\d+)/);
                         if (rgbMatch) {
@@ -2355,7 +2444,7 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
                         ctx.fillRect(rx, ry, rw, rh);
                     }
                     // Notable txs: draw a second pass for stronger glow + bright outline
-                    if (blip.notableType) {
+                    if (blip.notableType && !dimmedZoom) {
                         // Second glow pass (doubles the bloom)
                         if (useRound) {
                             ctx.beginPath();
@@ -2469,7 +2558,7 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
                     }
 
                     // At zoom >= 5: show fee rate + value on brick face (clipped to brick)
-                    if (zoom >= 5 && rw > 20 && rh > 11) {
+                    if (!dimmedZoom && zoom >= 5 && rw > 20 && rh > 11) {
                         ctx.save();
                         ctx.beginPath();
                         if (useRound) {

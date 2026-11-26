@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use super::heartbeat_sync::{
     ApplyEffect, CanonicalBlock, CompactTx, ConfirmedBlock, Coverage,
-    HeartbeatMirror, PendingBlock, TxFlags,
+    HeartbeatMirror, PendingBlock, QueuePosition, TxFlags,
 };
 
 // ---------------------------------------------------------------------------
@@ -27,6 +27,18 @@ pub enum PinnedTxStatus {
     Removed,
 }
 
+/// Compact input or output preview row returned by `/api/stats/tx/{txid}`
+/// (capped server-side to 25 entries each).
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+pub struct TxIoEntry {
+    pub label: String,
+    #[serde(default)]
+    pub value: Option<u64>,
+    /// Full copyable address or `txid:vout` outpoint when applicable.
+    #[serde(default)]
+    pub copy: Option<String>,
+}
+
 /// Deep node details fetched asynchronously from `/api/stats/tx/{txid}`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TxDeepDetails {
@@ -35,6 +47,9 @@ pub struct TxDeepDetails {
     pub size: Option<u64>,
     pub weight: Option<u64>,
     pub confirmations: Option<u64>,
+    pub input_items: Vec<TxIoEntry>,
+    pub output_items: Vec<TxIoEntry>,
+    pub features: Vec<String>,
 }
 
 /// Reactive view model for the in-place pinned transaction panel.
@@ -52,6 +67,8 @@ pub struct PinnedTxView {
     pub on_canvas: bool,
     pub deep: Option<TxDeepDetails>,
     pub deep_loading: bool,
+    /// Estimated solo-fee-rate queue depth while `status == Unconfirmed`.
+    pub queue_position: Option<QueuePosition>,
 }
 
 impl PinnedTxView {
@@ -166,6 +183,64 @@ pub struct RawTxDetailResponse {
     pub block_hash: Option<String>,
     #[serde(default)]
     pub block_height: Option<u64>,
+    #[serde(default)]
+    pub input_items: Vec<TxIoEntry>,
+    #[serde(default)]
+    pub output_items: Vec<TxIoEntry>,
+    #[serde(default)]
+    pub features: Vec<String>,
+}
+
+/// Rolling 60-second mempool arrival rate tracker (`tx/s`), fed by live
+/// `MembershipAdd` deltas after snapshot install.
+///
+/// Waits 3 seconds after reset before reporting a rate so page load never
+/// flashes a misleading `0.0 tx/s`, then divides by the elapsed observation
+/// window clamped to `[3s, 60s]` so early readings converge smoothly.
+#[derive(Clone, Debug, Default)]
+pub struct ArrivalRateTracker {
+    samples_ms: std::collections::VecDeque<f64>,
+    started_at_ms: Option<f64>,
+}
+
+impl ArrivalRateTracker {
+    const WINDOW_MS: f64 = 60_000.0;
+    const MIN_WARMUP_MS: f64 = 3_000.0;
+
+    pub fn reset(&mut self, now_ms: f64) {
+        self.samples_ms.clear();
+        self.started_at_ms = Some(now_ms);
+    }
+
+    pub fn record(&mut self, now_ms: f64) {
+        if self.started_at_ms.is_none() {
+            self.started_at_ms = Some(now_ms);
+        }
+        self.samples_ms.push_back(now_ms);
+        self.prune(now_ms);
+    }
+
+    fn prune(&mut self, now_ms: f64) {
+        let cutoff = now_ms - Self::WINDOW_MS;
+        while let Some(&front) = self.samples_ms.front() {
+            if front < cutoff {
+                self.samples_ms.pop_front();
+            } else {
+                break;
+            }
+        }
+    }
+
+    pub fn rate_tx_per_sec(&mut self, now_ms: f64) -> Option<f64> {
+        let started = self.started_at_ms?;
+        self.prune(now_ms);
+        let elapsed_ms = (now_ms - started).max(0.0);
+        if elapsed_ms < Self::MIN_WARMUP_MS {
+            return None;
+        }
+        let window_secs = (elapsed_ms.min(Self::WINDOW_MS)) / 1000.0;
+        Some(self.samples_ms.len() as f64 / window_secs)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -240,6 +315,7 @@ pub fn pinned_from_compact(tx: &CompactTx, on_canvas: bool) -> PinnedTxView {
         on_canvas,
         deep: None,
         deep_loading: false,
+        queue_position: None,
     }
 }
 
@@ -264,6 +340,7 @@ pub fn pinned_from_confirmed(
         on_canvas: false,
         deep: None,
         deep_loading: false,
+        queue_position: None,
     }
 }
 
@@ -293,7 +370,19 @@ pub fn update_pinned_from_mirror(
     pinned: &mut PinnedTxView,
     mirror: &HeartbeatMirror,
 ) {
+    update_pinned_from_mirror_ex(pinned, mirror, true);
+}
+
+/// Variant of [`update_pinned_from_mirror`] that lets hot delta paths throttle
+/// the O(N) mempool queue scan while still immediately updating metadata,
+/// status transitions, and clearing `queue_position` on confirmation/removal.
+pub fn update_pinned_from_mirror_ex(
+    pinned: &mut PinnedTxView,
+    mirror: &HeartbeatMirror,
+    refresh_queue: bool,
+) {
     if let Some(tx) = mirror.get_tx(&pinned.txid) {
+        let rate_changed = pinned.fee != tx.fee || pinned.vsize != tx.vsize;
         pinned.status = PinnedTxStatus::Unconfirmed;
         if tx.fee.is_some() {
             pinned.fee = tx.fee;
@@ -316,6 +405,14 @@ pub fn update_pinned_from_mirror(
                 pinned.op_return_text = tx.op_return_text.clone();
             }
         }
+        if pinned.fee.is_none() || pinned.vsize.is_none_or(|v| v == 0) {
+            pinned.queue_position = None;
+        } else if refresh_queue
+            || rate_changed
+            || pinned.queue_position.is_none()
+        {
+            pinned.queue_position = mirror.queue_position(&pinned.txid);
+        }
         return;
     }
 
@@ -326,12 +423,14 @@ pub fn update_pinned_from_mirror(
             block_height,
         };
         pinned.on_canvas = false;
+        pinned.queue_position = None;
         return;
     }
 
     if matches!(pinned.status, PinnedTxStatus::Unconfirmed) {
         pinned.status = PinnedTxStatus::Removed;
         pinned.on_canvas = false;
+        pinned.queue_position = None;
     }
 }
 
@@ -347,6 +446,9 @@ pub fn apply_deep_details(
         size: raw.size,
         weight: raw.weight,
         confirmations: raw.confirmations,
+        input_items: raw.input_items.clone(),
+        output_items: raw.output_items.clone(),
+        features: raw.features.clone(),
     });
     if pinned.fee.is_none() {
         pinned.fee = raw.fee;
@@ -745,6 +847,9 @@ mod js_bridge {
         #[wasm_bindgen(js_name = hbV2SetPinnedTx, catch)]
         fn js_hb_v2_set_pinned_tx(txid: Option<&str>) -> Result<(), JsValue>;
 
+        #[wasm_bindgen(js_name = hbV2SetSpotlightBand, catch)]
+        fn js_hb_v2_set_spotlight_band(band: i32) -> Result<(), JsValue>;
+
         // Pass JS Number (`f64`), not `u64` (BigInt), because JS compares
         // `seg.height === height` with strict equality against Number heights.
         #[wasm_bindgen(js_name = hbV2FocusBlockHeight, catch)]
@@ -795,6 +900,10 @@ mod js_bridge {
         let _ = js_hb_v2_set_pinned_tx(txid);
     }
 
+    pub fn hb_v2_set_spotlight_band(band: i32) {
+        let _ = js_hb_v2_set_spotlight_band(band);
+    }
+
     pub fn hb_v2_focus_block_height(height: u64) -> bool {
         js_hb_v2_focus_block_height(height as f64).unwrap_or(false)
     }
@@ -836,6 +945,7 @@ mod js_bridge {
         false
     }
     pub fn hb_v2_set_pinned_tx(_txid: Option<&str>) {}
+    pub fn hb_v2_set_spotlight_band(_band: i32) {}
     pub fn hb_v2_focus_block_height(_height: u64) -> bool {
         false
     }
@@ -856,7 +966,7 @@ pub use js_bridge::{
     hb_v2_apply_effect, hb_v2_enter_history_mode, hb_v2_exit_history_mode,
     hb_v2_focus_block_height, hb_v2_focus_pending_slot, hb_v2_focus_tx,
     hb_v2_install_snapshot, hb_v2_is_pending_slot_offscreen,
-    hb_v2_set_connection_state, hb_v2_set_pinned_tx,
+    hb_v2_set_connection_state, hb_v2_set_pinned_tx, hb_v2_set_spotlight_band,
 };
 
 // ---------------------------------------------------------------------------
@@ -886,13 +996,15 @@ mod client {
         hb_v2_set_connection_state, hb_v2_set_pinned_tx, js_bridge,
         normalize_tx_query, parse_history_mode_info, parse_search_query,
         pinned_from_compact, pinned_from_confirmed, retry_delay_ms,
-        update_pinned_from_mirror, HistoryModeInfo, InitialSearchParam,
+        update_pinned_from_mirror, update_pinned_from_mirror_ex,
+        ArrivalRateTracker, HistoryModeInfo, InitialSearchParam,
         PendingBlockBanner, PinnedTxStatus, PinnedTxView, RawTxDetailResponse,
         SearchQuery,
     };
     use crate::stats::heartbeat_sync::{
-        ApplyEffect, ApplyOutcome, Coverage, HeartbeatDelta, HeartbeatMirror,
-        HeartbeatSnapshot, MirrorTxMatch, TxFlags, TxLookupStatus,
+        ApplyEffect, ApplyOutcome, Coverage, FeeBandSummary, HeartbeatDelta,
+        HeartbeatMirror, HeartbeatSnapshot, MirrorTxMatch, TxFlags,
+        TxLookupStatus,
     };
 
     /// Reactive signals owned by `HeartbeatPage` and updated by `HeartbeatClient`.
@@ -909,6 +1021,8 @@ mod client {
         pub set_sse_ts: WriteSignal<u64>,
         pub set_pending_block: WriteSignal<Option<PendingBlockBanner>>,
         pub set_history_mode: WriteSignal<Option<HistoryModeInfo>>,
+        pub set_fee_bands: WriteSignal<FeeBandSummary>,
+        pub set_arrival_rate: WriteSignal<Option<f64>>,
     }
 
     type EventListenerEntry = (&'static str, Closure<dyn FnMut(Event)>);
@@ -938,6 +1052,15 @@ mod client {
         clear_pinned_closure: Option<Closure<dyn FnMut()>>,
         history_mode_change_closure: Option<Closure<dyn FnMut(JsValue)>>,
         resync_canvas_closure: Option<Closure<dyn FnMut()>>,
+        /// Timestamp (ms) of the last O(N) pinned-tx queue scan so high-rate
+        /// mempool bursts throttle queue updates to <= once every 2.5s.
+        last_queue_refresh_ms: f64,
+        /// Timestamp (ms) + last emitted value of the O(N) fee-band summary scan
+        /// (throttled to <= once every 2.0s during steady-state deltas).
+        last_bands_refresh_ms: f64,
+        last_fee_bands: FeeBandSummary,
+        /// Rolling 60s arrival rate tracker fed by live `MembershipAdd` deltas.
+        arrival_tracker: ArrivalRateTracker,
         destroyed: bool,
     }
 
@@ -1467,6 +1590,11 @@ mod client {
                         update_pinned_from_mirror(&mut pv, &st.mirror);
                         (&pv != existing).then_some(pv)
                     });
+                let now_ms = js_sys::Date::now();
+                let fee_bands = st.mirror.fee_band_summary();
+                st.last_fee_bands = fee_bands;
+                st.last_bands_refresh_ms = now_ms;
+                st.arrival_tracker.reset(now_ms);
                 // Consume on the first successful snapshot install regardless of
                 // `is_resync` so a transient initial snapshot failure cannot drop
                 // `?tx=` deep links.
@@ -1480,6 +1608,7 @@ mod client {
                     pending_banner,
                     updated_pinned,
                     initial_search,
+                    fee_bands,
                 )
             };
 
@@ -1492,9 +1621,12 @@ mod client {
                 pending_banner,
                 updated_pinned,
                 initial_search,
+                fee_bands,
             ) = extracted;
 
             let _ = self.inner.signals.set_coverage_note.try_set(coverage_note);
+            let _ = self.inner.signals.set_fee_bands.try_set(fee_bands);
+            let _ = self.inner.signals.set_arrival_rate.try_set(None);
             self.set_pending_block_if_changed(pending_banner);
 
             if let Some(pv) = updated_pinned {
@@ -1673,6 +1805,7 @@ mod client {
                 pending_update: Option<Option<PendingBlockBanner>>,
                 coverage_update: Option<(&'static str, Option<String>)>,
                 updated_pinned: Option<PinnedTxView>,
+                fee_bands_update: Option<FeeBandSummary>,
             }
 
             enum Step {
@@ -1772,6 +1905,30 @@ mod client {
                             } else {
                                 None
                             };
+                        let force_queue_refresh = matches!(
+                            eff,
+                            ApplyEffect::BlockInclusion { .. }
+                                | ApplyEffect::BlockDisconnected { .. }
+                        );
+                        let now_ms = js_sys::Date::now();
+                        if matches!(eff, ApplyEffect::MembershipAdd { .. }) {
+                            st.arrival_tracker.record(now_ms);
+                        }
+                        let bands_elapsed_ok =
+                            (now_ms - st.last_bands_refresh_ms) >= 2_000.0;
+                        let fee_bands_update =
+                            if force_queue_refresh || bands_elapsed_ok {
+                                st.last_bands_refresh_ms = now_ms;
+                                let next = st.mirror.fee_band_summary();
+                                if next != st.last_fee_bands {
+                                    st.last_fee_bands = next;
+                                    Some(next)
+                                } else {
+                                    None
+                                }
+                            } else {
+                                None
+                            };
                         let updated_pinned =
                             existing_pinned.as_ref().and_then(|existing| {
                                 let mut pv = existing.clone();
@@ -1780,7 +1937,24 @@ mod client {
                                         &mut pv, dhash,
                                     );
                                 }
-                                update_pinned_from_mirror(&mut pv, &st.mirror);
+                                let elapsed_ok = (now_ms
+                                    - st.last_queue_refresh_ms)
+                                    >= 2_500.0;
+                                let refresh_queue =
+                                    force_queue_refresh || elapsed_ok;
+                                update_pinned_from_mirror_ex(
+                                    &mut pv,
+                                    &st.mirror,
+                                    refresh_queue,
+                                );
+                                if refresh_queue
+                                    && matches!(
+                                        pv.status,
+                                        PinnedTxStatus::Unconfirmed
+                                    )
+                                {
+                                    st.last_queue_refresh_ms = now_ms;
+                                }
                                 (&pv != existing).then_some(pv)
                             });
                         Step::Apply(Box::new(AppliedStep {
@@ -1790,6 +1964,7 @@ mod client {
                             pending_update,
                             coverage_update,
                             updated_pinned,
+                            fee_bands_update,
                         }))
                     }
                 }
@@ -1809,8 +1984,12 @@ mod client {
                         pending_update,
                         coverage_update,
                         updated_pinned,
+                        fee_bands_update,
                     } = *applied;
                     hb_v2_apply_effect(&effect_json);
+                    if let Some(bands) = fee_bands_update {
+                        let _ = self.inner.signals.set_fee_bands.try_set(bands);
+                    }
                     if let Some(pb) = pending_update {
                         self.set_pending_block_if_changed(pb);
                     }
@@ -2198,12 +2377,28 @@ mod client {
         /// Exit historical block window mode and return to the live Heartbeat stream.
         pub fn exit_history_mode(&self) {
             let _ = self.begin_block_lookup_generation();
+            let _ = self.inner.signals.set_search_feedback.try_set(None);
             hb_v2_exit_history_mode();
         }
 
         /// Focus the canvas camera on the pending-block slot for `hash`.
         pub fn focus_pending_slot(&self, hash: &str) {
             let _ = hb_v2_focus_pending_slot(hash);
+        }
+
+        /// Recompute and publish the rolling 60-second arrival rate (`tx/s`).
+        /// Called on the page's existing 1s UI timer so quiet periods smoothly
+        /// decay toward `0.0 tx/s` without allocating a second timer.
+        pub fn refresh_arrival_rate(&self) {
+            let now_ms = js_sys::Date::now();
+            let rate = {
+                let mut st = self.inner.state.borrow_mut();
+                if st.destroyed {
+                    return;
+                }
+                st.arrival_tracker.rate_tx_per_sec(now_ms)
+            };
+            let _ = self.inner.signals.set_arrival_rate.try_set(rate);
         }
 
         fn handle_local_tx_match(
@@ -2219,6 +2414,11 @@ mod client {
                         hb_v2_set_pinned_tx(Some(&tx.txid));
                     }
                     let mut pv = pinned_from_compact(&tx, on_canvas);
+                    {
+                        let mut st = self.inner.state.borrow_mut();
+                        pv.queue_position = st.mirror.queue_position(&tx.txid);
+                        st.last_queue_refresh_ms = js_sys::Date::now();
+                    }
                     pv.deep_loading = true;
                     let txid = tx.txid.clone();
                     let _ = self.inner.signals.set_pinned_tx.try_set(Some(pv));
@@ -2445,6 +2645,11 @@ mod client {
                 TxLookupStatus::Unconfirmed(tx) => {
                     hb_v2_set_pinned_tx(Some(&tx.txid));
                     let mut pv = pinned_from_compact(&tx, true);
+                    {
+                        let mut st = self.inner.state.borrow_mut();
+                        pv.queue_position = st.mirror.queue_position(&tx.txid);
+                        st.last_queue_refresh_ms = js_sys::Date::now();
+                    }
                     pv.deep_loading = true;
                     let id = tx.txid.clone();
                     let _ = self.inner.signals.set_pinned_tx.try_set(Some(pv));
@@ -2532,6 +2737,20 @@ mod client {
                                     };
                                     let mut pv =
                                         pinned_from_compact(&tx, on_canvas);
+                                    if let (Some(f), Some(vs)) =
+                                        (tx.fee, tx.vsize)
+                                    {
+                                        let mut st =
+                                            ok_client.inner.state.borrow_mut();
+                                        pv.queue_position =
+                                            st.mirror.queue_position_for_rate(
+                                                f,
+                                                vs,
+                                                Some(&tx.txid),
+                                            );
+                                        st.last_queue_refresh_ms =
+                                            js_sys::Date::now();
+                                    }
                                     pv.deep_loading = true;
                                     let id = tx.txid.clone();
                                     let _ = ok_client
@@ -2728,8 +2947,25 @@ mod client {
                                 on_canvas,
                                 deep: None,
                                 deep_loading: false,
+                                queue_position: None,
                             };
                             apply_deep_details(&mut pv, &raw);
+                            if matches!(pv.status, PinnedTxStatus::Unconfirmed)
+                            {
+                                if let (Some(f), Some(vs)) = (pv.fee, pv.vsize)
+                                {
+                                    let mut st =
+                                        ok_client.inner.state.borrow_mut();
+                                    pv.queue_position =
+                                        st.mirror.queue_position_for_rate(
+                                            f,
+                                            vs,
+                                            Some(&txid_owned),
+                                        );
+                                    st.last_queue_refresh_ms =
+                                        js_sys::Date::now();
+                                }
+                            }
                             let _ = ok_client
                                 .inner
                                 .signals
@@ -3141,9 +3377,13 @@ mod tests {
             size: Some(280),
             weight: Some(896),
             confirmations: Some(0),
+            input_items: vec![],
+            output_items: vec![],
+            features: vec!["SegWit".to_string(), "RBF".to_string()],
         });
         assert_eq!(pinned.status, PinnedTxStatus::Unconfirmed);
         assert_eq!(pinned.fee, None);
+        assert_eq!(pinned.queue_position, None);
 
         // 2. TxDetails enriches fee/vsize/value/flags/op_return while preserving deep details.
         mirror.apply_delta(delta(
@@ -3166,8 +3406,18 @@ mod tests {
         assert_eq!(pinned.flags, TxFlags::OP_RETURN_MSG);
         assert_eq!(pinned.op_return_text.as_deref(), Some("gm bitcoin"));
         assert!(pinned.deep.is_some());
+        assert_eq!(
+            pinned.queue_position,
+            Some(crate::stats::heartbeat_sync::QueuePosition {
+                txs_ahead: 0,
+                vbytes_ahead: 0,
+                est_blocks: 1,
+                unenriched_count: 0,
+            })
+        );
 
-        // 3. BlockObserved + BlockInclusion confirms tx in place, preserving fee/vsize/value.
+        // 3. BlockObserved + BlockInclusion confirms tx in place, preserving fee/vsize/value
+        //    and clearing queue_position.
         mirror.apply_delta(delta(
             12,
             DeltaKind::BlockObserved {
@@ -3192,6 +3442,7 @@ mod tests {
             }
         );
         assert!(!pinned.on_canvas);
+        assert_eq!(pinned.queue_position, None);
         assert_eq!(pinned.fee, Some(1_500));
         assert_eq!(pinned.vsize, Some(224));
         assert_eq!(pinned.value, Some(12_500_000));
@@ -3298,6 +3549,17 @@ mod tests {
             confirmations: Some(0),
             block_hash: None,
             block_height: None,
+            input_items: vec![TxIoEntry {
+                label: "bc1qtestin".to_string(),
+                value: Some(1_000),
+                copy: Some("bc1qtestin".to_string()),
+            }],
+            output_items: vec![TxIoEntry {
+                label: "Anchor".to_string(),
+                value: Some(0),
+                copy: None,
+            }],
+            features: vec!["Taproot".to_string(), "RBF".to_string()],
         };
         apply_deep_details(&mut pinned, &raw);
         assert!(!pinned.deep_loading);
@@ -3306,6 +3568,40 @@ mod tests {
         assert_eq!(pinned.value, Some(0));
         assert_eq!(pinned.fee_rate_sat_per_vb(), Some(0.0));
         assert_eq!(format_fee_rate(pinned.fee_rate_sat_per_vb()), "0.0 sat/vB");
+        let deep = pinned.deep.as_ref().expect("deep details populated");
+        assert_eq!(deep.input_items.len(), 1);
+        assert_eq!(deep.output_items[0].label, "Anchor");
+        assert_eq!(deep.features, vec!["Taproot", "RBF"]);
+    }
+
+    #[test]
+    fn arrival_rate_tracker_warms_up_windows_and_decays() {
+        let mut tracker = ArrivalRateTracker::default();
+        assert_eq!(tracker.rate_tx_per_sec(1_000.0), None);
+
+        tracker.reset(10_000.0);
+        // Under 3s warmup -> None (avoids flashing 0.0 tx/s at boot).
+        assert_eq!(tracker.rate_tx_per_sec(12_500.0), None);
+
+        // 10 arrivals over first 5s -> 2.0 tx/s.
+        for i in 0..10 {
+            tracker.record(10_000.0 + (i as f64) * 500.0);
+        }
+        let r5 = tracker.rate_tx_per_sec(15_000.0).unwrap();
+        assert!((r5 - 2.0).abs() < 1e-6, "expected 2.0 tx/s, got {r5}");
+
+        // After 60s full window with 120 arrivals -> 2.0 tx/s.
+        let mut steady = ArrivalRateTracker::default();
+        steady.reset(0.0);
+        for i in 0..120 {
+            steady.record((i as f64) * 500.0);
+        }
+        let r60 = steady.rate_tx_per_sec(60_000.0).unwrap();
+        assert!((r60 - 2.0).abs() < 1e-6, "expected 2.0 tx/s, got {r60}");
+
+        // 65s after last sample -> all pruned -> decays cleanly to 0.0 tx/s.
+        let r_quiet = steady.rate_tx_per_sec(130_000.0).unwrap();
+        assert_eq!(r_quiet, 0.0);
     }
 
     #[test]

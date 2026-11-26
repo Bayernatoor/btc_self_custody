@@ -846,6 +846,19 @@ pub struct Block {
     pub fee_rate_p75: f64,
 }
 
+/// Immutable polled-block payload handed from `ingest.rs` (`getblock` verbosity 2)
+/// to `heartbeat_block_jobs.rs` so stalled ZMQ RPCs can resolve immediately without
+/// waiting 45s on `getblock(hash, 1)` or `getblockstats`.
+#[derive(Debug)]
+pub(crate) struct PolledBlockSeed {
+    pub ids: BlockTxids,
+    /// Exact sum of per-tx `fee` fields across all non-coinbase txs (`Some` only
+    /// when Core populated `fee` on every non-coinbase tx, guaranteeing exact
+    /// parity with `getblockstats.totalfee` with zero coinbase-minus-subsidy drift).
+    pub exact_fees: Option<u64>,
+    pub miner: Option<String>,
+}
+
 impl BitcoinRpc {
     /// Create a new RPC client.
     ///
@@ -2201,18 +2214,32 @@ impl BitcoinRpc {
         block.validate(hash)
     }
 
-    /// Live poll ingestion already needs verbosity 2. Reuse its txids instead
-    /// of making a second large call when this is the first block observation.
+    /// Live poll ingestion already needs verbosity 2. Reuse its txids (plus exact
+    /// per-tx fee sum and miner when available) instead of making a second large
+    /// call or stalling live Heartbeat reveals if `getblockstats` hangs.
     pub(crate) async fn fetch_polled_block(
         &self,
         height: u64,
-    ) -> Result<(Block, Option<BlockTxids>), StatsError> {
+    ) -> Result<(Block, Option<PolledBlockSeed>), StatsError> {
         let hash = self.get_block_hash_fresh(height).await?;
         if let Some(block) = self.block_data_cache.get(&hash) {
             return Ok((block, None));
         }
         let mut raw = self.call("getblock", &[json!(&hash), json!(2)]).await?;
         let block = Self::parse_block_value(&raw);
+        let exact_fees = raw["tx"].as_array().and_then(|txs| {
+            let mut sum: u64 = 0;
+            for tx in txs.iter().skip(1) {
+                let fee_btc = tx["fee"].as_f64()?;
+                if !fee_btc.is_finite() || fee_btc < 0.0 {
+                    return None;
+                }
+                sum =
+                    sum.checked_add((fee_btc * 100_000_000.0).round() as u64)?;
+            }
+            Some(sum)
+        });
+        let miner = (!block.miner.is_empty()).then(|| block.miner.clone());
         if let Some(txs) = raw["tx"].as_array_mut() {
             for tx in txs {
                 *tx =
@@ -2228,7 +2255,14 @@ impl BitcoinRpc {
             ));
         }
         self.block_data_cache.put(hash, block.clone());
-        Ok((block, Some(exact)))
+        Ok((
+            block,
+            Some(PolledBlockSeed {
+                ids: exact,
+                exact_fees,
+                miner,
+            }),
+        ))
     }
 
     /// A restart between two independent RPCs can pair the old process's

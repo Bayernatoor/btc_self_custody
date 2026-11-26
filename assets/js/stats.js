@@ -1576,12 +1576,26 @@
             if (window.innerWidth <= 640) return; // mobile uses fixed CSS positioning
             var rect = el.getBoundingClientRect();
             var tipW = tip.offsetWidth;
-            var left = rect.left + rect.width / 2 - tipW / 2;
-            // Clamp to viewport
-            if (left < 8) left = 8;
-            if (left + tipW > window.innerWidth - 8) left = window.innerWidth - 8 - tipW;
-            tip.style.left = left + 'px';
-            tip.style.top = (rect.top - tip.offsetHeight - 8) + 'px';
+            var tipH = tip.offsetHeight;
+            var targetCx = rect.left + rect.width / 2;
+            var left = targetCx - tipW / 2;
+            // Clamp horizontally inside viewport
+            if (left < 12) left = 12;
+            if (left + tipW > window.innerWidth - 12) left = window.innerWidth - 12 - tipW;
+            // Flip below when opening upward would collide with the sticky navbar
+            var top = rect.top - tipH - 10;
+            var placeBelow = top < 72 && (rect.bottom + 10 + tipH <= window.innerHeight - 12);
+            if (placeBelow) {
+                top = rect.bottom + 10;
+                tip.classList.add('tip-below');
+            } else {
+                top = Math.max(12, top);
+                tip.classList.remove('tip-below');
+            }
+            var arrowX = Math.max(16, Math.min(tipW - 16, targetCx - left));
+            tip.style.setProperty('--tip-arrow-x', Math.round(arrowX) + 'px');
+            tip.style.left = Math.round(left) + 'px';
+            tip.style.top = Math.round(top) + 'px';
         }
 
         // Event delegation on document
@@ -1598,6 +1612,16 @@
         }, true);
 
         document.addEventListener('mouseleave', function(e) {
+            var el = findTip(e);
+            if (el && el === activeEl) hide();
+        }, true);
+
+        document.addEventListener('focusin', function(e) {
+            var el = findTip(e);
+            if (el) show(el);
+        }, true);
+
+        document.addEventListener('focusout', function(e) {
             var el = findTip(e);
             if (el && el === activeEl) hide();
         }, true);

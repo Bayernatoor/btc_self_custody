@@ -48,7 +48,7 @@ window.initHeartbeat = function(canvasId) {
         canvas.style.height = '100%';
         canvas.style.display = 'block';
     }
-    var dpr = window.devicePixelRatio || 1;
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
     var rect = (container || canvas).getBoundingClientRect();
 
     canvas.width = Math.max(1, Math.round(rect.width * dpr));
@@ -187,10 +187,12 @@ window.initHeartbeat = function(canvasId) {
     // state, so a returning visitor with sound on would otherwise see the wrong icon.
     initSoundButton();
 
-    // Show fullscreen button only if the API is supported (not on iOS)
-    var fsBtn = document.getElementById('heartbeat-fullscreen-btn');
-    if (fsBtn && (document.fullscreenEnabled || document.webkitFullscreenEnabled)) {
-        fsBtn.classList.remove('hidden');
+    // Show fullscreen buttons only if the API is supported (not on iOS)
+    if (document.fullscreenEnabled || document.webkitFullscreenEnabled) {
+        var fsBtn = document.getElementById('heartbeat-fullscreen-btn');
+        if (fsBtn) fsBtn.classList.remove('hidden');
+        var fsBtnMob = document.getElementById('heartbeat-fullscreen-btn-mobile');
+        if (fsBtnMob) fsBtnMob.classList.remove('hidden');
     }
 
     // Fullscreen sizing
@@ -522,6 +524,7 @@ window.pushHeartbeatBlocks = function(json, replay) {
                         existingSeg.total_fees = replacement.total_fees;
                         existingSeg.size = replacement.size;
                         existingSeg.weight = replacement.weight;
+                        if (replacement.miner) existingSeg.miner = replacement.miner;
                         existingSeg.inter_block_seconds = replacement.inter_block_seconds;
                         if (!_hb._suppressAnnounce) {
                             var heightStr = b.height.toLocaleString();
@@ -876,6 +879,7 @@ window.pushHeartbeatBlocks = function(json, replay) {
                 total_fees: b.total_fees,
                 size: b.size,
                 weight: b.weight,
+                miner: b.miner || null,
                 inter_block_seconds: b.inter_block_seconds
             };
             if (_hb.recentBlocks.length > 0 && b.height && (_hb.recentBlocks[_hb.recentBlocks.length - 1].height || 0) > b.height) {
@@ -1156,11 +1160,19 @@ function placeCarriedLeftovers(leftovers, staggerSecs) {
             return;
         }
         ensureSegMaps(curSeg);
+        var chunkStartMs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+        var budgetMs = (s.width && s.width < 640) ? 5 : 10;
         var end = Math.min(i + CARRY_CHUNK, plannedCarry.length);
         var span = Math.max(1, usableSpan);
         var startGridX = Math.ceil(curSeg.x_start / 5) * 5;
         curSeg._carryEndX = startGridX + usableCols * 5;
+        var chunkDone = 0;
         for (; i < end; i++) {
+            if (stagger > 0 && chunkDone > 0 && (chunkDone & 255) === 0) {
+                var nowMs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+                if (nowMs - chunkStartMs >= budgetMs) break;
+            }
+            chunkDone++;
             var item = plannedCarry[i];
             var src = item.src;
             if (src && src.txid && s._pendingCarryByTxid) {
@@ -1435,7 +1447,8 @@ function replayQueuedBlock(qb) {
         tx_count: qb.tx_count || qb.confirmed_count || 0,
         total_fees: qb.total_fees || 0,
         size: qb.size || 0,
-        weight: qb.weight || 0
+        weight: qb.weight || 0,
+        miner: qb.miner || null
     }]), false);
 }
 
@@ -1651,24 +1664,35 @@ function _recoverTimelineInner(_hb, gapSecs) {
         var newestBlockTs = catchUpBlocks(newQueued, preBlockHidden);
         var gapStart = _hb.virtualX;
         var actualPostElapsed = newestBlockTs > 0 ? Math.max(0, now - newestBlockTs) : Math.max(0, gapSecs);
-        var clampedPostElapsed = Math.min(actualPostElapsed, 300);
-        var postVolPx = Math.ceil(countBufferedHidden() / 14) * 5;
-        var postSpanPx = Math.max(clampedPostElapsed * FLATLINE_PX_PER_SEC, postVolPx);
+        var postBuffered = countBufferedHidden();
+        var postSpanPx;
+        if (postBuffered > 0) {
+            var postVolPx = Math.max(25, Math.ceil(postBuffered / 8) * 5);
+            var postTimePx = Math.min(actualPostElapsed, 300) * FLATLINE_PX_PER_SEC;
+            postSpanPx = Math.max(postVolPx, Math.min(postTimePx, Math.max(postVolPx * 2.5, 100)));
+        } else {
+            postSpanPx = Math.min(actualPostElapsed, 15) * (FLATLINE_PX_PER_SEC * 0.22);
+        }
         if (postSpanPx > 0) {
             _hb.virtualX += postSpanPx;
         }
         var winStart = newestBlockTs > 0 ? newestBlockTs : (now - actualPostElapsed);
         drainHiddenTxsAcrossGap(gapStart, Math.max(gapStart, _hb.virtualX - 5), winStart, now);
     } else {
-        // No blocks while away: advance the live head across the elapsed gap
-        // (sized to hold all hidden arrivals at normal skyline height without
-        // clamping timestamps to 300s, which piled older hidden txs into a
-        // tower wall at the 300s boundary).
+        // No blocks while away: advance the live head proportionally to buffered
+        // arrivals so quiet background tabs never carve a 1,500px sparse desert
+        // while busy tabs still spread smoothly across the actual elapsed window.
         var gapStartNoBlk = _hb.virtualX;
         var actualGap = gapSecs > 0 ? gapSecs : 0;
-        var clampedGap = Math.min(actualGap, 300);
-        var volPx = Math.ceil(countBufferedHidden() / 14) * 5;
-        var spanPx = Math.max(clampedGap * FLATLINE_PX_PER_SEC, volPx);
+        var noBlkBuffered = countBufferedHidden();
+        var spanPx;
+        if (noBlkBuffered > 0) {
+            var volPx = Math.max(25, Math.ceil(noBlkBuffered / 8) * 5);
+            var timePx = Math.min(actualGap, 300) * FLATLINE_PX_PER_SEC;
+            spanPx = Math.max(volPx, Math.min(timePx, Math.max(volPx * 2.5, 100)));
+        } else {
+            spanPx = Math.min(actualGap, 15) * (FLATLINE_PX_PER_SEC * 0.22);
+        }
         if (spanPx > 0) {
             _hb.virtualX += spanPx;
         }
@@ -2261,22 +2285,26 @@ window.hbV2ExitHistoryMode = function() {
     var nowExitSec = Date.now() / 1000;
     var enteredAt = (backup && backup.enteredAt > 0) ? backup.enteredAt : nowExitSec;
     var actualAway = Math.max(0, nowExitSec - enteredAt);
-    if (queuedDuringHistory > 0 || actualAway > 1) {
+    if (queuedDuringHistory > 0) {
         var gapStartExit = _hb.virtualX;
         var winStartExit = enteredAt;
         if (_hb.lastBlockTime > 0 && _hb.lastBlockTime > winStartExit && _hb.lastBlockTime < nowExitSec) {
             winStartExit = _hb.lastBlockTime;
             actualAway = Math.max(0, nowExitSec - winStartExit);
         }
-        var clampedAway = Math.min(actualAway, 300);
-        var volSpanPx = Math.ceil(queuedDuringHistory / 14) * 5;
-        var exitSpanPx = Math.max(clampedAway * FLATLINE_PX_PER_SEC, volSpanPx);
+        // Size the recovery span proportionally to the queued arrivals so we
+        // neither build a narrow skyscraper nor carve a huge empty desert.
+        var volSpanPx = Math.max(30, Math.ceil(queuedDuringHistory / 10) * 5);
+        var timeCapPx = Math.min(actualAway, 180) * FLATLINE_PX_PER_SEC;
+        var exitSpanPx = Math.min(Math.max(volSpanPx, Math.min(timeCapPx, volSpanPx * 2)), Math.max(volSpanPx, 1500));
         if (exitSpanPx > 0) {
             _hb.virtualX += exitSpanPx;
         }
-        if (queuedDuringHistory > 0) {
-            drainHiddenTxsAcrossGap(gapStartExit, Math.max(gapStartExit, _hb.virtualX - 5), winStartExit, nowExitSec);
-        }
+        drainHiddenTxsAcrossGap(gapStartExit, Math.max(gapStartExit, _hb.virtualX - 5), winStartExit, nowExitSec);
+    } else if (actualAway > 1) {
+        // No queued arrivals while browsing history: keep the gap modest so
+        // returning to LIVE does not drop the viewer into a 1,500px empty void.
+        _hb.virtualX += Math.min(actualAway, 10) * FLATLINE_PX_PER_SEC;
     }
 
     _hb.viewOffset = _hb.virtualX - ((_hb.width || 800) * HEAD_POSITION_FRAC) / _hb.zoom;
@@ -2320,6 +2348,11 @@ window.hbV2FocusTx = function(txid) {
 };
 window.hbV2SetPinnedTx = function(txidOrNull) {
     return hbV2SetPinnedTx(txidOrNull);
+};
+window.hbV2SetSpotlightBand = function(band) {
+    var _hb = getState();
+    if (!_hb) return;
+    _hb._spotlightBand = (typeof band === 'number' && band >= 0 && band <= 6) ? band : -1;
 };
 window.hbV2FocusBlockHeight = function(height) {
     return hbV2FocusBlockHeight(height);

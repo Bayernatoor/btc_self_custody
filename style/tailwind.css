@@ -336,48 +336,69 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 /* JS-driven tooltip bubble (appended to body, avoids overflow clipping) */
 #btc-tooltip {
   position: fixed;
-  z-index: 9999;
-  background: rgba(8, 12, 24, 0.96);
-  color: rgba(255, 255, 255, 0.85);
-  font-size: 11px;
+  z-index: 10005;
+  background: rgba(7, 19, 32, 0.96);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 12px;
   font-weight: 400;
-  line-height: 1.45;
-  padding: 8px 12px;
-  border-radius: 8px;
-  border: 1px solid rgba(247, 147, 26, 0.2);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-  max-width: 260px;
+  line-height: 1.55;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(247, 147, 26, 0.14) inset;
+  max-width: 340px;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.12s;
+  transform: translateY(3px);
+  transition: opacity 0.14s ease, transform 0.14s ease;
   font-family: var(--font-inter);
+  text-align: left;
   text-transform: none;
   letter-spacing: normal;
+  white-space: pre-line;
+  text-wrap: pretty;
 }
 #btc-tooltip.visible {
   opacity: 1;
+  transform: translateY(0);
 }
 #btc-tooltip::after {
   content: '';
   position: absolute;
   top: 100%;
-  left: 50%;
+  left: var(--tip-arrow-x, 50%);
   transform: translateX(-50%);
-  border: 5px solid transparent;
-  border-top-color: rgba(247, 147, 26, 0.2);
+  border: 6px solid transparent;
+  border-top-color: rgba(7, 19, 32, 0.96);
+  filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.15));
+}
+#btc-tooltip.tip-below {
+  transform: translateY(-3px);
+}
+#btc-tooltip.tip-below.visible {
+  transform: translateY(0);
+}
+#btc-tooltip.tip-below::after {
+  top: auto;
+  bottom: 100%;
+  border-top-color: transparent;
+  border-bottom-color: rgba(7, 19, 32, 0.96);
+  filter: drop-shadow(0 -1px 0 rgba(255, 255, 255, 0.15));
 }
 
 @media (max-width: 640px) {
   #btc-tooltip {
-    left: 16px !important;
-    right: 16px !important;
-    bottom: 16px !important;
+    left: 14px !important;
+    right: 14px !important;
+    bottom: 14px !important;
     top: auto !important;
     max-width: none;
-    text-align: center;
-    border-radius: 10px;
-    padding: 10px 16px;
-    font-size: 12px;
+    text-align: left;
+    border-radius: 12px;
+    padding: 11px 15px;
+    font-size: 12.5px;
   }
   #btc-tooltip::after {
     display: none;

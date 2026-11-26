@@ -561,6 +561,7 @@ fn uniform_block(height: u64, timestamp: u64) -> BlockSummary {
         segwit_tx_count: 1_400,
         taproot_tx_count: 799,
         coinbase_text: "/uniform/".to_string(),
+        miner: String::new(),
     }
 }
 

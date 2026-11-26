@@ -12,7 +12,7 @@ use crate::stats::{
     db,
     heartbeat_state::HeartbeatStore,
     heartbeat_sync::CanonicalBlock,
-    rpc::{BitcoinRpc, BlockTxids},
+    rpc::{BitcoinRpc, BlockTxids, PolledBlockSeed},
 };
 
 const RECENT_BLOCKS: usize = 12;
@@ -67,6 +67,13 @@ pub(crate) struct BlockJob {
     first_receipt: Instant,
     observed_at: u64,
     ids: OnceCell<Arc<BlockTxids>>,
+    /// Immutable payload seeded by the 15s poller (`getblock` verbosity 2) so
+    /// a stalled ZMQ `getblock(hash, 1)` or `getblockstats` RPC can resolve
+    /// immediately once SQLite already has the block.
+    polled_ids: OnceLock<Arc<BlockTxids>>,
+    polled_fees: OnceLock<u64>,
+    polled_miner: OnceLock<String>,
+    polled_ready: Notify,
     running: AtomicBool,
     observed_sent: AtomicBool,
     ids_sent: AtomicBool,
@@ -197,7 +204,10 @@ impl BlockJobs {
             .unwrap()
             .iter()
             .filter(|job| job.ids_sent.load(Ordering::Relaxed))
-            .filter_map(|job| Some((job.ids.get()?.height, job.hash.clone())))
+            .filter_map(|job| {
+                let ids = job.ids.get().or_else(|| job.polled_ids.get())?;
+                Some((ids.height, job.hash.clone()))
+            })
             .collect()
     }
 
@@ -206,9 +216,18 @@ impl BlockJobs {
         let _ = self.entry(hash);
     }
 
-    pub(crate) fn seed_polled(&self, info: BlockTxids) {
-        if let Some(job) = self.entry(&info.hash) {
-            let _ = job.ids.set(Arc::new(info));
+    pub(crate) fn seed_polled(&self, seed: PolledBlockSeed) {
+        if let Some(job) = self.entry(&seed.ids.hash) {
+            let ids = Arc::new(seed.ids);
+            let _ = job.polled_ids.set(Arc::clone(&ids));
+            let _ = job.ids.set(ids);
+            if let Some(fees) = seed.exact_fees {
+                let _ = job.polled_fees.set(fees);
+            }
+            if let Some(miner) = seed.miner {
+                let _ = job.polled_miner.set(miner);
+            }
+            job.polled_ready.notify_waiters();
         }
     }
     fn entry(&self, hash: &str) -> Option<Arc<BlockJob>> {
@@ -227,6 +246,10 @@ impl BlockJobs {
             first_receipt: Instant::now(),
             observed_at: now_unix_secs(),
             ids: OnceCell::new(),
+            polled_ids: OnceLock::new(),
+            polled_fees: OnceLock::new(),
+            polled_miner: OnceLock::new(),
+            polled_ready: Notify::new(),
             running: false.into(),
             observed_sent: false.into(),
             ids_sent: false.into(),
@@ -396,23 +419,56 @@ impl BlockJob {
         self.finished.notify_waiters();
     }
 
+    async fn wait_polled_ids(&self) -> Arc<BlockTxids> {
+        loop {
+            let notified = self.polled_ready.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+            if let Some(ids) = self.polled_ids.get() {
+                return Arc::clone(ids);
+            }
+            notified.await;
+        }
+    }
+
+    async fn wait_polled_fees(&self) -> u64 {
+        loop {
+            let notified = self.polled_ready.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+            if let Some(&fees) = self.polled_fees.get() {
+                return fees;
+            }
+            notified.await;
+        }
+    }
+
     pub(super) async fn accepted_ids(
         &self,
         rpc: &BitcoinRpc,
     ) -> Result<Arc<BlockTxids>, StatsError> {
         let hash = &self.hash;
-        let ids = self
-            .ids
-            .get_or_try_init(|| async {
-                retry_block_rpc(hash, "getblock_txids", || {
-                    rpc.get_block_txids(hash)
-                })
-                .await
-                .map(Arc::new)
-            })
-            .await?;
+        let ids = if let Some(cached) =
+            self.ids.get().or_else(|| self.polled_ids.get())
+        {
+            Arc::clone(cached)
+        } else {
+            tokio::select! {
+                res = self.ids.get_or_try_init(|| async {
+                    retry_block_rpc(hash, "getblock_txids", || {
+                        rpc.get_block_txids(hash)
+                    })
+                    .await
+                    .map(Arc::new)
+                }) => Arc::clone(res?),
+                polled = self.wait_polled_ids() => {
+                    let _ = self.ids.set(Arc::clone(&polled));
+                    polled
+                }
+            }
+        };
         self.check_height(rpc, ids.height).await?;
-        Ok(Arc::clone(ids))
+        Ok(ids)
     }
 
     async fn check_height(
@@ -485,16 +541,58 @@ pub(crate) fn observe_block(
             state
                 .heartbeat_blocks
                 .publish_inclusion_if_current(&state, &job, &info);
-            Ok::<_, StatsError>(info)
+            // Resolve mining pool from the poller seed if already available, or
+            // from the coinbase tx in parallel with `getblockstats`, bounded to
+            // 500ms so it never delays block reveal.
+            let miner = if let Some(m) = job.polled_miner.get() {
+                Some(m.clone())
+            } else {
+                match info.txids.first() {
+                    Some(cb_txid) => tokio::time::timeout(
+                        std::time::Duration::from_millis(500),
+                        state.rpc.get_raw_transaction(cb_txid),
+                    )
+                    .await
+                    .ok()
+                    .and_then(Result::ok)
+                    .and_then(|tx| {
+                        tx["vin"][0]["coinbase"].as_str().map(|hex| {
+                            crate::stats::classifier::identify_miner(hex)
+                        })
+                    }),
+                    None => None,
+                }
+            };
+            Ok::<_, StatsError>((info, miner))
         };
-        // Always use Core's getblockstats.totalfee so polled and ZMQ-observed
-        // live blocks agree on total_fees (avoiding coinbase-minus-subsidy drift).
-        let fees = retry_block_rpc(hash, "getblockstats", || {
-            state.rpc.get_block_fees(hash)
-        });
-        let (info, fees) = tokio::join!(ids, fees);
+        // Primary: Core's `getblockstats.totalfee` (typically 0.3-1.0s).
+        // Fallback: if `getblockstats` stalls (e.g. back-to-back blocks on
+        // Start9) and the 15s poller has already parsed exact per-tx fees from
+        // `getblock(hash, 2)`, unblock immediately so live and refreshed views
+        // stay in sync with zero coinbase-minus-subsidy drift.
+        let fees = async {
+            if let Some(&polled) = job.polled_fees.get() {
+                return Ok::<u64, StatsError>(polled);
+            }
+            tokio::select! {
+                res = retry_block_rpc(hash, "getblockstats", || {
+                    state.rpc.get_block_fees(hash)
+                }) => res,
+                polled = job.wait_polled_fees() => {
+                    tracing::info!(
+                        source,
+                        stage = "fees_polled_fallback",
+                        %hash,
+                        elapsed_ms = job.first_receipt.elapsed().as_millis(),
+                        "heartbeat_block"
+                    );
+                    Ok(polled)
+                }
+            }
+        };
+        let (ids_res, fees) = tokio::join!(ids, fees);
         let result = async {
-            let (info, total_fees) = (info?, fees?);
+            let ((info, miner), total_fees) = (ids_res?, fees?);
             job.check_height(&state.rpc, info.height).await?;
             state.heartbeat_blocks.if_current(&job, || {
                 state.heartbeat_store.apply_block_details(CanonicalBlock {
@@ -506,6 +604,7 @@ pub(crate) fn observe_block(
                     size: info.size,
                     weight: info.weight,
                     observed_at: job.observed_at,
+                    miner,
                 });
                 let event = HeartbeatEvent::Block {
                     height: info.height,

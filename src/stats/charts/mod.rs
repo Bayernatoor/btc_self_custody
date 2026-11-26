@@ -4788,6 +4788,7 @@ mod tests {
             coinbase_text: String::new(),
             fee_rate_p25: 0.0,
             fee_rate_p75: 0.0,
+            miner: String::new(),
         };
         let result = dp(&block, 42.5);
         let arr = result.as_array().unwrap();
@@ -5008,6 +5009,7 @@ mod tests {
             coinbase_text: String::new(),
             fee_rate_p25: 5.0,
             fee_rate_p75: 25.0,
+            miner: String::new(),
         }
     }
 

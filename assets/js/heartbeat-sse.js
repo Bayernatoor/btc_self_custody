@@ -759,6 +759,7 @@ function syncBlocksFromSnapshot(_hb, payload, isResync, skipPendingReserve) {
                     total_fees: sorted[i].total_fees,
                     size: sorted[i].size,
                     weight: sorted[i].weight,
+                    miner: sorted[i].miner || null,
                     inter_block_seconds: interSec
                 });
             }
@@ -784,6 +785,7 @@ function syncBlocksFromSnapshot(_hb, payload, isResync, skipPendingReserve) {
                         total_fees: missed[k].total_fees,
                         size: missed[k].size,
                         weight: missed[k].weight,
+                        miner: missed[k].miner || null,
                         inter_block_seconds: resolveInterBlockSeconds(missed[k])
                     }]), false);
                 }
@@ -963,9 +965,17 @@ function _hbV2InstallSnapshotInner(_hb, payload, isResync) {
         });
 
         // Append newly discovered txids cleanly without piling into flat-topped
-        // skyscrapers: size any large recovery span by brick-height volume and
-        // respect softMaxStack so the skyline stays organic.
+        // skyscrapers or leaving a detached island after a sparse/disconnected gap:
+        // sort chronologically, anchor right after the last dense brick column when
+        // empty space already exists behind headGx, and respect softMaxStack.
         if (newTxs.length > 0) {
+            newTxs.sort(function(a, b) {
+                var aKnown = (a.first_seen || 0) > 0 ? 1 : 0;
+                var bKnown = (b.first_seen || 0) > 0 ? 1 : 0;
+                if (aKnown !== bKnown) return aKnown - bKnown;
+                if (aKnown === 1 && a.first_seen !== b.first_seen) return a.first_seen - b.first_seen;
+                return a.txid < b.txid ? -1 : (a.txid > b.txid ? 1 : 0);
+            });
             var resyncSoftMax = Math.min(maxStack, 160);
             var minGx = Math.ceil(liveSeg.x_start / 5) * 5;
             var newTotalH = 0;
@@ -979,11 +989,25 @@ function _hbV2InstallSnapshotInner(_hb, payload, isResync) {
             var targetCols = Math.max(1, Math.ceil(newTotalH / 65));
             var neededSpan = targetCols * 5;
             var headGx = Math.max(minGx, Math.floor(_hb.virtualX / 5) * 5);
+            // Locate the rightmost column that already holds settled bricks so
+            // resync recovery backfills any empty gap directly instead of jumping
+            // past it and stranding older first_seen txs at the far right edge.
+            var lastBrickGx = -1;
+            if (liveSeg._colHeights) {
+                for (var ck in liveSeg._colHeights) {
+                    if (liveSeg._colHeights[ck] > 0) {
+                        var gxNum = Number(ck);
+                        if (gxNum >= minGx && gxNum > lastBrickGx) lastBrickGx = gxNum;
+                    }
+                }
+            }
             var startGx;
             if (newTxs.length > 100) {
-                // Recovery delta: open fresh room past existing bricks so we never
-                // pile hundreds/thousands of recovered txs on top of existing columns.
-                startGx = headGx + 5;
+                if (lastBrickGx >= minGx && (headGx - lastBrickGx) > 20) {
+                    startGx = lastBrickGx + 5;
+                } else {
+                    startGx = headGx + 5;
+                }
                 _hb.virtualX = Math.max(_hb.virtualX, startGx + neededSpan + 10);
                 headGx = Math.floor(_hb.virtualX / 5) * 5;
             } else {
@@ -1291,10 +1315,17 @@ function _hbV2InstallSnapshotInner(_hb, payload, isResync) {
             return;
         }
         ensureSegMaps(curSeg);
+        var chunkStartMs = nowPerfMs();
+        var budgetMs = (s.width && s.width < 640) ? 5 : 10;
         var end = Math.min(idx + CHUNK_SIZE, planned.length);
         var span = Math.max(1, usableSpan);
         var chunkStartGridX = Math.ceil(curSeg.x_start / 5) * 5;
+        var chunkDone = 0;
         for (; idx < end; idx++) {
+            if (!isResync && chunkDone > 0 && (chunkDone & 255) === 0 && (nowPerfMs() - chunkStartMs) >= budgetMs) {
+                break;
+            }
+            chunkDone++;
             var item = planned[idx];
             var tx = item.tx;
             if (!tx || !tx.txid) continue;
@@ -2256,6 +2287,7 @@ export function processLiveBlock(block) {
         total_fees: block.total_fees || 0,
         size: block.size || 0,
         weight: block.weight || 0,
+        miner: block.miner || null,
         inter_block_seconds: inter
     }]);
 
@@ -2469,10 +2501,10 @@ export function drainHiddenTxsAcrossGap(gapStart, gapEnd, windowStartSec, window
     var minTs = hasTimeSpan ? windowStartSec : Infinity;
     var maxTs = hasTimeSpan ? windowEndSec : 0;
     if (hasTimeSpan) {
-        // Expand minTs down to the earliest buffered arrival (clamped to 30m before
-        // windowEndSec) so a miner's future-skewed block header timestamp can never
-        // clamp real post-block arrivals onto colIdx = 0.
-        var floorTs = maxTs - 1800;
+        // Allow up to 5m of slack before windowStartSec (covers future-skewed miner
+        // block headers like +4m44s) without letting a single 25m-old rebroadcast
+        // stretch tsSpan and carve an empty void on the left of the gap.
+        var floorTs = Math.max(maxTs - 1800, windowStartSec - 300);
         for (var ti0 = 0; ti0 < buffered.length; ti0++) {
             var fts0 = buffered[ti0].first_seen || 0;
             if (fts0 > floorTs && fts0 < minTs) {

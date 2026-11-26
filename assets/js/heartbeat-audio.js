@@ -131,14 +131,36 @@ var _cuedHashes = new Set();
 
 var _enabled = (function () {
     try {
-        return localStorage.getItem('hb_sound') === 'on';
+        return localStorage.getItem('hb_sound') !== 'off';
     } catch (e) {
-        return false;
+        return true;
     }
 })();
+var _unlockAttached = false;
 
 export function isSoundEnabled() {
     return _enabled;
+}
+
+// Browsers suspend AudioContext until a user gesture. Because block audio
+// defaults ON, silently create/resume the context on the visitor's first
+// pointer or keyboard interaction so subsequent blocks play cleanly.
+export function unlockAudioOnGesture() {
+    if (_unlockAttached || !_enabled || typeof window === 'undefined' || typeof window.addEventListener !== 'function') {
+        return;
+    }
+    _unlockAttached = true;
+    var onGesture = function () {
+        if (!_enabled) return;
+        var ctx = ensureContext();
+        safeResume(ctx);
+    };
+    try {
+        window.addEventListener('pointerdown', onGesture, { once: true, passive: true });
+        window.addEventListener('keydown', onGesture, { once: true, passive: true });
+    } catch (e) {
+        window.addEventListener('pointerdown', onGesture, true);
+    }
 }
 
 function ensureContext() {

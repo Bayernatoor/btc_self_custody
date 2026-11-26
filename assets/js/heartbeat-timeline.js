@@ -228,6 +228,18 @@ export function feeRateColor(feeRate) {
     return 'rgba(244, 67, 54, ';                      // #f44336 crimson red (50+ sat/vB)
 }
 
+// Fixed 6-band + sub-1 + pending fee rate index (0..=6), matching Rust's
+// `heartbeat_sync::fee_band_index` so legend spotlighting agrees 1:1.
+export function feeBandIndex(feeRate, feePending) {
+    if (feePending || feeRate == null || !isFinite(feeRate)) return 0;
+    if (feeRate < 1)  return 1;
+    if (feeRate < 2)  return 2;
+    if (feeRate < 5)  return 3;
+    if (feeRate < 15) return 4;
+    if (feeRate < 50) return 5;
+    return 6;
+}
+
 // Human-readable label for the fixed fee band
 export function feeBandLabel(feeRate) {
     if (feeRate == null || !isFinite(feeRate)) return 'Fee pending';
@@ -341,6 +353,7 @@ export function createBlockSegment(block, xStart) {
         total_fees: block.total_fees || 0,
         size: block.size || 0,
         weight: block.weight || 0,
+        miner: block.miner || null,
         inter_block_seconds: rawInter,
         points: points,
         _minY: minY,
