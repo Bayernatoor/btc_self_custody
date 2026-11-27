@@ -142,7 +142,7 @@ pub fn PostQuantumChartsPage() -> impl IntoView {
                     view! {
                         <div class="space-y-10">
                             <ChartCard title="Value Exposed by Construction" description=chart_desc(range, "Share of the bitcoin each block creates that lands in outputs publishing a public key", "Share of the bitcoin created each day that lands in outputs publishing a public key") chart_id="chart-pq-exposed-value" option=value_option/>
-                            <ChartCard title="Exposure by Construction" description=chart_desc(range, "Share of outputs created whose public key is on chain from the moment they exist", "Share of outputs created whose public key is on chain, totalled over each day") chart_id="chart-pq-exposure" option=exposure_option/>
+                            <ChartCard title="Exposure by Construction" description=chart_desc(range, "Share of outputs created whose public key is on chain from the moment they exist", "Share of outputs created whose public key is on chain, totaled over each day") chart_id="chart-pq-exposure" option=exposure_option/>
                             <ChartCard title="P2PK Outputs Created" description=chart_desc(range, "Outputs paying a raw public key, the oldest exposed form, still created today", "Outputs paying a raw public key, averaged per block over each day") chart_id="chart-pq-p2pk-creation" option=p2pk_option/>
 
                             // The rule is the boundary, the pivot explains

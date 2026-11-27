@@ -208,7 +208,7 @@ pub fn FeeChartsPage() -> impl IntoView {
                             />
                             <ChartCard
                                 title="Halving Era Comparison"
-                                description="Four block metrics compared across the halving eras present in the selected range, each normalised to its own highest era"
+                                description="Four block metrics compared across the halving eras present in the selected range, each normalized to its own highest era"
                                 chart_id="chart-halving-era"
                                 option=halving_era_option
                             />

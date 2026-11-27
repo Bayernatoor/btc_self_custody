@@ -137,25 +137,25 @@ fn op_return_weight(script_bytes: u64, output_count: u64) -> f64 {
     4.0 * op_return_output_bytes(script_bytes, output_count)
 }
 
-/// OP_RETURN bytes bar chart.
+/// OP_RETURN bytes bar chart (per-block, in decimal kB).
 pub fn op_return_bytes_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("Embedded Data Volume");
     }
 
-    let runes_str = build_data_array_i64(blocks, |b| b.runes_bytes as i64);
+    let kb = |bytes: u64| round(bytes as f64 / 1_000.0, 2);
+    let runes_str = build_data_array_f64(blocks, |b| kb(b.runes_bytes));
     let runes = data_array_value(&runes_str);
-    let omni_str = build_data_array_i64(blocks, |b| b.omni_bytes as i64);
+    let omni_str = build_data_array_f64(blocks, |b| kb(b.omni_bytes));
     let omni = data_array_value(&omni_str);
-    let xcp_str = build_data_array_i64(blocks, |b| b.counterparty_bytes as i64);
+    let xcp_str = build_data_array_f64(blocks, |b| kb(b.counterparty_bytes));
     let xcp = data_array_value(&xcp_str);
-    let other_str =
-        build_data_array_i64(blocks, |b| b.data_carrier_bytes as i64);
+    let other_str = build_data_array_f64(blocks, |b| kb(b.data_carrier_bytes));
     let other = data_array_value(&other_str);
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
-        "yAxis": y_axis("Bytes"),
+        "yAxis": y_axis("kB"),
         "dataZoom": data_zoom(),
         "tooltip": tooltip_axis(),
         "series": [
@@ -716,7 +716,7 @@ pub fn all_embedded_share_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         if i < first_inscription {
             let _ =
                 write!(insc_buf, "[{},null,{}]", ts_ms(b.timestamp), b.height);
-        } else if b.size > 0 {
+        } else if b.weight > 0 {
             let _ = write!(
                 insc_buf,
                 "[{},{},{}]",
@@ -948,7 +948,7 @@ pub fn unified_embedded_count_chart_daily(
     }))
 }
 
-/// Unified embedded data volume: all protocols by bytes (per-block).
+/// Unified embedded data volume: all protocols in decimal kB (per-block).
 pub fn unified_embedded_volume_chart(
     blocks: &[BlockSummary],
 ) -> serde_json::Value {
@@ -956,26 +956,27 @@ pub fn unified_embedded_volume_chart(
         return no_data_chart("All Embedded Data Volume");
     }
 
-    let runes_str = build_data_array_i64(blocks, |b| b.runes_bytes as i64);
+    let kb = |bytes: u64| round(bytes as f64 / 1_000.0, 2);
+    let runes_str = build_data_array_f64(blocks, |b| kb(b.runes_bytes));
     let runes = data_array_value(&runes_str);
-    let omni_str = build_data_array_i64(blocks, |b| b.omni_bytes as i64);
+    let omni_str = build_data_array_f64(blocks, |b| kb(b.omni_bytes));
     let omni = data_array_value(&omni_str);
-    let xcp_str = build_data_array_i64(blocks, |b| b.counterparty_bytes as i64);
+    let xcp_str = build_data_array_f64(blocks, |b| kb(b.counterparty_bytes));
     let xcp = data_array_value(&xcp_str);
     let other_op_str =
-        build_data_array_i64(blocks, |b| b.data_carrier_bytes as i64);
+        build_data_array_f64(blocks, |b| kb(b.data_carrier_bytes));
     let other_op = data_array_value(&other_op_str);
     let inscriptions_str =
         // Envelope, not payload: the OP_RETURN bands beside it are script
         // bytes, which include each output's own OP_RETURN and push opcodes.
         // Stacking those against a payload with its envelope stripped put two
         // different levels in one bar.
-        build_data_array_i64(blocks, |b| b.inscription_envelope_bytes as i64);
+        build_data_array_f64(blocks, |b| kb(b.inscription_envelope_bytes));
     let inscriptions = data_array_value(&inscriptions_str);
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
-        "yAxis": y_axis("Bytes"),
+        "yAxis": y_axis("kB"),
         "dataZoom": data_zoom(),
         "tooltip": tooltip_axis(),
         "legend": { "show": true },

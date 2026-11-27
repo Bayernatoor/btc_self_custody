@@ -421,6 +421,7 @@ fn drawer_pages() -> Vec<DrawerPage> {
 #[component]
 pub fn ChartDrawer() -> impl IntoView {
     let (open, set_open) = signal(false);
+    let (query, set_query) = signal(String::new());
     let location = use_location();
 
     view! {
@@ -513,7 +514,7 @@ pub fn ChartDrawer() -> impl IntoView {
                             </p>
                         </div>
                         <button
-                            class="text-white/30 hover:text-white/70 cursor-pointer p-1 -mr-1 -mt-0.5 rounded-md hover:bg-white/5 transition-colors"
+                            class="text-white/45 hover:text-white/85 cursor-pointer p-1 -mr-1 -mt-0.5 rounded-md hover:bg-white/5 transition-colors"
                             aria-label="Close the chart index"
                             on:click=move |_| set_open.set(false)
                         >
@@ -522,6 +523,27 @@ pub fn ChartDrawer() -> impl IntoView {
                             </svg>
                         </button>
                     </div>
+                    <div class="relative mt-2.5">
+                        <input
+                            type="text"
+                            placeholder=format!("Filter {} charts...", chart_count())
+                            aria-label="Filter charts"
+                            class="w-full bg-[#0a1a2e] text-white/90 placeholder-white/40 text-xs border border-white/10 rounded-lg pl-7 pr-7 py-1.5 focus:outline-none focus:border-[#f7931a]/50"
+                            prop:value=move || query.get()
+                            on:input=move |ev| set_query.set(event_target_value(&ev))
+                        />
+                        <svg class="w-3.5 h-3.5 text-white/40 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                            <circle cx="11" cy="11" r="7"/>
+                            <path stroke-linecap="round" d="m20 20-3.5-3.5"/>
+                        </svg>
+                        <Show when=move || !query.get().is_empty()>
+                            <button
+                                class="absolute right-2 top-1/2 -translate-y-1/2 text-white/45 hover:text-white cursor-pointer text-xs px-1"
+                                aria-label="Clear chart filter"
+                                on:click=move |_| set_query.set(String::new())
+                            >"×"</button>
+                        </Show>
+                    </div>
                 </div>
 
                 // Content
@@ -529,90 +551,127 @@ pub fn ChartDrawer() -> impl IntoView {
                     // Built here rather than hoisted above the view: `Portal`
                     // takes its children as `Fn`, so the closure cannot move a
                     // captured Vec out of its environment.
-                    {drawer_pages().into_iter().map(|page| {
-                        let path_prefix = page.path_prefix;
-                        view! {
-                            <div class="mb-3">
-                                // Page heading
-                                <div class=move || {
-                                    let current = location.pathname.get();
-                                    if current.starts_with(path_prefix) {
-                                        "text-sm font-bold text-[#f7931a] uppercase tracking-wider px-2 py-1.5 border-b border-[#f7931a]/20 mb-1"
+                    {move || {
+                        let q = query.get().trim().to_lowercase();
+                        let mut any_match = false;
+                        let pages_view = drawer_pages().into_iter().filter_map(|page| {
+                            let path_prefix = page.path_prefix;
+                            let page_label_match = !q.is_empty() && page.label.to_lowercase().contains(&q);
+                            let filtered_sections: Vec<DrawerSection> = page
+                                .sections
+                                .into_iter()
+                                .filter_map(|section| {
+                                    let sec_match = page_label_match
+                                        || (!q.is_empty() && section.label.to_lowercase().contains(&q));
+                                    let charts: Vec<DrawerChart> = if q.is_empty() || sec_match {
+                                        section.charts
                                     } else {
-                                        "text-sm font-bold text-white/50 uppercase tracking-wider px-2 py-1.5 border-b border-white/5 mb-1"
+                                        section
+                                            .charts
+                                            .into_iter()
+                                            .filter(|c| {
+                                                c.label.to_lowercase().contains(&q)
+                                                    || slug_of(c.card_id).contains(&q)
+                                            })
+                                            .collect()
+                                    };
+                                    if charts.is_empty() {
+                                        None
+                                    } else {
+                                        Some(DrawerSection {
+                                            label: section.label,
+                                            charts,
+                                        })
                                     }
-                                }>
-                                    {page.label}
-                                    <span class="ml-1.5 font-normal normal-case tracking-normal text-white/25">
-                                        {page.sections.iter().map(|s| s.charts.len()).sum::<usize>()}
-                                    </span>
-                                </div>
-                                // Sections
-                                {page.sections.into_iter().map(|section| {
-                                    let has_label = !section.label.is_empty();
-                                    view! {
-                                        <div class="ml-1">
-                                            {if has_label {
-                                                Some(view! {
-                                                    <div class="text-[11px] text-white/50 font-semibold uppercase tracking-wider px-2 pt-3 pb-1">
-                                                        {section.label}
-                                                    </div>
-                                                })
-                                            } else {
-                                                None
-                                            }}
-                                            <ul class="space-y-0">
-                                                {section.charts.into_iter().map(|chart| {
-                                                    let card_id = chart.card_id;
-                                                    view! {
-                                                        <li>
-                                                            <button
-                                                                // 13px and py-1.5, up from 12px and py-1. Sixty-one
-                                                                // entries at the old size read as a wall of grey
-                                                                // rather than a list of things to pick.
-                                                                class="w-full text-left text-[13px] text-white/65 hover:text-white hover:bg-white/[0.07] rounded-md px-3 py-1.5 cursor-pointer transition-colors"
-                                                                on:click=move |_| {
-                                                                    set_open.set(false);
-                                                                    #[cfg(feature = "hydrate")]
-                                                                    {
-                                                                        // Reading a chart on its own page and picking
-                                                                        // another from the index means you want that
-                                                                        // chart's page, not the grid it came from.
-                                                                        // Sending you back to the multi-chart view was
-                                                                        // a demotion disguised as navigation.
-                                                                        let on_single = leptos::prelude::window()
-                                                                            .location()
-                                                                            .pathname()
-                                                                            .unwrap_or_default()
-                                                                            .starts_with("/observatory/chart/");
-                                                                        let url = if on_single {
-                                                                            format!("/observatory/chart/{}", slug_of(card_id))
-                                                                        } else if let Some(el) =
-                                                                            leptos::prelude::document().get_element_by_id(card_id)
+                                })
+                                .collect();
+                            if filtered_sections.is_empty() {
+                                return None;
+                            }
+                            any_match = true;
+                            let count: usize = filtered_sections.iter().map(|s| s.charts.len()).sum();
+                            Some(view! {
+                                <div class="mb-3">
+                                    // Page heading
+                                    <div class=move || {
+                                        let current = location.pathname.get();
+                                        if current.starts_with(path_prefix) {
+                                            "text-sm font-bold text-[#f7931a] uppercase tracking-wider px-2 py-1.5 border-b border-[#f7931a]/20 mb-1"
+                                        } else {
+                                            "text-sm font-bold text-white/60 uppercase tracking-wider px-2 py-1.5 border-b border-white/5 mb-1"
+                                        }
+                                    }>
+                                        {page.label}
+                                        <span class="ml-1.5 font-normal normal-case tracking-normal text-white/35">
+                                            {count}
+                                        </span>
+                                    </div>
+                                    // Sections
+                                    {filtered_sections.into_iter().map(|section| {
+                                        let has_label = !section.label.is_empty();
+                                        view! {
+                                            <div class="ml-1">
+                                                {if has_label {
+                                                    Some(view! {
+                                                        <div class="text-[11px] text-white/55 font-semibold uppercase tracking-wider px-2 pt-3 pb-1">
+                                                            {section.label}
+                                                        </div>
+                                                    })
+                                                } else {
+                                                    None
+                                                }}
+                                                <ul class="space-y-0">
+                                                    {section.charts.into_iter().map(|chart| {
+                                                        let card_id = chart.card_id;
+                                                        view! {
+                                                            <li>
+                                                                <button
+                                                                    class="w-full text-left text-[13px] text-white/75 hover:text-white hover:bg-white/[0.07] rounded-md px-3 py-1.5 cursor-pointer transition-colors"
+                                                                    on:click=move |_| {
+                                                                        set_open.set(false);
+                                                                        #[cfg(feature = "hydrate")]
                                                                         {
-                                                                            // Same page, flat layout: every card is in
-                                                                            // the DOM, so scroll rather than reload.
-                                                                            el.scroll_into_view();
-                                                                            return;
-                                                                        } else {
-                                                                            format!("{}#{}", path_prefix, card_id)
-                                                                        };
-                                                                        let _ = leptos::prelude::window().location().set_href(&url);
+                                                                            let on_single = leptos::prelude::window()
+                                                                                .location()
+                                                                                .pathname()
+                                                                                .unwrap_or_default()
+                                                                                .starts_with("/observatory/chart/");
+                                                                            let url = if on_single {
+                                                                                format!("/observatory/chart/{}", slug_of(card_id))
+                                                                            } else if let Some(el) =
+                                                                                leptos::prelude::document().get_element_by_id(card_id)
+                                                                            {
+                                                                                el.scroll_into_view();
+                                                                                return;
+                                                                            } else {
+                                                                                format!("{}#{}", path_prefix, card_id)
+                                                                            };
+                                                                            let _ = leptos::prelude::window().location().set_href(&url);
+                                                                        }
                                                                     }
-                                                                }
-                                                            >
-                                                                {chart.label}
-                                                            </button>
-                                                        </li>
-                                                    }
-                                                }).collect::<Vec<_>>()}
-                                            </ul>
-                                        </div>
-                                    }
-                                }).collect::<Vec<_>>()}
-                            </div>
+                                                                >
+                                                                    {chart.label}
+                                                                </button>
+                                                            </li>
+                                                        }
+                                                    }).collect::<Vec<_>>()}
+                                                </ul>
+                                            </div>
+                                        }
+                                    }).collect::<Vec<_>>()}
+                                </div>
+                            })
+                        }).collect::<Vec<_>>();
+                        if !any_match {
+                            view! {
+                                <p class="text-xs text-white/50 px-2 py-4 text-center">
+                                    "No charts match that filter."
+                                </p>
+                            }.into_any()
+                        } else {
+                            pages_view.into_any()
                         }
-                    }).collect::<Vec<_>>()}
+                    }}
                 </nav>
             </div>
         </Portal>

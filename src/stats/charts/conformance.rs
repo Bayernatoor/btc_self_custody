@@ -4617,28 +4617,10 @@ mod inventory {
 
     /// Bands whose two arms plot the same quantity in different units.
     ///
-    /// Both of these declare `Unit::Kilobytes`. The daily arm honours it and
-    /// the per-block arm plots raw bytes, so the two differ by exactly a
-    /// thousand. The Key Facts rail already works around it by printing no
-    /// unit at all on these charts, which `single_chart.rs` calls "worse
-    /// writing and correct". Per-resolution units are tracked in
-    /// `tasks/todo.md`.
-    ///
-    /// **Listed rather than tolerated.** Fixing it divides two live charts'
-    /// y axis by a thousand, which is a visible change and not one to make
-    /// inside a test. The list is shrink-only: an entry that stops
-    /// disagreeing fails, so it cannot outlive the fix.
-    const ARMS_IN_DIFFERENT_UNITS: &[(&str, &str)] = &[
-        ("opreturn-bytes", "Runes"),
-        ("opreturn-bytes", "Omni"),
-        ("opreturn-bytes", "Counterparty"),
-        ("opreturn-bytes", "Other"),
-        ("unified-volume", "Runes"),
-        ("unified-volume", "Omni"),
-        ("unified-volume", "Counterparty"),
-        ("unified-volume", "Other OP_RETURN"),
-        ("unified-volume", "Inscriptions incl. BRC-20"),
-    ];
+    /// Empty now that `opreturn-bytes` and `unified-volume` plot decimal kB on
+    /// both per-block and daily resolutions. Kept so any future regression
+    /// fails loudly.
+    const ARMS_IN_DIFFERENT_UNITS: &[(&str, &str)] = &[];
 
     /// Both arms of a chart must answer the same question.
     ///

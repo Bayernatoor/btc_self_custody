@@ -85,7 +85,13 @@ fn fmt_num(v: f64) -> String {
     } else if abs >= 1.0 {
         format!("{v:.2}")
     } else if abs >= 0.001 {
-        format!("{v:.4}")
+        let s = format!("{v:.4}");
+        let trimmed = s.trim_end_matches('0').trim_end_matches('.');
+        if trimmed == "-0" {
+            "0".to_string()
+        } else {
+            trimmed.to_string()
+        }
     } else if abs > 0.0 {
         // Genesis difficulty is 1 against a present-day 1.6e14, so the low
         // over ALL is real but tiny. "0.0000" claimed it was zero.
@@ -232,9 +238,32 @@ fn UnknownChart(slug: Signal<String>) -> impl IntoView {
 fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
     let state = expect_context::<ObservatoryState>();
     let range = state.range;
+    let set_range = state.set_range;
+    let set_custom_from = state.set_custom_from;
+    let set_custom_to = state.set_custom_to;
     let overlay_flags = state.overlay_flags;
     let dashboard_data = state.dashboard_data;
     let data_loading = state.data_loading;
+
+    // Per-block-only charts cannot render daily presets like the default 1Y.
+    // Snap automatically to the nearest supported range (1M) on arrival unless
+    // the URL explicitly asked for a specific range.
+    Effect::new(move |ran_before: Option<()>| {
+        if ran_before.is_some() || meta.has_daily() {
+            return;
+        }
+        let explicit = leptos_router::hooks::use_query_map()
+            .read_untracked()
+            .get("range")
+            .is_some_and(|r| !r.is_empty());
+        if !explicit
+            && uses_daily_aggregates(range_to_blocks(&range.get_untracked()))
+        {
+            set_custom_from.set(None);
+            set_custom_to.set(None);
+            set_range.set("1m".to_string());
+        }
+    });
 
     // Local toggles for the two charts that have a count/percent switch and
     // the fee unit. Defaults match what the card shows.
@@ -703,7 +732,15 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
         }
     });
 
+    // A chart with no daily builder draws nothing at long ranges. Saying which
+    // ranges it supports is the honest version of an empty frame.
+    let daily_gap =
+        Signal::derive(move || !meta.has_daily() && resolved_daily.get());
+
     let kpis = Signal::derive(move || {
+        if daily_gap.get() {
+            return kpi::Kpis::Unavailable;
+        }
         kpi::compute(
             &option.get(),
             meta.shape,
@@ -730,11 +767,6 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
             )
         })
     });
-
-    // A chart with no daily builder draws nothing at long ranges. Saying which
-    // ranges it supports is the honest version of an empty frame.
-    let daily_gap =
-        Signal::derive(move || !meta.has_daily() && resolved_daily.get());
 
     // True when the dashboard fetch for the selected window came back an
     // error. Borrowed rather than cloned, for the reason `data_loading` is.
@@ -832,7 +864,16 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                                 explain=false
                             />
                         </Show>
-                        <RailRange resolved_daily=resolved_daily/>
+                        <RailRange
+                            resolved_daily=resolved_daily
+                            has_daily=meta.has_daily()
+                            show_resolution_badge=!matches!(
+                                meta.shape,
+                                registry::Shape::Donut
+                                    | registry::Shape::Gauge
+                                    | registry::Shape::Histogram
+                            )
+                        />
                         <button
                             class="hidden lg:inline-flex items-center text-white/60 hover:text-[#f7931a] transition-colors cursor-pointer p-1 rounded-md hover:bg-white/5 mt-0.5"
                             title=move || if rail_open.get() { "Hide the side panel and widen the chart" } else { "Show the side panel" }
@@ -1171,6 +1212,7 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                             move || download_chart_png(&id, meta.title)
                         }
                     />
+                    <CopyPageLinkButton/>
                     // Two different things, and one note beside three
                     // buttons read as though it covered all of them. CSV and
                     // JSON are the data; PNG is a picture of the chart as it
@@ -1298,7 +1340,7 @@ const ABOUT_LABEL: &str =
 /// Anything the parser does not recognise is emitted verbatim rather than
 /// swallowed: an unmatched bracket costs a reader one stray character, where
 /// eating to the end of the paragraph costs them the sentence.
-fn copy_with_links(para: &str) -> Vec<AnyView> {
+pub(super) fn copy_with_links(para: &str) -> Vec<AnyView> {
     parse_copy(para)
         .into_iter()
         .map(|seg| match seg {
@@ -1466,10 +1508,18 @@ fn RailRange(
     /// two derivations of one fact are what let the label disagree with the
     /// chart beside it.
     resolved_daily: Signal<bool>,
+    /// Whether this chart has a daily builder. When false, daily presets
+    /// (`3M`..`ALL`) are visually muted with a hint so readers do not click
+    /// blindly into an unavailable range.
+    has_daily: bool,
+    /// Whether to show the `1 point = 1 day / 1 block` pill. Hidden on donuts,
+    /// gauges, and histograms whose points are categories rather than time.
+    show_resolution_badge: bool,
 ) -> impl IntoView {
     const PRESETS: &[&str] = &[
         "1d", "1w", "1m", "3m", "6m", "ytd", "1y", "2y", "5y", "10y", "all",
     ];
+    let is_per_block_preset = |p: &str| matches!(p, "1d" | "1w" | "1m");
     let state = expect_context::<ObservatoryState>();
     let range = state.range;
     let set_range = state.set_range;
@@ -1586,9 +1636,24 @@ fn RailRange(
                     let val = val.clone();
                     move || range.get() == val
                 };
+                let unavailable = !has_daily && !is_per_block_preset(r);
+                let title_hint = if unavailable {
+                    "Per-block chart only (pick 1M or shorter)"
+                } else {
+                    ""
+                };
                 view! {
                     <button
-                        class=move || segmented_button(is_on())
+                        class=move || {
+                            if is_on() {
+                                segmented_button(true)
+                            } else if unavailable {
+                                "px-2 py-1 text-xs rounded-md transition-colors cursor-pointer whitespace-nowrap text-white/30 hover:text-white/60 hover:bg-white/5"
+                            } else {
+                                segmented_button(false)
+                            }
+                        }
+                        title=title_hint
                         on:click={
                             let val = val.clone();
                             move |_| {
@@ -1666,15 +1731,58 @@ fn RailRange(
         // a grey "1 point = 1 block" read as a disabled control rather than
         // a statement of fact. The text already changes; the colour was
         // carrying nothing the words did not.
-        <p class="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-[#f7931a]/40 bg-[#f7931a]/10 text-[#f7931a] text-[0.7rem]">
-            <span class="whitespace-nowrap font-mono">
-                <DefinedTerm
-                    label=Signal::derive(mode)
-                    text="Short ranges plot one point per block, about one every ten minutes. Longer ranges plot one point per day, computed from every block in that day. How it is computed depends on the chart: some average, some total the day up, some are a ratio of the day's sums, and each chart says which. Either way a brief spike inside a day is smoothed away."
-                />
-            </span>
-        </p>
+        {show_resolution_badge.then(|| view! {
+            <p class="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-[#f7931a]/40 bg-[#f7931a]/10 text-[#f7931a] text-[0.7rem]">
+                <span class="whitespace-nowrap font-mono">
+                    <DefinedTerm
+                        label=Signal::derive(mode)
+                        text="Short ranges plot one point per block (roughly every 10 minutes). Longer ranges plot one point per day, calculated from every block in that day. Depending on the chart, daily points are averages, daily totals, or ratios of daily totals."
+                    />
+                </span>
+            </p>
+        })}
         </div>
+    }
+}
+
+#[allow(unused_variables)] // set_copied only used under hydrate feature
+#[component]
+fn CopyPageLinkButton() -> impl IntoView {
+    let (copied, set_copied) = signal(false);
+    view! {
+        <button
+            class="text-xs px-3 py-1.5 rounded-lg bg-white/5 text-white/85 hover:text-[#f7931a] hover:bg-white/10 transition-colors cursor-pointer inline-flex items-center gap-1.5"
+            title="Copy a direct link to this chart with the current range and settings"
+            on:click=move |_| {
+                #[cfg(feature = "hydrate")]
+                {
+                    if let Ok(href) = leptos::prelude::window().location().href() {
+                        let _ = leptos::prelude::window().navigator().clipboard().write_text(&href);
+                        set_copied.set(true);
+                        leptos::prelude::set_timeout(
+                            move || set_copied.set(false),
+                            std::time::Duration::from_secs(2),
+                        );
+                    }
+                }
+            }
+        >
+            {move || if copied.get() {
+                view! {
+                    <svg class="w-3.5 h-3.5 text-[#f7931a]" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/>
+                    </svg>
+                    <span class="text-[#f7931a]">"Copied"</span>
+                }.into_any()
+            } else {
+                view! {
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m9.364-9.364a4.5 4.5 0 0 1 6.364 6.364l-1.757 1.757m-7.07 7.07 4.243-4.243"/>
+                    </svg>
+                    <span>"Copy link"</span>
+                }.into_any()
+            }}
+        </button>
     }
 }
 
@@ -1913,15 +2021,26 @@ fn KeyFacts(
                 .then(|| {
                     format!("across {observations} points, each counting once")
                 });
+                let u = unit.get();
+                let signed_change = format!(
+                    "{}{}",
+                    if change >= 0.0 { "+" } else { "" },
+                    fmt_num(change)
+                );
+                let change_val = if matches!(u, registry::Unit::Percent) {
+                    format!("{signed_change} pp")
+                } else {
+                    u.qualify(&signed_change)
+                };
                 view! {
                     <div class=FACT_GRID>
-                        <Fact label="average" value=unit.get().qualify(&fmt_num(average)) note=averaged_population/>
-                        <Fact label="peak" value=fmt_num(peak.y) note=point_label(&peak, &axis_labels)/>
-                        <Fact label="low" value=fmt_num(low.y) note=point_label(&low, &axis_labels)/>
+                        <Fact label="average" value=u.qualify(&fmt_num(average)) note=averaged_population/>
+                        <Fact label="peak" value=u.qualify(&fmt_num(peak.y)) note=point_label(&peak, &axis_labels)/>
+                        <Fact label="low" value=u.qualify(&fmt_num(low.y)) note=point_label(&low, &axis_labels)/>
                         {reports_change.then(|| view! {
                             <Fact
                                 label="change"
-                                value=format!("{}{}", if change >= 0.0 { "+" } else { "" }, fmt_num(change))
+                                value=change_val
                                 note=pct.map(|p| format!("{p:+.1}%"))
                             />
                         })}
@@ -1930,27 +2049,16 @@ fn KeyFacts(
                 }.into_any()
             }
             Kpis::Bands { total_range, average_total, total_latest, dominant, dominant_share_pct, dominant_over_range, band_count, observations } => {
-                // **Deliberately not qualified with the unit**, unlike the
-                // time-series rail above. `ChartMeta` declares one `Unit` per
-                // chart while the real unit is per resolution: `opreturn-bytes`
-                // and `unified-volume` declare `Kilobytes`, but their per-block
-                // builders plot raw bytes, so appending " kB" here overstated
-                // them a thousandfold under 5,000 blocks. A bare number leaves
-                // the reader to take the unit off the y axis, which is worse
-                // writing and correct. Per-resolution units: tasks/todo.md.
+                let u = unit.get();
                 view! {
                     <div class=FACT_GRID>
-                        // Both totals, because they answer different
-                        // questions: "how much over this window" against
-                        // "where does it stand now". Absent for a percentage
-                        // chart, where a total of shares is not a share.
                         {total_range.map(|t| view! {
-                            <Fact label="range total" value=fmt_num(t) note=None/>
+                            <Fact label="range total" value=u.qualify(&fmt_num(t)) note=None/>
                         })}
                         {average_total.map(|a| view! {
-                            <Fact label="average total" value=fmt_num(a) note=None/>
+                            <Fact label="average total" value=u.qualify(&fmt_num(a)) note=None/>
                         })}
-                        <Fact label="latest total" value=fmt_num(total_latest) note=None/>
+                        <Fact label="latest total" value=u.qualify(&fmt_num(total_latest)) note=None/>
                         <Fact label="largest band" value=dominant note=Some(share_note(dominant_share_pct, dominant_over_range))/>
                         <Fact label="bands" value=band_count.to_string() note=None/>
                         <Fact label="observations" value=observations.to_string() note=None/>
@@ -2318,6 +2426,10 @@ mod tests {
         // And nothing below the new rungs moved.
         assert_eq!(fmt_num(1.5e9), "1.5G");
         assert_eq!(fmt_num(-1.5e18), "-1.5E");
+        assert_eq!(fmt_num(0.6300), "0.63");
+        assert_eq!(fmt_num(-0.9400), "-0.94");
+        assert_eq!(fmt_num(0.0025), "0.0025");
+        assert_eq!(fmt_num(0.5000), "0.5");
     }
 
     /// A paragraph with no marker survives intact, markers become links, and

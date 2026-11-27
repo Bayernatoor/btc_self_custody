@@ -788,13 +788,18 @@ pub fn fee_spike_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.len() < 300 {
         return no_data_chart_with_hint(
             "Fee Spike Detector",
-            "Select a longer range (1W+) for enough data to detect fee spikes",
+            "Select 1W or 1M for enough blocks to detect fee spikes",
         );
     }
 
-    let rates: Vec<f64> =
-        blocks.iter().map(|b| round(b.median_fee_rate, 2)).collect();
-    let ma = moving_average(&rates, 144);
+    // Coinbase-only blocks carry a 0.0 sentinel rather than a real fee rate;
+    // exclude them from the trailing baseline so empty blocks do not pull the
+    // moving average down and trigger false spikes.
+    let rates: Vec<Option<f64>> = blocks
+        .iter()
+        .map(|b| (b.tx_count > 1).then(|| round(b.median_fee_rate, 2)))
+        .collect();
+    let ma = moving_average_over_gaps(&rates, 144);
     let ma_str = build_ma_array(blocks, &ma);
     let ma_data = data_array_value(&ma_str);
 
@@ -812,10 +817,9 @@ pub fn fee_spike_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     spike_buf.push('[');
     let mut first = true;
     for (i, b) in blocks.iter().enumerate() {
-        if let Some(avg) = ma[i] {
+        if let (Some(rate), Some(avg)) = (rates[i], ma[i]) {
             if avg > 0.0
-                && (rates[i] > avg * SPIKE_RATIO
-                    || rates[i] - avg >= SPIKE_JUMP_SAT_VB)
+                && (rate > avg * SPIKE_RATIO || rate - avg >= SPIKE_JUMP_SAT_VB)
             {
                 if !first {
                     spike_buf.push(',');
@@ -825,7 +829,7 @@ pub fn fee_spike_chart(blocks: &[BlockSummary]) -> serde_json::Value {
                     spike_buf,
                     "[{},{},{}]",
                     ts_ms(b.timestamp),
-                    rates[i],
+                    rate,
                     b.height
                 );
             }

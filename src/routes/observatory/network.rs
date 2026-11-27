@@ -549,7 +549,7 @@ pub fn NetworkChartsPage() -> impl IntoView {
                 <ChartCard title="Avg Transaction Size" description=chart_desc(range, "Average serialized size of a transaction in bytes, including header and coinbase", "Daily average serialized transaction size in bytes (block bytes over transactions)") chart_id="chart-avg-tx-size" option=avg_tx_size_option/>
                 <ChartCard title="Chain Size Growth" description="Total blockchain size over time, showing how fast the chain is growing" chart_id="chart-chain-size" option=chain_size_option/>
                 <ChartCard title="Weekday Activity" description="Average transaction count and fees per block, grouped by UTC day of the week" chart_id="chart-weekday" option=weekday_option/>
-                <ChartCard title="Block Fullness Distribution" description="Distribution of blocks by weight utilization percentage. Shows how many blocks are nearly full vs partially empty" chart_id="chart-fullness-dist" option=fullness_toggled>
+                <ChartCard title="Block Fullness Distribution" description="Distribution of blocks by weight utilization percentage, from near-empty to full" chart_id="chart-fullness-dist" option=fullness_toggled>
                     <button
                         class=move || if fullness_pct_mode.get() { "text-xs px-2 py-1 rounded-md cursor-pointer transition-colors bg-[#f7931a]/20 text-[#f7931a]" } else { "text-xs px-2 py-1 rounded-md cursor-pointer transition-colors bg-white/10 text-white/50" }
                         on:click=move |_| set_fullness_pct_mode.update(|v| *v = !*v)
@@ -565,11 +565,11 @@ pub fn NetworkChartsPage() -> impl IntoView {
                         {move || if time_pct_mode.get() { "%" } else { "#" }}
                     </button>
                 </ChartCard>
-                <ChartCard title="Rapid Consecutive Blocks" description="Consecutive blocks whose header timestamps are less than 60 seconds apart. Miners choose those timestamps, so this is not a measure of propagation" chart_id="chart-propagation" option=propagation_option/>
+                <ChartCard title="Rapid Consecutive Blocks" description="Consecutive blocks whose header timestamps are less than 60 seconds apart. Miners set these timestamps, so this does not measure network propagation" chart_id="chart-propagation" option=propagation_option/>
 
                 // ── Adoption ─────────────────────────────
                 <SectionHeading id="section-adoption" title="Adoption"/>
-                <ChartCard title="SegWit Adoption" description=chart_desc(range, "Percentage of transactions using Segregated Witness", "Daily average SegWit adoption percentage") chart_id="chart-segwit" option=segwit_option/>
+                <ChartCard title="SegWit Adoption" description=chart_desc(range, "Percentage of transactions using Segregated Witness", "Daily share of transactions using Segregated Witness") chart_id="chart-segwit" option=segwit_option/>
                 <ChartCard title="Taproot Outputs" description=chart_desc(range, "New Taproot (P2TR) outputs created per block", "Average Taproot (P2TR) outputs created per block each day") chart_id="chart-taproot" option=taproot_option/>
                 <ChartCard title="Address Type Count" description=chart_desc(range, "Counts of outputs by script type in each block, one band per type", "Daily totals of outputs by script type, one band per type") chart_id="chart-address-types" option=address_type_option/>
                 <ChartCard title="Address Type Share" description="Each of the six payment output types as a percentage of their combined total" chart_id="chart-address-types-pct" option=address_type_pct_option/>
@@ -584,8 +584,8 @@ pub fn NetworkChartsPage() -> impl IntoView {
 
                 // ── Transactions ─────────────────────────
                 <SectionHeading id="section-tx-metrics" title="Transactions"/>
-                <ChartCard title="Explicit RBF Signaling" description=chart_desc(range, "Share of each block's transactions whose inputs signal replaceability under BIP 125", "Daily share of transactions signalling replaceability under BIP 125") chart_id="chart-rbf" option=rbf_option/>
-                <ChartCard title="UTXO Flow" description=chart_desc(range, "Inputs spent vs outputs created per block. The gap between them counts outputs, not unspent ones", "Daily average inputs spent vs outputs created. The gap between them counts outputs, not unspent ones") chart_id="chart-utxo-flow" option=utxo_flow_option/>
+                <ChartCard title="Explicit RBF Signaling" description=chart_desc(range, "Share of each block's transactions whose inputs signal replaceability under BIP 125", "Daily share of transactions signaling replaceability under BIP 125") chart_id="chart-rbf" option=rbf_option/>
+                <ChartCard title="UTXO Flow" description=chart_desc(range, "Inputs spent against outputs created per block. The gap includes unspendable outputs like OP_RETURN", "Daily average inputs spent against outputs created per block. The gap includes unspendable outputs like OP_RETURN") chart_id="chart-utxo-flow" option=utxo_flow_option/>
                 <ChartCard title="Transaction Batching" description=chart_desc(range, "Average inputs and outputs per transaction in each block", "Daily average inputs and outputs per transaction") chart_id="chart-batching" option=batching_option/>
                 <ChartCard title="Largest Transaction" description=chart_desc(range, "Size of the largest transaction in each block, in kilobytes", "Largest transaction (per-block ranges only)") chart_id="chart-largest-tx" option=largest_tx_option/>
                 <ChartCard title="Transaction Density" description=chart_desc(range, "Transactions per 1,000 serialized bytes of block space", "Daily transaction density (total transactions over total serialized kilobytes)") chart_id="chart-tx-density" option=tx_density_option/>

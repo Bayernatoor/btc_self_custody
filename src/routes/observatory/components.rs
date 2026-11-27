@@ -363,18 +363,31 @@ pub fn ChartCard(
             // voices.
             {about.map(|copy| view! {
                 <Show when=move || info_open.get()>
-                    <div class="mb-4 p-3 bg-white/[0.03] border border-white/5 rounded-lg text-sm text-white/60 leading-relaxed space-y-2 max-w-3xl">
-                        {copy.definition.map(|d| view! { <p>{d}</p> })}
-                        <p>
-                            <span class="text-white/40">"How it is measured. "</span>
-                            {copy.technical}
-                        </p>
-                        <p class="text-xs text-white/30">
+                    <div class="mb-4 p-4 bg-white/[0.03] border border-white/10 rounded-xl text-sm text-white/80 leading-relaxed space-y-3 max-w-3xl">
+                        {copy.definition.map(|d| view! {
+                            <div class="space-y-2">
+                                <div class="text-[0.65rem] uppercase tracking-widest text-[#f7931a]/85 font-semibold">"Definition"</div>
+                                {d.split("\n\n")
+                                    .map(|para| view! {
+                                        <p>{super::single_chart::copy_with_links(para)}</p>
+                                    })
+                                    .collect_view()}
+                            </div>
+                        })}
+                        <div class="space-y-2">
+                            <div class="text-[0.65rem] uppercase tracking-widest text-[#f7931a]/85 font-semibold">"How it is measured"</div>
+                            {copy.technical.split("\n\n")
+                                .map(|para| view! {
+                                    <p>{super::single_chart::copy_with_links(para)}</p>
+                                })
+                                .collect_view()}
+                        </div>
+                        <p class="text-xs text-white/55 pt-1 border-t border-white/5">
                             <a
                                 href=format!("/observatory/chart/{about_slug}")
-                                class="hover:text-[#f7931a] transition-colors"
+                                class="text-[#f7931a]/90 hover:text-[#f7931a] hover:underline transition-colors"
                             >
-                                "Full page, key figures and downloads"
+                                "Open full chart page, key figures and downloads ->"
                             </a>
                         </p>
                     </div>

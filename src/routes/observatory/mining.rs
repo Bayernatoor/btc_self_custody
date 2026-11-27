@@ -185,12 +185,12 @@ pub fn MiningChartsPage() -> impl IntoView {
                         <ChartCard title="Difficulty" description=chart_desc(range, "Mining difficulty per block, adjusts every 2,016 blocks (~2 weeks)", "Daily mining difficulty, adjusts every 2,016 blocks (~2 weeks)") chart_id="chart-difficulty" option=diff_option/>
                         <ChartCard title="Hash Rate" description=chart_desc(range, "Estimated hashes per second the network is computing, derived from difficulty", "Estimated daily hash rate, derived from difficulty") chart_id="chart-hash-rate" option=hash_rate_option/>
                         <ChartCard title="Difficulty Adjustment" description=chart_desc(range, "How much difficulty moved at each retarget, every 2,016 blocks", "How much difficulty moved at each retarget, every 2,016 blocks") chart_id="chart-diff-adjustment" option=diff_adjustment_option/>
-                        <ChartCard title="Difficulty Ribbon" description=chart_desc(range, "Seven moving averages of difficulty, from 9 to 128 blocks. There is no unsmoothed line: every series here is derived", "Seven moving averages of difficulty, from 7 to 128 days. There is no unsmoothed line: every series here is derived") chart_id="chart-diff-ribbon" option=diff_ribbon_option/>
+                        <ChartCard title="Difficulty Ribbon" description=chart_desc(range, "Seven moving averages of difficulty, from 9 to 128 blocks. Every series here is a smoothed average", "Seven moving averages of difficulty, from 7 to 128 days. Every series here is a smoothed average") chart_id="chart-diff-ribbon" option=diff_ribbon_option/>
 
                         <SectionHeading id="section-pools" title="Mining Pools"/>
                         <ChartCard title="Mining Pool Share" description="Share of blocks in the range by identified pool, with unattributed blocks kept separate" chart_id="chart-miner-dominance" option=miner_chart_option/>
                         <ChartCard title="Mining Diversity Index" description="Herfindahl-Hirschman Index (HHI) measuring mining concentration. Conventionally below 1,000 is competitive and above 1,800 is concentrated" chart_id="chart-diversity" option=diversity_option/>
-                        <ChartCard title="Empty Blocks" description="Blocks carrying only the coinbase transaction, which is almost always the early chain: 78,800 of them are from 2009 and 2010" chart_id="chart-empty-blocks" option=empty_blocks_option/>
+                        <ChartCard title="Empty Blocks" description="Blocks carrying only the coinbase transaction, mostly from the early chain: 78,800 are from 2009 and 2010" chart_id="chart-empty-blocks" option=empty_blocks_option/>
                         <ChartCard title="Empty Blocks by Pool" description="Coinbase-only blocks in the range, grouped by the pool that mined them" chart_id="chart-empty-by-pool" option=empty_by_pool_option/>
                     </div>
                 }

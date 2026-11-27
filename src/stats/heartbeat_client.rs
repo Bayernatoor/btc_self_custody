@@ -1072,6 +1072,8 @@ mod client {
         block_lookup_abort: Option<AbortController>,
         retry_timer_id: Option<i32>,
         retry_closure: Option<Closure<dyn FnMut()>>,
+        sync_watchdog_id: Option<i32>,
+        sync_watchdog_closure: Option<Closure<dyn FnMut()>>,
         retry_count: u32,
         connected: bool,
         resume_attempted: bool,
@@ -1398,6 +1400,8 @@ mod client {
                 block_lookup_abort,
                 timer_id,
                 _retry_cb,
+                watchdog_id,
+                _watchdog_cb,
                 vis_cb,
                 _sel_cb,
                 _clr_cb,
@@ -1418,6 +1422,8 @@ mod client {
                     st.block_lookup_abort.take(),
                     st.retry_timer_id.take(),
                     st.retry_closure.take(),
+                    st.sync_watchdog_id.take(),
+                    st.sync_watchdog_closure.take(),
                     st.visibility_closure.take(),
                     st.select_tx_closure.take(),
                     st.clear_pinned_closure.take(),
@@ -1438,6 +1444,9 @@ mod client {
             }
             if let Some(win) = web_sys::window() {
                 if let Some(id) = timer_id {
+                    win.clear_timeout_with_handle(id);
+                }
+                if let Some(id) = watchdog_id {
                     win.clear_timeout_with_handle(id);
                 }
                 let _ = js_sys::Reflect::delete_property(
@@ -1488,7 +1497,56 @@ mod client {
             }
         }
 
+        fn clear_sync_watchdog(&self) {
+            let (timer_id, _cb) = {
+                let mut st = self.inner.state.borrow_mut();
+                (st.sync_watchdog_id.take(), st.sync_watchdog_closure.take())
+            };
+            if let Some(id) = timer_id {
+                if let Some(win) = web_sys::window() {
+                    win.clear_timeout_with_handle(id);
+                }
+            }
+        }
+
+        /// Guard against being stranded in `"syncing"` across a server restart
+        /// (hung snapshot fetch, stalled EventSource CONNECTING, or a missed
+        /// `resync_required` during initial boot checkpoint).
+        fn arm_sync_watchdog(&self, mount_gen: u64, cycle_gen: u64) {
+            const SYNC_WATCHDOG_MS: i32 = 20_000;
+            self.clear_sync_watchdog();
+            let wd_client = self.downgrade();
+            let cb = Closure::<dyn FnMut()>::new(move || {
+                let Some(wd_client) = upgrade_client(&wd_client) else {
+                    return;
+                };
+                if !wd_client.is_cycle_live(mount_gen, cycle_gen) {
+                    return;
+                }
+                {
+                    let mut st = wd_client.inner.state.borrow_mut();
+                    st.sync_watchdog_id = None;
+                }
+                wd_client.fetch_and_connect(true);
+            });
+            if let Some(win) = web_sys::window() {
+                if let Ok(id) = win
+                    .set_timeout_with_callback_and_timeout_and_arguments_0(
+                        cb.as_ref().unchecked_ref(),
+                        SYNC_WATCHDOG_MS,
+                    )
+                {
+                    let mut st = self.inner.state.borrow_mut();
+                    st.sync_watchdog_id = Some(id);
+                    st.sync_watchdog_closure = Some(cb);
+                }
+            }
+        }
+
         fn set_conn_state(&self, state: &str) {
+            if state != "syncing" {
+                self.clear_sync_watchdog();
+            }
             let _ =
                 self.inner.signals.set_conn_state.try_set(state.to_string());
             hb_v2_set_connection_state(state);
@@ -1516,6 +1574,7 @@ mod client {
             }
 
             self.set_conn_state("syncing");
+            self.arm_sync_watchdog(mount_gen, cycle_gen);
 
             let Ok(controller) = AbortController::new() else {
                 self.schedule_retry(mount_gen, cycle_gen);
@@ -1601,10 +1660,18 @@ mod client {
                     return;
                 }
                 if st.mirror.install_snapshot(snapshot).is_err() {
+                    drop(st);
+                    let _ = self.inner.signals.set_loading.try_set(false);
+                    self.set_conn_state("disconnected");
+                    self.schedule_retry(mount_gen, cycle_gen);
                     return;
                 }
                 st.resume_attempted = false;
                 let Some((epoch, seq)) = st.mirror.revision() else {
+                    drop(st);
+                    let _ = self.inner.signals.set_loading.try_set(false);
+                    self.set_conn_state("disconnected");
+                    self.schedule_retry(mount_gen, cycle_gen);
                     return;
                 };
                 let epoch = epoch.to_string();
@@ -1788,6 +1855,9 @@ mod client {
                         (cs, note)
                     };
                     open_client.set_conn_state(cs);
+                    if cs == "syncing" {
+                        open_client.arm_sync_watchdog(mount_gen, cycle_gen);
+                    }
                     let _ = open_client
                         .inner
                         .signals
@@ -2255,6 +2325,7 @@ mod client {
                 };
                 if let Some((epoch, seq)) = resume_target {
                     retry_client.set_conn_state("syncing");
+                    retry_client.arm_sync_watchdog(mount_gen, cycle_gen);
                     retry_client
                         .open_event_source(&epoch, seq, mount_gen, cycle_gen);
                 } else {
