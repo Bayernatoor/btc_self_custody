@@ -196,7 +196,7 @@ pub fn FeeChartsPage() -> impl IntoView {
                             />
                             <ChartCard
                                 title="Fee Revenue Share"
-                                description=chart_desc(range, "Percentage of total block reward that comes from fees rather than subsidy", "Daily average fee revenue as a percentage of total block reward")
+                                description=chart_desc(range, "Percentage of total block reward that comes from fees rather than subsidy", "Each day's fee revenue as a percentage of that day's total block reward")
                                 chart_id="chart-fee-revenue-share"
                                 option=fee_revenue_share_option
                             />

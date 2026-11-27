@@ -535,8 +535,20 @@ pub fn subsidy_vs_fees_chart_daily(
 
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
 
-    let subsidy_vals: Vec<f64> =
-        days.iter().map(|d| daily_subsidy_btc(&d.date)).collect();
+    let subsidy_vals: Vec<f64> = days
+        .iter()
+        .map(|d| {
+            if d.block_count > 0 {
+                round_plot(
+                    d.total_subsidy as f64
+                        / d.block_count as f64
+                        / 100_000_000.0,
+                )
+            } else {
+                0.0
+            }
+        })
+        .collect();
     let fee_vals: Vec<serde_json::Value> = days
         .iter()
         .map(|d| {
@@ -634,9 +646,7 @@ pub fn fee_revenue_share_chart_daily(
     let data: Vec<f64> = days
         .iter()
         .map(|d| {
-            let subsidy_per_block = daily_subsidy_btc(&d.date);
-            let total_subsidy =
-                subsidy_per_block * d.block_count as f64 * 100_000_000.0;
+            let total_subsidy = d.total_subsidy as f64;
             let fees = d.total_fees as f64;
             if total_subsidy + fees > 0.0 {
                 round(fees / (total_subsidy + fees) * 100.0, 2)
@@ -999,8 +1009,12 @@ pub fn halving_era_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
         entry.0 += d.avg_size / 1_000_000.0 * bc;
         entry.1 += d.avg_tx_count * bc;
         entry.2 += d.total_fees as f64 / 100_000_000.0;
-        let sub = subsidy_btc.get(era as usize).copied().unwrap_or(3.125);
-        let total_subsidy = sub * bc * 100_000_000.0;
+        let total_subsidy = if d.total_subsidy > 0 {
+            d.total_subsidy as f64
+        } else {
+            let sub = subsidy_btc.get(era as usize).copied().unwrap_or(3.125);
+            sub * bc * 100_000_000.0
+        };
         let fees = d.total_fees as f64;
         if total_subsidy + fees > 0.0 {
             entry.3 += fees / (total_subsidy + fees) * 100.0 * bc;

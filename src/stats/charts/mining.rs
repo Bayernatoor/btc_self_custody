@@ -4,44 +4,75 @@
 use super::*;
 use serde_json::json;
 
-const PIE_COLORS: [&str; 11] = [
+const PIE_COLORS: [&str; 10] = [
     "#4ecdc4", "#f7931a", "#ff6b6b", "#bb8fff", "#2ecc71", "#e74c3c",
-    "#3498db", "#e67e22", "#1abc9c", "#9b59b6", "#95a5a6",
+    "#3498db", "#e67e22", "#1abc9c", "#9b59b6",
 ];
+const OTHER_POOL_COLOR: &str = "#95a5a6";
+const UNKNOWN_POOL_COLOR: &str = "#64748b";
 
 /// Miner dominance donut chart.
+///
+/// Folds `OCEAN*` sub-tags into `"OCEAN"` (matching [`mining_diversity_chart`])
+/// and lifts `"Unknown"` outside the top-10 pool cut so unattributed blocks
+/// never displace an identified pool into `"Other"`.
 pub fn miner_dominance_chart(miners: &[MinerShare]) -> serde_json::Value {
     if miners.is_empty() {
         return no_data_chart("Miner Dominance");
     }
 
-    // Top 10 + "Other"
-    let (top, rest) = if miners.len() > 10 {
-        (&miners[..10], &miners[10..])
+    let mut unknown_count: u64 = 0;
+    let mut folded: std::collections::BTreeMap<&str, u64> =
+        std::collections::BTreeMap::new();
+    for m in miners {
+        if m.miner == "Unknown" {
+            unknown_count += m.count;
+        } else {
+            let pool = if m.miner.starts_with("OCEAN") {
+                "OCEAN"
+            } else {
+                m.miner.as_str()
+            };
+            *folded.entry(pool).or_insert(0) += m.count;
+        }
+    }
+
+    let mut named: Vec<(&str, u64)> = folded.into_iter().collect();
+    named.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(b.0)));
+
+    let (top, rest) = if named.len() > 10 {
+        (&named[..10], &named[10..])
     } else {
-        (miners, &[][..])
+        (&named[..], &[][..])
     };
 
-    let mut pie_data: Vec<serde_json::Value> = top
-        .iter()
-        .map(|m| {
-            json!({
-                "name": m.miner,
-                "value": m.count
-            })
-        })
-        .collect();
+    let mut pie_data: Vec<serde_json::Value> = Vec::with_capacity(12);
+    let mut colors: Vec<&str> = Vec::with_capacity(12);
+
+    for (idx, &(name, count)) in top.iter().enumerate() {
+        pie_data.push(json!({
+            "name": name,
+            "value": count
+        }));
+        colors.push(PIE_COLORS[idx % PIE_COLORS.len()]);
+    }
 
     if !rest.is_empty() {
-        let other_count: u64 = rest.iter().map(|m| m.count).sum();
+        let other_count: u64 = rest.iter().map(|&(_, c)| c).sum();
         pie_data.push(json!({
             "name": "Other",
             "value": other_count
         }));
+        colors.push(OTHER_POOL_COLOR);
     }
 
-    let colors: Vec<&str> =
-        PIE_COLORS.iter().copied().take(pie_data.len()).collect();
+    if unknown_count > 0 {
+        pie_data.push(json!({
+            "name": "Unknown",
+            "value": unknown_count
+        }));
+        colors.push(UNKNOWN_POOL_COLOR);
+    }
 
     json!({
         "backgroundColor": "transparent",
@@ -563,6 +594,70 @@ pub fn difficulty_adjustment_chart_daily(
               "itemStyle": { "color": "#ef4444" } }
         ]
     }))
+}
+
+#[cfg(test)]
+mod dominance_tests {
+    use super::*;
+
+    fn ms(name: &str, count: u64) -> MinerShare {
+        MinerShare {
+            miner: name.to_string(),
+            count,
+            percentage: 0.0,
+        }
+    }
+
+    #[test]
+    fn folds_ocean_subtags_and_keeps_unknown_outside_top_ten() {
+        let mut miners = vec![ms("Unknown", 500_000)];
+        for i in 1..=10 {
+            miners.push(ms(&format!("Pool{i:02}"), (20 - i) as u64 * 100));
+        }
+        // Two OCEAN sub-tags summing to 1,250, which outranks Pool10 (1,000)
+        // and Pool09 (1,100), pushing Pool10 into Other rather than OCEAN.
+        miners.push(ms("OCEAN / alice", 700));
+        miners.push(ms("OCEAN / bob", 550));
+        miners.push(ms("SmallPool", 50));
+
+        let opt = miner_dominance_chart(&miners);
+        let slices = opt["series"][0]["data"].as_array().expect("pie slices");
+        let names: Vec<&str> = slices
+            .iter()
+            .map(|s| s["name"].as_str().expect("name"))
+            .collect();
+
+        // 10 named pools (Pool01..Pool09 + OCEAN) + Other + Unknown = 12 slices
+        assert_eq!(slices.len(), 12, "slices: {names:?}");
+        assert!(
+            names.contains(&"OCEAN"),
+            "OCEAN should be folded into top 10"
+        );
+        assert!(
+            !names.iter().any(|n| n.starts_with("OCEAN /")),
+            "sub-tags must be folded"
+        );
+        assert_eq!(names[10], "Other");
+        assert_eq!(names[11], "Unknown");
+
+        let ocean_val = slices
+            .iter()
+            .find(|s| s["name"] == "OCEAN")
+            .and_then(|s| s["value"].as_u64());
+        assert_eq!(ocean_val, Some(1_250));
+
+        let other_val = slices
+            .iter()
+            .find(|s| s["name"] == "Other")
+            .and_then(|s| s["value"].as_u64());
+        assert_eq!(other_val, Some(1_050)); // Pool10 (1,000) + SmallPool (50)
+
+        let unknown_val = slices
+            .iter()
+            .find(|s| s["name"] == "Unknown")
+            .and_then(|s| s["value"].as_u64());
+        assert_eq!(unknown_val, Some(500_000));
+    }
 }
 
 #[cfg(test)]

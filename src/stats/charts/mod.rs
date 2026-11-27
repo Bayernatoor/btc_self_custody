@@ -1601,8 +1601,9 @@ pub(crate) fn halving_era_for_date(date: &str) -> u32 {
     (HALVING_DATE_BOUNDARIES.len() - not_yet_reached) as u32
 }
 
-/// Block subsidy in BTC for a UTC date string. See [`halving_era_for_date`]
-/// for the halving-day caveat.
+/// Block subsidy in BTC for a UTC date string. Kept test-only now that daily
+/// builders read `daily_blocks.total_subsidy` (summed per block height).
+#[cfg(test)]
 pub(crate) fn daily_subsidy_btc(date: &str) -> f64 {
     50.0 / 2f64.powi(halving_era_for_date(date) as i32)
 }

@@ -88,11 +88,17 @@ pub fn op_return_count_chart_daily(
 /// Serialised bytes an OP_RETURN output costs beyond its script: the 8-byte
 /// `value` field plus the 1-byte CompactSize length prefix.
 ///
-/// Counting script bytes alone understates the real cost by **44%** over the
-/// last year, which is larger than it sounds because a typical OP_RETURN
-/// script is only 20.5 bytes. Runes markers and protocol tags are short, not
-/// the 80-byte policy maximum, so a fixed 9-byte frame is nearly half the
-/// output.
+/// Counting script bytes alone understates the real cost by **about 46%** over
+/// the last year, which is larger than it sounds because a typical OP_RETURN
+/// script is only 20.5 bytes. Runes markers and protocol tags are short,
+/// nowhere near the 83 bytes the retired relay default allowed, so a fixed
+/// 9-byte frame is nearly half the output.
+///
+/// That default is retired, not current: Core's `-datacarriersize` capped the
+/// whole scriptPubKey at 83 bytes until it was lifted, and more than half of
+/// recent blocks now carry a script above it. The overhead this models is
+/// unaffected, since 9 bytes is serialisation rather than policy, but do not
+/// read 83 here as a live ceiling.
 ///
 /// The prefix widens to 3 bytes once a script reaches 253. Measured
 /// 2026-10-21: 3.5% of OP_RETURN outputs sit in blocks containing at least one
@@ -114,17 +120,17 @@ fn op_return_output_bytes(script_bytes: u64, output_count: u64) -> f64 {
 /// **Share charts divide by weight, not size, and the difference reverses the
 /// answer.** Block space is rationed by weight (4,000,000 units), and a
 /// non-witness byte costs four units where a witness byte costs one. Dividing
-/// by `size` prices them as the same good. Measured 2026-10-21 from height
-/// 920,000:
+/// by `size` prices them as the same good. Measured across the closed window
+/// of heights 920,000 to 975,000:
 ///
 /// ```text
 ///                   % of size    % of weight
-/// OP_RETURN            3.97          6.68
-/// inscriptions         8.07          3.40
+/// OP_RETURN            3.94          6.64
+/// inscriptions         8.09          3.41
 /// ```
 ///
 /// On size, inscriptions look twice OP_RETURN. On weight, OP_RETURN is nearly
-/// twice inscriptions, and 20.9% of individual blocks flip ranking on the
+/// twice inscriptions, and 20.1% of individual blocks flip ranking on the
 /// choice. Inscriptions live in the witness and OP_RETURN outputs do not, so
 /// this is not a rounding difference: it is the wrong good being measured.
 fn op_return_weight(script_bytes: u64, output_count: u64) -> f64 {

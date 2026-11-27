@@ -2422,40 +2422,34 @@ mod tests {
         assert_eq!(find("P2TR"), 15.0, "1.5 per block over 10 blocks");
     }
 
-    /// A halving day takes the **whole date** at the new subsidy, which is a
-    /// step at the wrong moment rather than a blend of the two eras.
+    /// A halving day blends from stored per-height block subsidies rather than
+    /// assigning the whole calendar date to the new era.
     ///
-    /// One of the four declarations the round-one review found wrong, and the
-    /// two that can be pinned by a fixture are pinned here rather than left
-    /// as corrected prose. `daily_subsidy_btc` is `50 / 2^era_for_date` with
-    /// the era read off the date, so 2020-05-11 is entirely 6.25 BTC even
-    /// though the halving landed at block 630,000 part-way through it.
-    ///
-    /// Each wrong alternative lands somewhere else: a true mean of that day's
-    /// 157 stored blocks is 11.544586 BTC, and an even split of the two eras
-    /// would be 9.375. The day before must still be 12.5, or the boundary is
-    /// off by one.
+    /// On 2020-05-11 (halving at block 630,000), 133 of the day's 157 blocks
+    /// earned 12.5 BTC and 24 earned 6.25 BTC, for a stored `total_subsidy` of
+    /// 1,812.5 BTC (11.5446 BTC/block) and `total_fees` of 88.60442418 BTC.
+    /// Reading `d.total_subsidy` puts Fee Revenue Share at 4.66% rather than
+    /// the 8.28% a date-only lookup produced.
     #[test]
-    fn a_halving_day_takes_the_whole_dates_subsidy() {
-        assert_eq!(super::super::daily_subsidy_btc("2020-05-10"), 12.5);
-        assert_eq!(
-            super::super::daily_subsidy_btc("2020-05-11"),
-            6.25,
-            "the halving date is attributed entirely to the new era"
-        );
-        assert_eq!(super::super::daily_subsidy_btc("2020-05-12"), 6.25);
-        // And the chart that reads it plots that, rather than a mean of the
-        // blocks actually mined under each subsidy.
-        let days: Vec<DailyAggregate> = ["2020-05-10", "2020-05-11"]
-            .iter()
-            .map(|d| DailyAggregate {
-                date: (*d).to_string(),
-                block_count: 157,
+    fn a_halving_day_blends_from_stored_block_subsidies() {
+        let days = vec![
+            DailyAggregate {
+                date: "2020-05-10".to_string(),
+                block_count: 150,
+                total_subsidy: 150 * 1_250_000_000,
                 total_fees: 100_000_000,
                 avg_size: 900_000.0,
                 ..Default::default()
-            })
-            .collect();
+            },
+            DailyAggregate {
+                date: "2020-05-11".to_string(),
+                block_count: 157,
+                total_subsidy: 181_250_000_000,
+                total_fees: 8_860_442_418,
+                avg_size: 900_000.0,
+                ..Default::default()
+            },
+        ];
         let opt = super::super::subsidy_vs_fees_chart_daily(&days);
         let subsidy = opt["series"]
             .as_array()
@@ -2464,10 +2458,19 @@ mod tests {
             .find(|s| s["name"] == "Subsidy")
             .expect("a Subsidy series");
         assert_eq!(subsidy["data"][0].as_f64(), Some(12.5));
-        assert_eq!(
-            subsidy["data"][1].as_f64(),
-            Some(6.25),
-            "not 9.375, which is what blending the halving day would give"
+        let halving_sub = subsidy["data"][1].as_f64().expect("halving subsidy");
+        assert!(
+            (halving_sub - 11.5446).abs() < 0.001,
+            "expected ~11.5446 BTC on 2020-05-11, got {halving_sub}"
+        );
+
+        let share_opt = super::super::fee_revenue_share_chart_daily(&days);
+        let share = share_opt["series"][0]["data"][1]
+            .as_f64()
+            .expect("halving fee share");
+        assert!(
+            (share - 4.66).abs() < 0.01,
+            "expected ~4.66% on 2020-05-11, got {share}"
         );
     }
 

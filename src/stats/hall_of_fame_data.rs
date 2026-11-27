@@ -669,9 +669,9 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
     HallOfFameEntry {
         slug: "taproot-activation",
         title: "Taproot Activation (BIP-341)",
-        // DB: height 709632, 2,043 txs, miner F2Pool
-        description: "Taproot activated at block 709,632, introducing Schnorr signatures, MAST, and new script capabilities. The activation block contained 14 Taproot spends out of 2,043 transactions. Mined by F2Pool.",
-        short_context: Some("<a href='https://github.com/bitcoin/bips/blob/master/bip-0341.mediawiki' target='_blank' class='text-[#f7931a] hover:underline'>BIP-341</a> activated at block 709,632. The largest Bitcoin upgrade since SegWit, enabling more private and efficient smart contracts"),
+        // DB: height 709632, 2,043 txs, 14 P2TR outputs, 0 P2TR spends, miner F2Pool
+        description: "Taproot activated at block 709,632, introducing Schnorr signatures, MAST, and new script capabilities. The activation block created 14 Taproot outputs out of 2,043 transactions. Mined by F2Pool.",
+        short_context: Some("<a href='https://github.com/bitcoin/bips/blob/master/bip-0341.mediawiki' target='_blank' class='text-[#f7931a] hover:underline'>BIP-341</a> activated at block 709,632, introducing Schnorr signatures, MAST, and Tapscript"),
         almanac: true,
         category: Protocol,
         date: "2021-11-14",
@@ -682,9 +682,11 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
     },
     HallOfFameEntry {
         slug: "first-taproot-spend",
-        title: "First Taproot Key-Path Spend",
-        description: "Three blocks after Taproot activated, BitGo executed the first P2TR key-path spend in block 709,635 with the message \"Thanks Satoshi!\" embedded via OP_RETURN. Multiple Bitcoin developers also made early Taproot transactions in the same block.",
-        short_context: Some("Three blocks after activation, BitGo made the first key-path spend, with \"Thanks Satoshi!\" embedded in an OP_RETURN"),
+        title: "First Taproot Spends",
+        // Verified against node on block 709,635: 12 key-path spends (first at tx index 21,
+        // 33e794d0...) and 9 script-path spends (including BitGo's tapscript multisig at index 105).
+        description: "Three blocks after Taproot activated, block 709,635 carried the first batch of P2TR spends (12 key-path and 9 script-path). Among them, BitGo executed a tapscript multisig spend with the message \"Thanks Satoshi!\" embedded via OP_RETURN.",
+        short_context: Some("Three blocks after activation, block 709,635 carried the first P2TR spends, including BitGo's tapscript spend with \"Thanks Satoshi!\" in an OP_RETURN"),
         almanac: true,
         category: Protocol,
         date: "2021-11-14",

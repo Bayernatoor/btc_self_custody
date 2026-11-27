@@ -13,7 +13,8 @@
 //! 372.7 million exposed UTXOs, because most have since been spent. Conflating
 //! the two is the single easiest way to publish a wrong number on this subject,
 //! so every title, axis and caption says "created". A current balance needs a
-//! `dumptxoutset` snapshot, which is tier 2 and not built.
+//! `dumptxoutset` snapshot, which is now rendered separately in `utxo_snapshot_data.rs`
+//! and the snapshot section at the foot of the Post-Quantum page.
 //!
 //! **The two limits here push in opposite directions**, and saying they both
 //! understate would be wrong. Omitting exposure by reuse can only make the
