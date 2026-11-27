@@ -1,7 +1,7 @@
 // heartbeat-render.js: Main draw loop and all drawing helpers for the heartbeat canvas.
 
 import { getState, COLORS, BG_COLOR, GRID_COLOR, POINT_WIDTH, FLATLINE_PX_PER_SEC, HEAD_POSITION_FRAC, MAX_BLIPS_PER_SEGMENT } from './heartbeat-state.js';
-import { computeColor, lerpColor, drawGrid, hexToRgb, lerp, feeRateColor, PENDING_FEE_COLOR, UNKNOWN_INTERVAL_COLOR, feeBandLabel, feeBandIndex, formatFeeRate, cellRadiusForVsize, brickHeightScale, fmtBtc, formatDuration, buildFlatlineGradient, waitColor, resolveInterBlockSeconds } from './heartbeat-timeline.js';
+import { computeColor, lerpColor, drawGrid, hexToRgb, lerp, feeRateColor, PENDING_FEE_COLOR, UNKNOWN_INTERVAL_COLOR, feeBandLabel, feeBandIndex, blipMatchesSpotlight, formatFeeRate, cellRadiusForVsize, brickHeightScale, fmtBtc, formatDuration, buildFlatlineGradient, waitColor, resolveInterBlockSeconds } from './heartbeat-timeline.js';
 import { canvasToVirtual, virtualToCanvas, blockAtVirtualX, flatlineAtVirtualX, blipAtCanvasXY } from './heartbeat-blips.js';
 import { stopMomentum } from './heartbeat-interaction.js';
 import { flushTxBatch, maybeClearRemovedTxids, compressSealedFlatline } from './heartbeat-sse.js';
@@ -265,6 +265,12 @@ export function drawBlipTooltip(ctx, blip, canvasX, baseline) {
         }
     } else {
         lines.push('First seen: Already waiting (time unknown)');
+    }
+    // When a script-level X-Ray filter (bits 3..9) is active on a cold-boot brick
+    // whose raw scripts were not yet parsed (SCRIPT_PARSED = 1 << 10), say so honestly.
+    var spotXrayTip = _hb && _hb._spotlightXray ? (_hb._spotlightXray | 0) : 0;
+    if ((spotXrayTip & 0x3f8) !== 0 && !((blip.flags || 0) & (1 << 10))) {
+        lines.push({ text: 'Script not inspected (predates restart)', color: 'rgba(148, 163, 184, 0.9)' });
     }
     // Show the "open detail" hint only when the live PinnedTxPanel callback isn't wired.
     if (blip.txid && _hb._pinnedBlip === blip && typeof window.__hbSelectTx !== 'function') {
@@ -722,9 +728,8 @@ function runBlockReveal(_hb, dt, now, w) {
             }
         }
     } else if (r.phase === 'unfurl') {
-        // Advance virtualX smoothly in real time once leftovers are laid so live
-        // post-block arrivals drop continuously with zero jump when return finishes.
-        if (dt > 0) _hb.virtualX += dt * FLATLINE_PX_PER_SEC;
+        // Hold virtualX flush against the carried backlog while flushTxBatch() is
+        // suppressed so unfurl/hold never carve an empty flatline gap ahead of live arrivals.
         // Follow the falling-brick FRONT rightward while exponentially zooming OUT
         // at constant perceptual speed to frame the spike + entire carried mempool.
         var tu = elapsed / r.unfurlSecs; if (tu > 1) tu = 1;
@@ -764,17 +769,16 @@ function runBlockReveal(_hb, dt, now, w) {
         }
     } else if (r.phase === 'hold') {
         if (r.newSeg) r.newSeg._revealLineEnd = undefined;
-        // Keep the live head gliding smoothly at real-time speed while holding.
-        if (dt > 0) _hb.virtualX += dt * FLATLINE_PX_PER_SEC;
-        // Hold on the whole timeline: "here's the size of the mempool".
+        // Hold on the whole timeline: "here's the size of the mempool" without
+        // drifting virtualX into empty space while flushTxBatch() is paused.
         _hb.zoom = r.fitZoom;
         _hb.viewOffset = fracOff(_hb.virtualX, r.fitZoom, 0.88);
         if (elapsed >= REVEAL_HOLD_SECS) { r.phase = 'return'; r.start = now; r.fromZoom = undefined; }
     } else { // return
         if (r.newSeg) r.newSeg._revealLineEnd = undefined;
-        // Keep virtualX advancing smoothly at real-time speed right into LIVE handoff
-        // so there is zero leap or brick dump when the reveal concludes.
-        if (dt > 0) _hb.virtualX += dt * FLATLINE_PX_PER_SEC;
+        // Resume gentle adaptive advance as flushTxBatch() trickles live post-block
+        // arrivals onto the tip, matching quiet live pacing with zero empty gap.
+        if (dt > 0) _hb.virtualX += dt * (FLATLINE_PX_PER_SEC * 0.22);
         // Exponentially zoom back IN to the live tip at the ORIGINAL entry zoom.
         var tr = smootherstep(elapsed / REVEAL_RETURN_SECS);
         _hb.zoom = lerpZoomExp(r.fitZoom, r.entryZoom, tr);
@@ -1219,24 +1223,38 @@ export function drawFrame(frameTime) {
         ctx.textAlign = 'center';
         ctx.globalAlpha = annAlpha;
 
-        // Block number
-        ctx.font = 'bold 22px monospace';
+        // Block number / confirmation headline (auto-fit width for narrow mobile screens)
+        var maxAnnW = Math.max(160, w - 28);
+        var titlePx = 22;
+        ctx.font = 'bold ' + titlePx + 'px monospace';
+        var titleW = ctx.measureText(ann.title || '').width;
+        if (titleW > maxAnnW && titleW > 0) {
+            titlePx = Math.max(12, Math.floor(titlePx * (maxAnnW / titleW)));
+            ctx.font = 'bold ' + titlePx + 'px monospace';
+        }
         ctx.fillStyle = ann.color;
         ctx.fillText(ann.title, w / 2, 46);
 
         // Subtle horizontal accent lines
+        var ruleHalf = Math.min(80, Math.floor(maxAnnW * 0.35));
         ctx.strokeStyle = ann.color;
         ctx.lineWidth = 1;
         ctx.globalAlpha = annAlpha * 0.3;
         ctx.beginPath();
-        ctx.moveTo(w / 2 - 80, 52);
-        ctx.lineTo(w / 2 + 80, 52);
+        ctx.moveTo(w / 2 - ruleHalf, 52);
+        ctx.lineTo(w / 2 + ruleHalf, 52);
         ctx.stroke();
         ctx.globalAlpha = annAlpha;
 
-        // Fee + tx count subtitle
-        ctx.font = '14px monospace';
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+        // Fee + tx count subtitle (auto-fit width for narrow mobile screens)
+        var subPx = 14;
+        ctx.font = subPx + 'px monospace';
+        var subW = ctx.measureText(ann.subtitle || '').width;
+        if (subW > maxAnnW && subW > 0) {
+            subPx = Math.max(10, Math.floor(subPx * (maxAnnW / subW)));
+            ctx.font = subPx + 'px monospace';
+        }
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
         ctx.fillText(ann.subtitle, w / 2, 70);
 
         ctx.globalAlpha = 1;
@@ -1588,6 +1606,8 @@ export function drawFlatlineBlipsLOD(ctx, seg, viewLeft, viewRight, baseline, zo
     var offPx = _hb.viewOffset * zoom;
     var colW = Math.max(1, 5 * zoom); // grid pitch in canvas px, floored at 1
     var spotBand = (typeof _hb._spotlightBand === 'number' && _hb._spotlightBand >= 0) ? _hb._spotlightBand : -1;
+    var spotXray = (typeof _hb._spotlightXray === 'number' && _hb._spotlightXray > 0) ? (_hb._spotlightXray | 0) : 0;
+    var spotActive = spotBand >= 0 || spotXray !== 0;
     var cols = {};                    // stable virtual bucket -> aggregate
     for (var i = 0; i < blips.length; i++) {
         var b = blips[i];
@@ -1605,7 +1625,7 @@ export function drawFlatlineBlipsLOD(ctx, seg, viewLeft, viewRight, baseline, zo
         var c = cols[k];
         if (!c) c = cols[k] = { h: 0, notable: false, ncolor: null, counts: {}, topN: 0, topColor: null, spotMatch: false, spotColor: null };
         if (top > c.h) c.h = top;
-        if (spotBand >= 0 && feeBandIndex(b.feeRate, b.feePending) === spotBand) {
+        if (spotActive && blipMatchesSpotlight(b, spotBand, spotXray)) {
             c.spotMatch = true;
             if (!c.spotColor) c.spotColor = (b.feePending && !b.notableType) ? PENDING_FEE_COLOR : (b.color || feeRateColor(b.feeRate));
         }
@@ -1626,7 +1646,7 @@ export function drawFlatlineBlipsLOD(ctx, seg, viewLeft, viewRight, baseline, zo
         var col = cols[key];
         // blip.color is an "rgba(r, g, b, " prefix awaiting an alpha + ")".
         var color, alpha;
-        if (spotBand >= 0) {
+        if (spotActive) {
             if (col.spotMatch) {
                 color = col.spotColor || col.topColor || PENDING_FEE_COLOR;
                 alpha = 0.95 * rf;
@@ -1669,6 +1689,8 @@ function drawFlatlineBricksBatched(ctx, _hb, seg, viewLeft, viewRight, baseline,
     var pinnedTxid = _hb._pinnedTxid;
     var pinnedRect = null;
     var spotBand = (typeof _hb._spotlightBand === 'number' && _hb._spotlightBand >= 0) ? _hb._spotlightBand : -1;
+    var spotXray = (typeof _hb._spotlightXray === 'number' && _hb._spotlightXray > 0) ? (_hb._spotlightXray | 0) : 0;
+    var spotActive = spotBand >= 0 || spotXray !== 0;
 
     var dimmedNorm = Object.create(null);
     var settledNorm = Object.create(null);
@@ -1764,7 +1786,7 @@ function drawFlatlineBricksBatched(ctx, _hb, seg, viewLeft, viewRight, baseline,
         }
 
         var isPinnedHere = !!(pinnedTxid && blip.txid === pinnedTxid);
-        var dimmedBySpot = spotBand >= 0 && !isPinnedHere && feeBandIndex(blip.feeRate, blip.feePending) !== spotBand;
+        var dimmedBySpot = spotActive && !isPinnedHere && !blipMatchesSpotlight(blip, spotBand, spotXray);
 
         if (dimmedBySpot) {
             var dm = dimmedNorm[baseColor];
@@ -1796,8 +1818,8 @@ function drawFlatlineBricksBatched(ctx, _hb, seg, viewLeft, viewRight, baseline,
         }
     }
 
-    // 0. Dimmed background bricks when a fee-band spotlight is active
-    if (spotBand >= 0) {
+    // 0. Dimmed background bricks when a fee-band or X-Ray spotlight is active
+    if (spotActive) {
         var dimAlpha = (0.10 * rf).toFixed(2);
         for (var dmKey in dimmedNorm) {
             var dmCoords = dimmedNorm[dmKey];
@@ -2409,8 +2431,10 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
 
                     // At zoom >= 5, use a subtle top-bevel vertical gradient for crisp tile depth
                     var spotBandZoom = (typeof _hb._spotlightBand === 'number' && _hb._spotlightBand >= 0) ? _hb._spotlightBand : -1;
+                    var spotXrayZoom = (typeof _hb._spotlightXray === 'number' && _hb._spotlightXray > 0) ? (_hb._spotlightXray | 0) : 0;
+                    var spotActiveZoom = spotBandZoom >= 0 || spotXrayZoom !== 0;
                     var isPinnedZoom = !!(_hb._pinnedTxid && blip.txid === _hb._pinnedTxid);
-                    var dimmedZoom = spotBandZoom >= 0 && !isPinnedZoom && feeBandIndex(blip.feeRate, blip.feePending) !== spotBandZoom;
+                    var dimmedZoom = spotActiveZoom && !isPinnedZoom && !blipMatchesSpotlight(blip, spotBandZoom, spotXrayZoom);
                     var drawAlpha = isHoveredBlip ? Math.min(1, bOpacity + 0.18) : bOpacity;
                     if (dimmedZoom) {
                         drawAlpha = Math.max(0.06, drawAlpha * 0.14);

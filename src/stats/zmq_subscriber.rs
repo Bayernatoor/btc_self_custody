@@ -401,8 +401,8 @@ impl SeenTxids {
 /// DB write can never disagree about a tx's flags.
 struct EnrichedTx {
     event: HeartbeatEvent,
-    /// Compact notable bitmask for Heartbeat v2 `TxDetails`.
-    flags_bits: u8,
+    /// Compact notable + protocol/X-Ray bitmask for Heartbeat v2 `TxDetails`.
+    flags_bits: u32,
     /// Highest-priority notable label, if any.
     notable_type: Option<&'static str>,
     /// Whether any notable flag fired.
@@ -425,15 +425,16 @@ fn enrich_tx(
     };
 
     let flags = classify_notable(parsed, fee, fee_rate, price_usd);
-    let flags_bits = super::heartbeat_sync::TxFlags::from_bools(
-        flags.whale,
-        flags.fee_outlier,
-        flags.consolidation,
-        flags.fan_out,
-        flags.large_inscription,
-        flags.round_number,
-        flags.op_return_msg,
-    );
+    let flags_bits = parsed.protocol_flags
+        | super::heartbeat_sync::TxFlags::from_bools(
+            flags.whale,
+            flags.fee_outlier,
+            flags.consolidation,
+            flags.fan_out,
+            flags.large_inscription,
+            flags.round_number,
+            flags.op_return_msg,
+        );
     let notable_type = flags.primary_type();
     let is_notable = flags.is_notable();
 
@@ -545,6 +546,7 @@ async fn process_rawtx(
     let notable_type = enriched.notable_type;
     let is_notable = enriched.is_notable;
     let value_usd = enriched.value_usd;
+    let tx_flags = enriched.flags_bits;
     tokio::task::spawn_blocking(move || {
         let conn = match db.get() {
             Ok(c) => c,
@@ -568,6 +570,7 @@ async fn process_rawtx(
                 input_count: parsed.input_count,
                 output_count: parsed.output_count,
                 op_return_text: parsed.op_return_text.as_deref(),
+                tx_flags,
             },
         );
 
@@ -665,7 +668,9 @@ async fn timed_block_rpc<T>(
 
 /// Parse a raw Bitcoin transaction to extract txid and total output value.
 /// Handles both legacy and segwit (BIP 141) formats.
-fn parse_raw_tx(data: &[u8]) -> Option<ParsedTx> {
+pub(crate) fn parse_raw_tx(data: &[u8]) -> Option<ParsedTx> {
+    use super::heartbeat_sync::TxFlags;
+
     let mut cursor = 0;
 
     if data.len() < 10 {
@@ -673,7 +678,7 @@ fn parse_raw_tx(data: &[u8]) -> Option<ParsedTx> {
     }
 
     // Version: 4 bytes LE
-    let _version = read_u32_le(data, &mut cursor)?;
+    let version = read_u32_le(data, &mut cursor)?;
 
     // Check for segwit marker (0x00) + flag (0x01)
     let is_segwit =
@@ -682,26 +687,51 @@ fn parse_raw_tx(data: &[u8]) -> Option<ParsedTx> {
         cursor += 2;
     }
 
+    let mut protocol_flags = TxFlags::META_KNOWN | TxFlags::SCRIPT_PARSED;
+    if is_segwit {
+        protocol_flags |= TxFlags::SEGWIT;
+    }
+    if version == 3 {
+        protocol_flags |= TxFlags::V3_TRUC;
+    }
+
     // Input count
     let input_count = read_varint(data, &mut cursor)?;
 
-    // Skip inputs (input data isn't needed for classification).
-    // Use checked_add so a garbage varint can't wrap the cursor past data.len()
-    // and bypass the bounds check (mirrors the output loop's pre-advance check).
+    // Walk inputs: inspect sequence for BIP-125 RBF and scriptSig for revealed
+    // P2SH multisig redeemScript.
+    let mut is_rbf = false;
+    let mut has_multisig = false;
     for _ in 0..input_count {
         cursor = cursor.checked_add(36)?; // prev txid (32) + prev vout (4)
         let script_len = read_varint(data, &mut cursor)? as usize;
-        cursor = cursor.checked_add(script_len)?; // scriptSig
-        cursor = cursor.checked_add(4)?; // sequence
-        if cursor > data.len() {
+        let script_end = cursor.checked_add(script_len)?;
+        if script_end > data.len() {
             return None;
         }
+        if !has_multisig && script_len >= 37 {
+            if let Some(redeem) = last_push_slice(&data[cursor..script_end]) {
+                if redeem.len() >= 37
+                    && script_has_opcode(redeem, &[0xae, 0xaf])
+                {
+                    has_multisig = true;
+                }
+            }
+        }
+        cursor = script_end;
+        let sequence = read_u32_le(data, &mut cursor)?;
+        if sequence < 0xffff_fffe {
+            is_rbf = true;
+        }
+    }
+    if is_rbf {
+        protocol_flags |= TxFlags::RBF;
     }
 
     // Output count
     let output_count = read_varint(data, &mut cursor)?;
 
-    // Parse outputs for value, track max output, detect OP_RETURN text
+    // Parse outputs for value, track max output, and classify objective output scripts.
     let mut total_value = 0u64;
     let mut max_output_value = 0u64;
     let mut op_return_text: Option<String> = None;
@@ -712,20 +742,30 @@ fn parse_raw_tx(data: &[u8]) -> Option<ParsedTx> {
             max_output_value = value;
         }
         let script_len = read_varint(data, &mut cursor)? as usize;
-        if cursor + script_len > data.len() {
+        let script_end = cursor.checked_add(script_len)?;
+        if script_end > data.len() {
             return None;
         }
-        // Detect OP_RETURN: 0x6a prefix, scan for readable ASCII.
-        if op_return_text.is_none() && script_len >= 4 && data[cursor] == 0x6a {
-            let payload = &data[cursor + 1..cursor + script_len];
-            if let Some(text) = extract_readable_text(payload) {
-                op_return_text = Some(text);
+        let spk = &data[cursor..script_end];
+        if spk.len() == 34 && spk[0] == 0x51 && spk[1] == 0x20 {
+            protocol_flags |= TxFlags::TAPROOT;
+        } else if spk == [0x51, 0x02, 0x4e, 0x73] {
+            protocol_flags |= TxFlags::P2A;
+        } else if spk.first() == Some(&0x6a) {
+            protocol_flags |= TxFlags::OP_RETURN;
+            if spk.get(1) == Some(&0x5d) {
+                protocol_flags |= TxFlags::RUNES;
             }
+            // Detect readable ASCII message in OP_RETURN.
+            if op_return_text.is_none() && spk.len() >= 4 {
+                if let Some(text) = extract_readable_text(&spk[1..]) {
+                    op_return_text = Some(text);
+                }
+            }
+        } else if !has_multisig && is_bare_multisig_bytes(spk) {
+            has_multisig = true;
         }
-        cursor += script_len; // scriptPubKey
-        if cursor > data.len() {
-            return None;
-        }
+        cursor = script_end;
     }
 
     // Sanity check: Bitcoin supply is capped at 21M BTC = 2.1 * 10^15 sats.
@@ -749,26 +789,57 @@ fn parse_raw_tx(data: &[u8]) -> Option<ParsedTx> {
         // The witness data starts after all outputs, which is at `cursor`
         stripped.extend_from_slice(&data[6..cursor]); // skip 4 (version) + 2 (marker+flag)
 
-        // Skip witness data to find locktime, tracking total witness bytes
-        // and scanning for the Ordinals inscription envelope marker.
+        // Walk witness data to find locktime, tracking total witness bytes,
+        // Ordinals inscription envelopes, and revealed P2WSH/Tapscript multisig spends.
         let mut wit_cursor = cursor;
         for _ in 0..input_count {
             let wit_count = read_varint(data, &mut wit_cursor)?;
+            let mut prev2: Option<&[u8]> = None;
+            let mut prev1: Option<&[u8]> = None;
+            let mut last_item: Option<&[u8]> = None;
             for _ in 0..wit_count {
                 let item_len = read_varint(data, &mut wit_cursor)? as usize;
-                if wit_cursor + item_len > data.len() {
+                let item_end = wit_cursor.checked_add(item_len)?;
+                if item_end > data.len() {
                     return None;
                 }
+                let item = &data[wit_cursor..item_end];
                 total_witness_bytes += item_len as u64;
-                // Scan this witness item for the Ordinals inscription envelope.
-                if !has_inscription
-                    && has_inscription_marker(
-                        &data[wit_cursor..wit_cursor + item_len],
-                    )
-                {
+                if !has_inscription && has_inscription_marker(item) {
                     has_inscription = true;
                 }
-                wit_cursor += item_len;
+                prev2 = prev1;
+                prev1 = last_item;
+                last_item = Some(item);
+                wit_cursor = item_end;
+            }
+            if !has_multisig && wit_count >= 2 {
+                // Strip optional Taproot annex (starts with 0x50 when >= 2 items remain).
+                let (top, below) = match (last_item, prev1, prev2) {
+                    (Some(ann), Some(t), b)
+                        if wit_count >= 3 && ann.first() == Some(&0x50) =>
+                    {
+                        (Some(t), b)
+                    }
+                    (t, b, _) => (t, b),
+                };
+                if let (Some(cb), Some(leaf)) = (top, below) {
+                    let is_tr_ctrl = cb.len() >= 33
+                        && (cb.len() - 33).is_multiple_of(32)
+                        && (cb[0] & 0xfe) == 0xc0;
+                    if is_tr_ctrl {
+                        // Taproot script-path multisig uses OP_CHECKSIGADD (0xba).
+                        if script_has_opcode(leaf, &[0xba]) {
+                            has_multisig = true;
+                        }
+                    } else if wit_count >= 3
+                        && cb.len() >= 37
+                        && script_has_opcode(cb, &[0xae, 0xaf])
+                    {
+                        // P2WSH multisig witnessScript uses OP_CHECKMULTISIG[VERIFY].
+                        has_multisig = true;
+                    }
+                }
             }
         }
 
@@ -784,6 +855,13 @@ fn parse_raw_tx(data: &[u8]) -> Option<ParsedTx> {
         sha256d_hex(data)
     };
 
+    if has_inscription {
+        protocol_flags |= TxFlags::INSCRIPTION;
+    }
+    if has_multisig {
+        protocol_flags |= TxFlags::MULTISIG;
+    }
+
     Some(ParsedTx {
         txid,
         value: total_value,
@@ -793,7 +871,148 @@ fn parse_raw_tx(data: &[u8]) -> Option<ParsedTx> {
         has_inscription,
         max_output_value,
         op_return_text,
+        protocol_flags,
     })
+}
+
+/// Walk a push-only script (such as a P2SH `scriptSig`) and return the final
+/// pushed byte slice (the `redeemScript`), or `None` if malformed/non-push.
+fn last_push_slice(script: &[u8]) -> Option<&[u8]> {
+    let mut i = 0;
+    let mut last: Option<&[u8]> = None;
+    while i < script.len() {
+        let op = script[i];
+        i += 1;
+        let len = match op {
+            0x00 => {
+                last = Some(&[]);
+                continue;
+            }
+            0x01..=0x4b => op as usize,
+            0x4c => {
+                let n = *script.get(i)? as usize;
+                i += 1;
+                n
+            }
+            0x4d => {
+                let b = script.get(i..i + 2)?;
+                i += 2;
+                u16::from_le_bytes([b[0], b[1]]) as usize
+            }
+            0x4e => {
+                let b = script.get(i..i + 4)?;
+                i += 4;
+                u32::from_le_bytes([b[0], b[1], b[2], b[3]]) as usize
+            }
+            0x4f..=0x60 => {
+                last = None;
+                continue;
+            }
+            _ => return None,
+        };
+        let end = i.checked_add(len)?;
+        if end > script.len() {
+            return None;
+        }
+        last = Some(&script[i..end]);
+        i = end;
+    }
+    last
+}
+
+/// Walk Bitcoin script opcodes while skipping all pushdata payloads, returning
+/// `true` iff any unpushed opcode in `targets` appears in a structurally valid script.
+fn script_has_opcode(script: &[u8], targets: &[u8]) -> bool {
+    let mut i = 0;
+    let mut found = false;
+    while i < script.len() {
+        let op = script[i];
+        i += 1;
+        let skip = match op {
+            0x01..=0x4b => op as usize,
+            0x4c => {
+                let Some(&n) = script.get(i) else {
+                    return false;
+                };
+                i += 1;
+                n as usize
+            }
+            0x4d => {
+                let Some(b) = script.get(i..i + 2) else {
+                    return false;
+                };
+                i += 2;
+                u16::from_le_bytes([b[0], b[1]]) as usize
+            }
+            0x4e => {
+                let Some(b) = script.get(i..i + 4) else {
+                    return false;
+                };
+                i += 4;
+                u32::from_le_bytes([b[0], b[1], b[2], b[3]]) as usize
+            }
+            _ => {
+                if targets.contains(&op) {
+                    found = true;
+                }
+                continue;
+            }
+        };
+        let Some(end) = i.checked_add(skip) else {
+            return false;
+        };
+        if end > script.len() {
+            return false;
+        }
+        i = end;
+    }
+    found
+}
+
+/// Exact bare multisig `scriptPubKey` check matching Bitcoin Core's `MatchMultisig`:
+/// `OP_m <33/65-byte pubkey>... OP_n OP_CHECKMULTISIG` with `1 <= m <= n <= 20`.
+fn is_bare_multisig_bytes(script: &[u8]) -> bool {
+    if script.len() < 37 || *script.last().unwrap_or(&0) != 0xae {
+        return false;
+    }
+    let Some(&first) = script.first() else {
+        return false;
+    };
+    if !(0x51..=0x60).contains(&first) {
+        return false;
+    }
+    let m = (first - 0x50) as usize;
+    let mut i = 1;
+    let mut keys = 0usize;
+    let body_end = script.len() - 1;
+    while i < body_end {
+        let op = script[i];
+        if op == 33 || op == 65 {
+            let Some(end) = i.checked_add(1 + op as usize) else {
+                return false;
+            };
+            if end >= body_end {
+                return false;
+            }
+            keys += 1;
+            if keys > 20 {
+                return false;
+            }
+            i = end;
+        } else {
+            break;
+        }
+    }
+    if keys == 0 || m > keys {
+        return false;
+    }
+    // Remaining byte(s) before OP_CHECKMULTISIG must encode `n == keys`.
+    let n = match &script[i..body_end] {
+        [op] if (0x51..=0x60).contains(op) => (*op - 0x50) as usize,
+        [0x01, v] if (17..=20).contains(v) => *v as usize,
+        _ => return false,
+    };
+    n == keys
 }
 
 /// Double SHA256, return as reversed hex (Bitcoin txid convention).
@@ -1343,6 +1562,7 @@ mod tests {
             has_inscription: false,
             max_output_value: 90_000,
             op_return_text: None,
+            protocol_flags: 0,
         }
     }
 
@@ -1470,5 +1690,108 @@ mod tests {
         }
         assert_eq!(seen.set.len(), 5);
         assert_eq!(seen.order.len(), 5);
+    }
+
+    #[test]
+    fn test_parse_raw_tx_extracts_xray_protocol_and_multisig_flags() {
+        use super::super::heartbeat_sync::TxFlags;
+
+        // Helper: build a minimal SegWit tx with custom version, sequence, outputs, and witness items.
+        let build_segwit = |version: u32,
+                            seq: u32,
+                            outputs: &[Vec<u8>],
+                            witness_items: &[Vec<u8>]|
+         -> Vec<u8> {
+            let mut raw = Vec::new();
+            raw.extend_from_slice(&version.to_le_bytes());
+            raw.extend_from_slice(&[0x00, 0x01]); // segwit marker+flag
+            raw.push(1); // 1 input
+            raw.extend_from_slice(&[0x11; 32]); // prev txid
+            raw.extend_from_slice(&0u32.to_le_bytes()); // prev vout
+            raw.push(0); // empty scriptSig
+            raw.extend_from_slice(&seq.to_le_bytes());
+            raw.push(outputs.len() as u8);
+            for spk in outputs {
+                raw.extend_from_slice(&1_000u64.to_le_bytes());
+                raw.push(spk.len() as u8);
+                raw.extend_from_slice(spk);
+            }
+            raw.push(witness_items.len() as u8);
+            for item in witness_items {
+                raw.push(item.len() as u8);
+                raw.extend_from_slice(item);
+            }
+            raw.extend_from_slice(&0u32.to_le_bytes()); // locktime
+            raw
+        };
+
+        // 1. v3/TRUC + RBF + Taproot + P2A + Runes (OP_RETURN 6a5d)
+        let mut p2tr = vec![0x51, 0x20];
+        p2tr.extend_from_slice(&[0xaa; 32]);
+        let p2a = vec![0x51, 0x02, 0x4e, 0x73];
+        let runes = vec![0x6a, 0x5d, 0x02, 0x00, 0x01];
+        // A pushdata containing 0xae must NOT false-positive as Multisig.
+        let non_ms_wit = vec![vec![0x30; 64], vec![0x02; 33]];
+        let raw1 =
+            build_segwit(3, 0xffff_fffd, &[p2tr, p2a, runes], &non_ms_wit);
+        let p1 = parse_raw_tx(&raw1).expect("parse v3 tx");
+        assert!(TxFlags::contains(
+            p1.protocol_flags,
+            TxFlags::META_KNOWN
+                | TxFlags::SCRIPT_PARSED
+                | TxFlags::SEGWIT
+                | TxFlags::V3_TRUC
+                | TxFlags::RBF
+                | TxFlags::TAPROOT
+                | TxFlags::P2A
+                | TxFlags::OP_RETURN
+                | TxFlags::RUNES
+        ));
+        assert!(!TxFlags::contains(p1.protocol_flags, TxFlags::MULTISIG));
+        assert!(!TxFlags::contains(p1.protocol_flags, TxFlags::INSCRIPTION));
+
+        // 2. P2WSH 2-of-2 multisig spend (witnessScript ends with OP_2 OP_CHECKMULTISIG)
+        let mut ws = vec![0x52, 33];
+        ws.extend_from_slice(&[0x02; 33]);
+        ws.push(33);
+        ws.extend_from_slice(&[0x03; 33]);
+        ws.extend_from_slice(&[0x52, 0xae]);
+        let p2wsh_raw = build_segwit(
+            2,
+            0xffff_ffff,
+            &[vec![
+                0x00, 0x14, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+                16, 17, 18, 19, 20,
+            ]],
+            &[vec![], vec![0x30; 64], vec![0x30; 64], ws],
+        );
+        let p2 = parse_raw_tx(&p2wsh_raw).expect("parse p2wsh multisig");
+        assert!(TxFlags::contains(p2.protocol_flags, TxFlags::MULTISIG));
+        assert!(!TxFlags::contains(p2.protocol_flags, TxFlags::RBF));
+
+        // 3. Tapscript multisig spend (OP_CHECKSIGADD = 0xba inside tapscript leaf)
+        let mut tapscript = vec![32];
+        tapscript.extend_from_slice(&[0x11; 32]);
+        tapscript.push(0xac); // OP_CHECKSIG
+        tapscript.push(32);
+        tapscript.extend_from_slice(&[0x22; 32]);
+        tapscript.push(0xba); // OP_CHECKSIGADD
+        tapscript.extend_from_slice(&[0x52, 0x9c]); // OP_2 OP_NUMEQUAL
+        let mut ctrl = vec![0xc0];
+        ctrl.extend_from_slice(&[0x33; 32]);
+        let tr_ms_raw = build_segwit(
+            2,
+            0xffff_ffff,
+            &[vec![0x51, 0x02, 0x4e, 0x73]],
+            &[vec![0x44; 64], vec![0x55; 64], tapscript, ctrl],
+        );
+        let p3 = parse_raw_tx(&tr_ms_raw).expect("parse tapscript multisig");
+        assert!(TxFlags::contains(p3.protocol_flags, TxFlags::MULTISIG));
+
+        // 4. Pushdata containing 0xae inside a script does NOT trigger script_has_opcode
+        let mut fake_script = vec![33];
+        fake_script.extend_from_slice(&[0xae; 33]);
+        fake_script.push(0xac);
+        assert!(!script_has_opcode(&fake_script, &[0xae, 0xaf]));
     }
 }

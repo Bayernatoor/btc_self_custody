@@ -240,6 +240,45 @@ export function feeBandIndex(feeRate, feePending) {
     return 6;
 }
 
+// TxFlags bit positions matching `src/stats/heartbeat_sync.rs::TxFlags` 1:1.
+var TX_NOTABLE_MASK = 0x7f;       // bits 0..=6
+var TX_RBF          = 1 << 7;
+var TX_SEGWIT       = 1 << 8;
+var TX_META_KNOWN   = 1 << 9;
+var TX_TAPROOT      = 1 << 11;
+var TX_P2A          = 1 << 12;
+var TX_V3_TRUC      = 1 << 13;
+var TX_OP_RETURN    = 1 << 14;
+var TX_RUNES        = 1 << 15;
+var TX_INSCRIPTION  = 1 << 16;
+var TX_MULTISIG     = 1 << 17;
+
+// Evaluate multi-select X-Ray pill bitmask (AND intersection), matching Rust's
+// `heartbeat_sync::xray_matches` 1:1.
+export function txMatchesXRayMask(flags, xrayMask) {
+    if (!xrayMask) return true;
+    var f = flags || 0;
+    if ((xrayMask & (1 << 0)) && !(f & TX_RBF)) return false;
+    if ((xrayMask & (1 << 1)) && !(f & TX_SEGWIT)) return false;
+    if ((xrayMask & (1 << 2)) && (!(f & TX_META_KNOWN) || (f & TX_SEGWIT))) return false;
+    if ((xrayMask & (1 << 3)) && !(f & TX_TAPROOT)) return false;
+    if ((xrayMask & (1 << 4)) && !(f & TX_P2A)) return false;
+    if ((xrayMask & (1 << 5)) && !(f & TX_V3_TRUC)) return false;
+    if ((xrayMask & (1 << 6)) && !(f & TX_OP_RETURN)) return false;
+    if ((xrayMask & (1 << 7)) && !(f & TX_RUNES)) return false;
+    if ((xrayMask & (1 << 8)) && !(f & TX_INSCRIPTION)) return false;
+    if ((xrayMask & (1 << 9)) && !(f & TX_MULTISIG)) return false;
+    if ((xrayMask & (1 << 10)) && !(f & TX_NOTABLE_MASK)) return false;
+    return true;
+}
+
+// Composable canvas spotlight predicate: optional Fee Band AND optional X-Ray mask.
+export function blipMatchesSpotlight(blip, spotBand, spotXray) {
+    if (spotBand >= 0 && feeBandIndex(blip.feeRate, blip.feePending) !== spotBand) return false;
+    if (spotXray && !txMatchesXRayMask(blip.flags, spotXray)) return false;
+    return true;
+}
+
 // Human-readable label for the fixed fee band
 export function feeBandLabel(feeRate) {
     if (feeRate == null || !isFinite(feeRate)) return 'Fee pending';

@@ -1882,6 +1882,19 @@ runScenario('20. Disconnected virtualX freeze, resync gap backfill & quiet recov
     window._hbRecoverTimeline(1200);
     const deltaX = state.getState().virtualX - 500;
     assert(deltaX <= 120, `quiet 20-tx hidden tab carved too wide a desert: deltaX=${deltaX}px`);
+
+    // 20d. Composable Fee Band + multi-select X-Ray spotlight predicate parity with Rust TxFlags.
+    const F_RBF = 1 << 7, F_SEGWIT = 1 << 8, F_META = 1 << 9, F_P2A = 1 << 12, F_V3 = 1 << 13, F_RUNES = 1 << 15;
+    const bPending = { feeRate: null, feePending: true, flags: 0 };
+    const bLegacy = { feeRate: 0.5, feePending: false, flags: F_META | F_RBF };
+    const bTrucP2a = { feeRate: 3.0, feePending: false, flags: F_META | F_SEGWIT | F_V3 | F_P2A };
+    const bRunesLow = { feeRate: 0.8, feePending: false, flags: F_META | F_SEGWIT | F_RUNES };
+    assert(!timeline.blipMatchesSpotlight(bPending, -1, 1 << 2), 'unenriched pending tx must not match Legacy');
+    assert(timeline.blipMatchesSpotlight(bLegacy, -1, (1 << 0) | (1 << 2)), 'legacy RBF tx must match RBF + Legacy');
+    assert(timeline.blipMatchesSpotlight(bTrucP2a, -1, (1 << 4) | (1 << 5)), 'v3+P2A tx must match P2A + v3/TRUC');
+    assert(!timeline.blipMatchesSpotlight(bRunesLow, -1, (1 << 4) | (1 << 5)), 'non-P2A tx must not match P2A + v3/TRUC');
+    assert(timeline.blipMatchesSpotlight(bRunesLow, 1, 1 << 7), '<1 sat/vB Runes tx must match band 1 + Runes');
+    assert(!timeline.blipMatchesSpotlight(bRunesLow, 3, 1 << 7), '<1 sat/vB Runes tx must not match band 3 + Runes');
 });
 
 if (failures.length > 0) {

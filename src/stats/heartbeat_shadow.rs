@@ -410,9 +410,10 @@ async fn load_sqlite_hydration(
                         fee: Some(row.fee),
                         vsize: Some(row.vsize),
                         value: (row.value > 0).then_some(row.value),
-                        flags: TxFlags::from_notable_type(
-                            row.notable_type.as_deref(),
-                        ),
+                        flags: row.tx_flags
+                            | TxFlags::from_notable_type(
+                                row.notable_type.as_deref(),
+                            ),
                         op_return_text: row.op_return_text,
                     })
                     .collect();

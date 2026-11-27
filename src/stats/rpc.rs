@@ -456,6 +456,10 @@ struct RawMempoolEntry {
     fees: RawMempoolFees,
     #[serde(default)]
     time: u64,
+    #[serde(default)]
+    wtxid: String,
+    #[serde(default, rename = "bip125-replaceable")]
+    bip125_replaceable: bool,
 }
 
 #[derive(serde::Deserialize)]
@@ -470,6 +474,8 @@ pub struct VerboseMempoolEntry {
     pub fee: u64,
     pub vsize: u32,
     pub time: u64,
+    pub is_rbf: bool,
+    pub is_segwit: bool,
 }
 
 /// Core captures both fields under the mempool lock. `mempool_sequence` is
@@ -609,6 +615,10 @@ pub struct MempoolEntryInfo {
     pub fee: u64,
     /// Virtual size in vbytes.
     pub vsize: u32,
+    /// BIP-125 replaceability from Core's `bip125-replaceable` field.
+    pub is_rbf: bool,
+    /// SegWit witness presence (`wtxid != txid`).
+    pub is_segwit: bool,
 }
 
 /// Block metadata and transaction ID list from `getblock` verbosity=1.
@@ -857,6 +867,21 @@ pub(crate) struct PolledBlockSeed {
     /// parity with `getblockstats.totalfee` with zero coinbase-minus-subsidy drift).
     pub exact_fees: Option<u64>,
     pub miner: Option<String>,
+}
+
+/// Decode a lowercase/uppercase even-length ASCII hex string into raw bytes.
+fn decode_hex_bytes(hex: &str) -> Option<Vec<u8>> {
+    let bytes = hex.as_bytes();
+    if bytes.is_empty() || !bytes.len().is_multiple_of(2) {
+        return None;
+    }
+    let mut out = Vec::with_capacity(bytes.len() / 2);
+    for pair in bytes.chunks_exact(2) {
+        let hi = (pair[0] as char).to_digit(16)?;
+        let lo = (pair[1] as char).to_digit(16)?;
+        out.push(((hi << 4) | lo) as u8);
+    }
+    Some(out)
 }
 
 impl BitcoinRpc {
@@ -2197,9 +2222,15 @@ impl BitcoinRpc {
             })?;
         let fee_sats = (fee_btc * 100_000_000.0).round() as u64;
         let vsize = result["vsize"].as_u64().unwrap_or(0) as u32;
+        let is_rbf = result["bip125-replaceable"].as_bool().unwrap_or(false);
+        let is_segwit = result["wtxid"]
+            .as_str()
+            .is_some_and(|w| !w.is_empty() && w != txid);
         Ok(MempoolEntryInfo {
             fee: fee_sats,
             vsize,
+            is_rbf,
+            is_segwit,
         })
     }
 
@@ -2373,11 +2404,15 @@ impl BitcoinRpc {
         for (txid, entry) in map {
             let fee_sats = (entry.fees.base * 100_000_000.0).round() as u64;
             if entry.vsize > 0 {
+                // BIP-141: a transaction carries witness data iff `wtxid != txid`.
+                let is_segwit = !entry.wtxid.is_empty() && entry.wtxid != txid;
                 entries.push(VerboseMempoolEntry {
                     txid,
                     fee: fee_sats,
                     vsize: entry.vsize,
                     time: entry.time,
+                    is_rbf: entry.bip125_replaceable,
+                    is_segwit,
                 });
             }
         }
@@ -2509,6 +2544,74 @@ impl BitcoinRpc {
             &[json!(txid), json!(true), json!(blockhash)],
         )
         .await
+    }
+
+    /// Fetch raw hex bytes for a small batch of mempool transactions in a
+    /// single JSON-RPC batch (`getrawtransaction(txid, false)`). Used by the
+    /// polite background X-Ray script backfill so pre-deploy mempool txs gain
+    /// full script/protocol flags without individual per-tx HTTP round-trips.
+    pub(crate) async fn get_raw_transactions_hex_batch(
+        &self,
+        txids: &[String],
+    ) -> Result<Vec<(String, Option<Vec<u8>>)>, StatsError> {
+        if txids.is_empty() {
+            return Ok(Vec::new());
+        }
+        #[derive(Deserialize)]
+        struct RawHexReply {
+            id: usize,
+            #[serde(default)]
+            result: Option<String>,
+            #[serde(default)]
+            error: Option<Value>,
+        }
+        let batch: Vec<Value> = txids
+            .iter()
+            .enumerate()
+            .map(|(i, txid)| {
+                json!({
+                    "jsonrpc": "1.0",
+                    "id": i,
+                    "method": "getrawtransaction",
+                    "params": [txid, false]
+                })
+            })
+            .collect();
+        let mut response = self
+            .client
+            .post(&self.url)
+            .basic_auth(&self.user, Some(&self.password))
+            .json(&batch)
+            .send()
+            .await?
+            .error_for_status()?;
+        // Cap batch response at 8 MiB (10 normal mempool txs are ~3-10 KiB;
+        // even several 400 KiB inscription txs stay well below this bound).
+        const LIMIT: usize = 8 * 1024 * 1024;
+        let mut bytes = Vec::new();
+        while let Some(chunk) = response.chunk().await? {
+            if chunk.len() > LIMIT.saturating_sub(bytes.len()) {
+                return Err(StatsError::Rpc(
+                    "rawtx batch response exceeded 8 MiB limit".into(),
+                ));
+            }
+            bytes.extend_from_slice(&chunk);
+        }
+        let replies: Vec<RawHexReply> = serde_json::from_slice(&bytes)
+            .map_err(|e| StatsError::Rpc(e.to_string()))?;
+        let mut out: Vec<(String, Option<Vec<u8>>)> =
+            txids.iter().map(|id| (id.clone(), None)).collect();
+        for reply in replies {
+            if reply.error.is_some() || reply.id >= out.len() {
+                continue;
+            }
+            if let Some(hex_str) = reply.result {
+                if let Some(decoded) = decode_hex_bytes(&hex_str) {
+                    out[reply.id].1 = Some(decoded);
+                }
+            }
+        }
+        Ok(out)
     }
 
     /// Fetch BTC/USD price from mempool.space API.

@@ -179,6 +179,8 @@ fn late_disconnect_only_revokes_the_matching_hash_without_readmitting() {
             fee: 17,
             vsize: 200,
             time: 0,
+            is_rbf: false,
+            is_segwit: true,
         }],
         200,
         10,

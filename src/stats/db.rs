@@ -364,6 +364,15 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
     {
         conn.execute_batch("ALTER TABLE mempool_txs ADD COLUMN awaiting_readmission INTEGER NOT NULL DEFAULT 0")?;
     }
+    if conn
+        .prepare("SELECT tx_flags FROM mempool_txs LIMIT 0")
+        .is_err()
+    {
+        tracing::info!("Migrating: adding tx_flags to mempool_txs");
+        conn.execute_batch(
+            "ALTER TABLE mempool_txs ADD COLUMN tx_flags INTEGER NOT NULL DEFAULT 0",
+        )?;
+    }
     conn.execute_batch(
         "CREATE INDEX IF NOT EXISTS idx_mempool_admitted ON mempool_txs(first_seen DESC)
          WHERE confirmed_height IS NULL AND awaiting_readmission = 0",
@@ -2818,6 +2827,7 @@ pub struct MempoolTxInsert<'a> {
     pub input_count: u64,
     pub output_count: u64,
     pub op_return_text: Option<&'a str>,
+    pub tx_flags: u32,
 }
 
 /// Record positive mempool evidence. Only clear `awaiting_readmission` when no
@@ -2830,10 +2840,14 @@ pub fn insert_mempool_tx(
     conn.execute(
         "INSERT INTO mempool_txs
              (txid, fee, vsize, value, first_seen, notable_type, value_usd,
-              input_count, output_count, op_return_text)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
-         ON CONFLICT(txid) DO UPDATE SET awaiting_readmission = 0
-         WHERE awaiting_readmission = 1 AND confirmed_height IS NULL",
+              input_count, output_count, op_return_text, tx_flags)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+         ON CONFLICT(txid) DO UPDATE SET
+             awaiting_readmission = CASE
+                 WHEN awaiting_readmission = 1 AND confirmed_height IS NULL THEN 0
+                 ELSE awaiting_readmission
+             END,
+             tx_flags = tx_flags | excluded.tx_flags",
         params![
             tx.txid,
             tx.fee,
@@ -2844,10 +2858,45 @@ pub fn insert_mempool_tx(
             tx.value_usd,
             tx.input_count,
             tx.output_count,
-            tx.op_return_text
+            tx.op_return_text,
+            tx.tx_flags
         ],
     )?;
     Ok(())
+}
+
+/// Persist backfilled `tx_flags`, `value` (when previously 0), and
+/// `op_return_text` for a small batch of unconfirmed mempool transactions in a
+/// single SQLite transaction so script X-Ray flags survive restarts.
+pub fn update_mempool_tx_flags_batch(
+    conn: &mut Connection,
+    updates: &[(String, u64, u32, Option<String>)],
+) -> rusqlite::Result<usize> {
+    if updates.is_empty() {
+        return Ok(0);
+    }
+    let tx = conn
+        .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+    let mut updated = 0usize;
+    {
+        let mut stmt = tx.prepare_cached(
+            "UPDATE mempool_txs
+             SET tx_flags = tx_flags | ?1,
+                 value = CASE WHEN value = 0 THEN ?2 ELSE value END,
+                 op_return_text = COALESCE(op_return_text, ?3)
+             WHERE txid = ?4",
+        )?;
+        for (txid, value, flags, op_return_text) in updates {
+            updated += stmt.execute(params![
+                flags,
+                value,
+                op_return_text.as_deref(),
+                txid
+            ])?;
+        }
+    }
+    tx.commit()?;
+    Ok(updated)
 }
 
 /// Stamp both tables atomically. The writer reservation must precede the
@@ -3098,7 +3147,7 @@ pub fn query_recent_mempool_txs(
 ) -> rusqlite::Result<Vec<MempoolTxRow>> {
     let mut stmt = conn.prepare_cached(
         "SELECT txid, fee, vsize, value, first_seen, notable_type, value_usd,
-                input_count, output_count, op_return_text
+                input_count, output_count, op_return_text, tx_flags
          FROM mempool_txs
          WHERE confirmed_height IS NULL AND awaiting_readmission = 0 AND first_seen >= ?1
          ORDER BY first_seen DESC
@@ -3116,6 +3165,7 @@ pub fn query_recent_mempool_txs(
             input_count: row.get(7)?,
             output_count: row.get(8)?,
             op_return_text: row.get(9)?,
+            tx_flags: row.get::<_, Option<u32>>(10)?.unwrap_or(0),
         })
     })?;
     rows.collect()
@@ -3159,6 +3209,9 @@ pub struct MempoolTxRow {
     /// Decoded OP_RETURN text, if the tx contains a readable message.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub op_return_text: Option<String>,
+    /// Persisted `TxFlags` bitmask (notable + protocol/X-Ray bits).
+    #[serde(default)]
+    pub tx_flags: u32,
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -5196,18 +5249,24 @@ mod tests {
                 fee: 100,
                 vsize: 150,
                 time: 1700000000,
+                is_rbf: false,
+                is_segwit: true,
             },
             crate::stats::rpc::VerboseMempoolEntry {
                 txid: "tx2".to_string(),
                 fee: 200,
                 vsize: 250,
                 time: 1700000500,
+                is_rbf: true,
+                is_segwit: true,
             },
             crate::stats::rpc::VerboseMempoolEntry {
                 txid: "tx3".to_string(),
                 fee: 300,
                 vsize: 350,
                 time: 0,
+                is_rbf: false,
+                is_segwit: false,
             },
         ];
         let inserted =
@@ -5244,6 +5303,8 @@ mod tests {
                 fee: 10,
                 vsize: 20,
                 time: 1700000100 + i,
+                is_rbf: false,
+                is_segwit: true,
             })
             .collect();
         let capped =

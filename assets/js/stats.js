@@ -1558,10 +1558,32 @@
         var isMobile = 'ontouchstart' in window;
         var activeEl = null;
 
+        function renderTooltipText(raw) {
+            tip.textContent = '';
+            var blocks = String(raw).split('\n\n');
+            if (blocks.length <= 1) {
+                tip.textContent = raw;
+                return;
+            }
+            for (var i = 0; i < blocks.length; i++) {
+                var div = document.createElement('div');
+                if (i === 0) {
+                    div.className = 'btc-tip-body';
+                } else if (i === blocks.length - 1) {
+                    div.className = 'btc-tip-meta';
+                } else {
+                    div.className = 'btc-tip-note';
+                }
+                div.textContent = blocks[i];
+                tip.appendChild(div);
+            }
+        }
+
         function show(el) {
             var text = el.getAttribute('data-tip');
             if (!text) return;
-            tip.textContent = text;
+            renderTooltipText(text);
+            tip.dataset.rawTip = text;
             tip.classList.add('visible');
             activeEl = el;
             position(el);
@@ -1674,8 +1696,9 @@
                 if (!activeEl.isConnected) { hide(); return; }
                 var nextText = activeEl.getAttribute('data-tip');
                 if (!nextText) { hide(); return; }
-                if (tip.textContent !== nextText) {
-                    tip.textContent = nextText;
+                if (tip.dataset.rawTip !== nextText) {
+                    renderTooltipText(nextText);
+                    tip.dataset.rawTip = nextText;
                     position(activeEl);
                 }
             }, 0);

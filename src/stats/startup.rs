@@ -529,6 +529,7 @@ pub fn spawn_background_tasks(
     // hold a long write lock or exhaust the pool.
     {
         let pending_state = Arc::clone(&state);
+        let xray_state = Arc::clone(&state);
         let state = Arc::clone(&state);
         tokio::spawn(async move {
             // Below this drift we don't bother with the verbose fetch: it absorbs
@@ -696,7 +697,10 @@ pub fn spawn_background_tasks(
                                     fee: Some(entry.fee),
                                     vsize: Some(entry.vsize),
                                     value: None,
-                                    flags: 0,
+                                    flags: super::heartbeat_sync::TxFlags::from_mempool_meta(
+                                        entry.is_rbf,
+                                        entry.is_segwit,
+                                    ),
                                     op_return_text: None,
                                     first_seen: None,
                                 });
@@ -722,6 +726,110 @@ pub fn spawn_background_tasks(
                     }
                 }
                 tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+            }
+        });
+
+        // Polite background X-Ray script backfill for pre-deploy / missed-rawtx
+        // mempool transactions: fetches 10 raw hex txs in ONE JSON-RPC batch
+        // every 2 seconds (0.5 HTTP req/s, ~3 KB/s over WireGuard), parses
+        // script/protocol flags via `parse_raw_tx`, hydrates HeartbeatStore
+        // incrementally (<= 10 <= 256, zero stream_epoch rotation), and persists
+        // to `mempool_txs.tx_flags` in one SQLite txn. Idles at 0 RPCs/sec once
+        // the backlog reaches 100% script-inspected.
+        tokio::spawn(async move {
+            let mut retry_after: std::collections::HashMap<String, u64> =
+                std::collections::HashMap::new();
+            tokio::time::sleep(std::time::Duration::from_secs(20)).await;
+            loop {
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0);
+                retry_after.retain(|_, until| *until > now);
+
+                let store = Arc::clone(&xray_state.heartbeat_store);
+                let excluded: std::collections::HashSet<String> =
+                    retry_after.keys().cloned().collect();
+                let to_fetch = tokio::task::spawn_blocking(move || {
+                    store.unparsed_script_txids(10, &excluded)
+                })
+                .await
+                .unwrap_or_default();
+
+                if to_fetch.is_empty() {
+                    tokio::time::sleep(std::time::Duration::from_secs(15))
+                        .await;
+                    continue;
+                }
+
+                match xray_state
+                    .rpc
+                    .get_raw_transactions_hex_batch(&to_fetch)
+                    .await
+                {
+                    Ok(results) => {
+                        let mut entries = Vec::with_capacity(results.len());
+                        let mut db_updates = Vec::with_capacity(results.len());
+                        for (txid, raw_opt) in results {
+                            let Some(raw) = raw_opt else {
+                                retry_after.insert(txid, now + 300);
+                                continue;
+                            };
+                            let Some(parsed) =
+                                zmq_subscriber::parse_raw_tx(&raw)
+                            else {
+                                retry_after.insert(txid, now + 300);
+                                continue;
+                            };
+                            if parsed.txid != txid {
+                                retry_after.insert(txid, now + 300);
+                                continue;
+                            }
+                            let mut flags = parsed.protocol_flags;
+                            if parsed.op_return_text.is_some() {
+                                flags |= super::heartbeat_sync::TxFlags::OP_RETURN_MSG;
+                            }
+                            db_updates.push((
+                                txid.clone(),
+                                parsed.value,
+                                flags,
+                                parsed.op_return_text.clone(),
+                            ));
+                            entries.push(TxMetadataHydration {
+                                txid,
+                                fee: None,
+                                vsize: None,
+                                value: Some(parsed.value),
+                                flags,
+                                op_return_text: parsed.op_return_text,
+                                first_seen: None,
+                            });
+                        }
+                        if !entries.is_empty() {
+                            let store = Arc::clone(&xray_state.heartbeat_store);
+                            let db_pool = xray_state.db.clone();
+                            let _ = tokio::task::spawn_blocking(move || {
+                                store.hydrate_details(&entries);
+                                if let Ok(mut conn) = db_pool.get() {
+                                    let _ = db::update_mempool_tx_flags_batch(
+                                        &mut conn,
+                                        &db_updates,
+                                    );
+                                }
+                            })
+                            .await;
+                        }
+                        tokio::time::sleep(std::time::Duration::from_secs(2))
+                            .await;
+                    }
+                    Err(e) => {
+                        tracing::debug!(
+                            "X-Ray script backfill batch RPC unavailable: {e}"
+                        );
+                        tokio::time::sleep(std::time::Duration::from_secs(10))
+                            .await;
+                    }
+                }
             }
         });
     }
@@ -764,7 +872,10 @@ fn verbose_entries_to_hydration(
             fee: Some(e.fee),
             vsize: Some(e.vsize),
             value: None,
-            flags: 0,
+            flags: super::heartbeat_sync::TxFlags::from_mempool_meta(
+                e.is_rbf,
+                e.is_segwit,
+            ),
             op_return_text: None,
         })
         .collect()

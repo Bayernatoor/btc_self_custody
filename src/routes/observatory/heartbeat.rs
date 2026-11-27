@@ -28,7 +28,7 @@ use crate::stats::heartbeat_client::{
     fee_band_for_rate, format_fee_rate, hb_v2_exit_history_mode,
     hb_v2_focus_block_height, hb_v2_focus_pending_slot, hb_v2_focus_tx,
     hb_v2_is_pending_slot_offscreen, hb_v2_set_pinned_tx,
-    hb_v2_set_spotlight_band, primary_notable_label, HistoryModeInfo,
+    hb_v2_set_spotlight_filter, primary_notable_label, HistoryModeInfo,
     PendingBlockBanner, PinnedTxStatus, PinnedTxView,
 };
 #[cfg(feature = "hydrate")]
@@ -37,7 +37,7 @@ use crate::stats::heartbeat_client::{
     InitialSearchParam,
 };
 use crate::stats::heartbeat_sync::{
-    FeeBandStat, FeeBandSummary, QueuePosition,
+    FeeBandStat, FeeBandSummary, QueuePosition, XRaySummary, XRAY_PILL_COUNT,
 };
 use crate::stats::types::HofCategory;
 
@@ -190,7 +190,14 @@ pub fn HeartbeatPage() -> impl IntoView {
     let (landmark_filter, set_landmark_filter) = signal(String::new());
     #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
     let (fee_bands, set_fee_bands) = signal(FeeBandSummary::default());
+    #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
+    let (xray_summary, set_xray_summary) = signal(XRaySummary::default());
+    let (spotlight_tab, set_spotlight_tab) = signal(0u8); // 0 = Fee Bands, 1 = X-Ray
     let (spotlight_band, set_spotlight_band) = signal(Option::<usize>::None);
+    let (spotlight_xray, set_spotlight_xray) = signal(0u32);
+    #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
+    let (spotlight_match_count, set_spotlight_match_count) =
+        signal(Option::<u64>::None);
     #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
     let (arrival_rate, set_arrival_rate) = signal(Option::<f64>::None);
     let (io_expanded, set_io_expanded) = signal(false);
@@ -390,6 +397,8 @@ pub fn HeartbeatPage() -> impl IntoView {
                     set_pending_block,
                     set_history_mode,
                     set_fee_bands,
+                    set_xray_summary,
+                    set_spotlight_match_count,
                     set_arrival_rate,
                 });
                 hb_client.set_value(Some(client.clone()));
@@ -2037,38 +2046,124 @@ pub fn HeartbeatPage() -> impl IntoView {
                 </div>
             </div>
 
-            // ── Interactive Fee-Band Spotlight Bar (promoted right below canvas) ──
+            // ── Interactive Spotlight Bar: Fee Bands + Mempool X-Ray (promoted right below canvas) ──
             <div class="bg-[#0d2137]/80 border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 space-y-2">
                 <div class="flex flex-wrap items-center justify-between gap-2">
-                    <span class="text-[11px] sm:text-xs text-white/85 font-mono font-semibold uppercase tracking-wider">
-                        "Fee Bands (sat/vB)"
-                    </span>
-                    {move || match spotlight_band.get() {
-                        Some(active_idx) => {
-                            let (name, color) = FEE_BAND_META[active_idx];
+                    // 2-tab mode switch (Fee Bands | X-Ray) with live active dots
+                    <div class="flex flex-wrap items-center gap-2">
+                        <div class="inline-flex items-center rounded-lg bg-[#071320]/80 border border-white/15 p-0.5 text-[11px] sm:text-xs font-mono">
+                            <button
+                                type="button"
+                                class=move || {
+                                    if spotlight_tab.get() == 0 {
+                                        "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-white/12 text-white font-semibold cursor-pointer transition-colors"
+                                    } else {
+                                        "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-white/70 hover:text-white cursor-pointer transition-colors"
+                                    }
+                                }
+                                on:click=move |_| set_spotlight_tab.set(0)
+                            >
+                                <span>"Fee Bands"</span>
+                                {move || spotlight_band.get().map(|b| view! {
+                                    <span
+                                        class="w-1.5 h-1.5 rounded-full shrink-0"
+                                        style=format!("background-color:{}", FEE_BAND_META[b].1)
+                                    ></span>
+                                })}
+                            </button>
+                            <button
+                                type="button"
+                                class=move || {
+                                    if spotlight_tab.get() == 1 {
+                                        "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-white/12 text-white font-semibold cursor-pointer transition-colors"
+                                    } else {
+                                        "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-white/70 hover:text-white cursor-pointer transition-colors"
+                                    }
+                                }
+                                on:click=move |_| set_spotlight_tab.set(1)
+                            >
+                                <span>"X-Ray"</span>
+                                {move || (spotlight_xray.get() != 0).then(|| view! {
+                                    <span class="w-1.5 h-1.5 rounded-full bg-[#38bdf8] shrink-0"></span>
+                                })}
+                            </button>
+                        </div>
+                        // Honest script-inspection coverage note under X-Ray when < 99% of mempool is script-parsed
+                        {move || {
+                            if spotlight_tab.get() != 1 {
+                                return None;
+                            }
+                            let xr = xray_summary.get();
+                            format_xray_coverage_note(xr).map(|(badge, tip)| view! {
+                                <span
+                                    class="text-[10px] sm:text-[11px] font-mono text-white/70 px-2 py-0.5 rounded-md bg-white/[0.04] border border-white/10"
+                                    data-tip=tip
+                                >
+                                    {badge}
+                                </span>
+                            })
+                        }}
+                    </div>
+
+                    // Right-hand status: unified active spotlight clear pill OR short hint
+                    {move || {
+                        let band = spotlight_band.get();
+                        let mask = spotlight_xray.get();
+                        if band.is_some() || mask != 0 {
+                            let label = format_active_spotlight_label(
+                                band,
+                                mask,
+                                spotlight_match_count.get(),
+                            );
+                            let accent = band
+                                .map(|b| FEE_BAND_META[b].1)
+                                .unwrap_or("#38bdf8");
                             view! {
                                 <button
                                     type="button"
                                     class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] sm:text-xs font-mono font-semibold border cursor-pointer transition-colors hover:bg-white/10"
-                                    style=format!("color:{color};border-color:{color}80;background:{color}20")
+                                    style=format!("color:{accent};border-color:{accent}80;background:{accent}20")
                                     on:click=move |_| {
                                         set_spotlight_band.set(None);
-                                        hb_v2_set_spotlight_band(-1);
+                                        set_spotlight_xray.set(0);
+                                        #[cfg(feature = "hydrate")]
+                                        if let Some(c) = hb_client.try_with_value(|c| c.clone()).flatten() {
+                                            c.set_spotlight(None, 0);
+                                            return;
+                                        }
+                                        hb_v2_set_spotlight_filter(-1, 0);
                                     }
                                 >
-                                    <span>{format!("Spotlight: {name}")}</span>
+                                    <span>{label}</span>
                                     <span class="text-white/85">"\u{00d7}"</span>
                                 </button>
                             }.into_any()
+                        } else if spotlight_tab.get() == 1 {
+                            view! {
+                                <span class="text-[11px] sm:text-xs text-white/80 font-mono">
+                                    "Tap 1+ features to spotlight (AND)"
+                                </span>
+                            }.into_any()
+                        } else {
+                            view! {
+                                <span class="text-[11px] sm:text-xs text-white/80 font-mono">
+                                    "Tap a band to spotlight (sat/vB)"
+                                </span>
+                            }.into_any()
                         }
-                        None => view! {
-                            <span class="text-[11px] sm:text-xs text-white/80 font-mono">
-                                "Tap a band to spotlight on canvas"
-                            </span>
-                        }.into_any(),
                     }}
                 </div>
-                <div class="flex sm:flex-wrap items-center gap-1.5 overflow-x-auto sm:overflow-visible [scrollbar-width:none] pb-0.5 sm:pb-0 text-[11px] sm:text-xs text-white/95 font-mono">
+
+                // Tab 0: Fee Bands chips
+                <div
+                    class=move || {
+                        if spotlight_tab.get() == 0 {
+                            "flex sm:flex-wrap items-center gap-1.5 overflow-x-auto sm:overflow-visible [scrollbar-width:none] pb-0.5 sm:pb-0 text-[11px] sm:text-xs text-white/95 font-mono"
+                        } else {
+                            "hidden"
+                        }
+                    }
+                >
                     {FEE_BAND_META.iter().enumerate().map(|(idx, &(band_label, band_color))| {
                         view! {
                             <button
@@ -2099,7 +2194,13 @@ pub fn HeartbeatPage() -> impl IntoView {
                                         Some(idx)
                                     };
                                     set_spotlight_band.set(next);
-                                    hb_v2_set_spotlight_band(next.map(|i| i as i32).unwrap_or(-1));
+                                    let mask = spotlight_xray.get_untracked();
+                                    #[cfg(feature = "hydrate")]
+                                    if let Some(c) = hb_client.try_with_value(|c| c.clone()).flatten() {
+                                        c.set_spotlight(next, mask);
+                                        return;
+                                    }
+                                    hb_v2_set_spotlight_filter(next.map(|i| i as i32).unwrap_or(-1), mask);
                                 }
                             >
                                 <span
@@ -2110,6 +2211,74 @@ pub fn HeartbeatPage() -> impl IntoView {
                                 {move || {
                                     let stat = fee_bands.get().bands[idx];
                                     let txt = format_band_chip_metrics(stat);
+                                    (!txt.is_empty()).then(|| view! {
+                                        <span class="text-[11px] text-white/80 tabular-nums">{txt}</span>
+                                    })
+                                }}
+                            </button>
+                        }
+                    }).collect_view()}
+                </div>
+
+                // Tab 1: Mempool X-Ray multi-select chips (AND intersection, composable with Fee Bands)
+                <div
+                    class=move || {
+                        if spotlight_tab.get() == 1 {
+                            "flex sm:flex-wrap items-center gap-1.5 overflow-x-auto sm:overflow-visible [scrollbar-width:none] pb-0.5 sm:pb-0 text-[11px] sm:text-xs text-white/95 font-mono"
+                        } else {
+                            "hidden"
+                        }
+                    }
+                >
+                    {XRAY_PILL_META.iter().enumerate().map(|(idx, meta)| {
+                        let bit = 1u32 << idx;
+                        let pill_color = meta.color;
+                        view! {
+                            <button
+                                type="button"
+                                aria-pressed=move || if (spotlight_xray.get() & bit) != 0 { "true" } else { "false" }
+                                data-tip=move || {
+                                    let xr = xray_summary.get();
+                                    let is_on = (spotlight_xray.get() & bit) != 0;
+                                    format_xray_chip_tooltip(idx, xr, is_on)
+                                }
+                                class=move || {
+                                    let cur = spotlight_xray.get();
+                                    if (cur & bit) != 0 {
+                                        "inline-flex items-center gap-1.5 px-2 py-1 rounded-md border whitespace-nowrap shrink-0 cursor-pointer transition-all shadow-sm"
+                                    } else if cur != 0 {
+                                        "inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-white/[0.03] border border-white/10 whitespace-nowrap shrink-0 cursor-pointer transition-all opacity-55 hover:opacity-90"
+                                    } else {
+                                        "inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-white/[0.05] hover:bg-white/[0.10] border border-white/15 hover:border-white/30 whitespace-nowrap shrink-0 cursor-pointer transition-all"
+                                    }
+                                }
+                                style=move || {
+                                    if (spotlight_xray.get() & bit) != 0 {
+                                        format!("border-color:{pill_color};background:{pill_color}24;color:#ffffff")
+                                    } else {
+                                        String::new()
+                                    }
+                                }
+                                on:click=move |_| {
+                                    let next_mask = spotlight_xray.get_untracked() ^ bit;
+                                    set_spotlight_xray.set(next_mask);
+                                    let band = spotlight_band.get_untracked();
+                                    #[cfg(feature = "hydrate")]
+                                    if let Some(c) = hb_client.try_with_value(|c| c.clone()).flatten() {
+                                        c.set_spotlight(band, next_mask);
+                                        return;
+                                    }
+                                    hb_v2_set_spotlight_filter(band.map(|i| i as i32).unwrap_or(-1), next_mask);
+                                }
+                            >
+                                <span
+                                    class="w-2 h-2 rounded-full shrink-0"
+                                    style=format!("background-color:{pill_color}")
+                                ></span>
+                                <span class="font-semibold text-white">{meta.label}</span>
+                                {move || {
+                                    let xr = xray_summary.get();
+                                    let txt = format_xray_chip_metrics(idx, xr);
                                     (!txt.is_empty()).then(|| view! {
                                         <span class="text-[11px] text-white/80 tabular-nums">{txt}</span>
                                     })
@@ -2637,6 +2806,209 @@ const FEE_BAND_META: [(&str, &str); 7] = [
     ("15\u{2013}50", "#ff5722"),
     ("50+", "#f44336"),
 ];
+
+#[derive(Clone, Copy)]
+enum XRayDenominator {
+    MetaKnown,
+    ScriptParsed,
+    Total,
+}
+
+#[derive(Clone, Copy)]
+struct XRayPillMeta {
+    label: &'static str,
+    color: &'static str,
+    denom: XRayDenominator,
+    description: &'static str,
+}
+
+/// Fixed Mempool X-Ray pill definitions ordered identically to
+/// `heartbeat_sync::xray_matches` and JS `txMatchesXRayMask` (`0..11`).
+const XRAY_PILL_META: [XRayPillMeta; XRAY_PILL_COUNT] = [
+    XRayPillMeta {
+        label: "RBF",
+        color: "#f7931a",
+        denom: XRayDenominator::MetaKnown,
+        description: "BIP-125 Replace-By-Fee signaling (100% mempool coverage from Core).",
+    },
+    XRayPillMeta {
+        label: "SegWit",
+        color: "#38bdf8",
+        denom: XRayDenominator::MetaKnown,
+        description: "Segregated Witness transactions with witness data (wtxid != txid; 100% mempool coverage).",
+    },
+    XRayPillMeta {
+        label: "Legacy",
+        color: "#94a3b8",
+        denom: XRayDenominator::MetaKnown,
+        description: "Non-SegWit transactions without witness data (wtxid == txid; excludes fee-pending placeholders).",
+    },
+    XRayPillMeta {
+        label: "Taproot",
+        color: "#c084fc",
+        denom: XRayDenominator::ScriptParsed,
+        description: "Contains a Taproot P2TR output (OP_1 <32-byte key>), detected from live raw transactions.",
+    },
+    XRayPillMeta {
+        label: "P2A",
+        color: "#2dd4bf",
+        denom: XRayDenominator::ScriptParsed,
+        description: "Pay-to-Anchor output (OP_1 0x4e73), Core 28 ephemeral anchor for fee-bumping.",
+    },
+    XRayPillMeta {
+        label: "v3 / TRUC",
+        color: "#818cf8",
+        denom: XRayDenominator::ScriptParsed,
+        description: "Version 3 topologically restricted transactions (BIP-431).",
+    },
+    XRayPillMeta {
+        label: "OP_RETURN",
+        color: "#fb923c",
+        denom: XRayDenominator::ScriptParsed,
+        description: "Contains an OP_RETURN (0x6a) provably unspendable data output.",
+    },
+    XRayPillMeta {
+        label: "Runes",
+        color: "#f472b6",
+        denom: XRayDenominator::ScriptParsed,
+        description: "Contains a Runes runestone (OP_RETURN OP_13 / 0x6a5d).",
+    },
+    XRayPillMeta {
+        label: "Inscriptions",
+        color: "#e879f9",
+        denom: XRayDenominator::ScriptParsed,
+        description: "Contains an Ordinals inscription envelope inside witness data.",
+    },
+    XRayPillMeta {
+        label: "Multisig",
+        color: "#facc15",
+        denom: XRayDenominator::ScriptParsed,
+        description: "Revealed multisig (P2WSH/P2SH spends, Tapscript CHECKSIGADD, or bare outputs).\n\nExcludes unspent P2SH/P2WSH outputs and Taproot MuSig2 keypath spends.",
+    },
+    XRayPillMeta {
+        label: "Notables",
+        color: "#ffd700",
+        denom: XRayDenominator::Total,
+        description: "Whales, round-number BTC transfers, consolidations, fan-outs, fee outliers, large inscriptions, and OP_RETURN messages.",
+    },
+];
+
+fn xray_denominator(denom: XRayDenominator, xr: XRaySummary) -> u64 {
+    match denom {
+        XRayDenominator::MetaKnown => xr.meta_known_txs,
+        XRayDenominator::ScriptParsed => xr.script_parsed_txs,
+        XRayDenominator::Total => xr.total_txs,
+    }
+}
+
+/// Compact inline metrics for an X-Ray chip (e.g. `12.4k · 18%`, `42`).
+fn format_xray_chip_metrics(idx: usize, xr: XRaySummary) -> String {
+    let count = xr.counts[idx];
+    if count == 0 {
+        return String::new();
+    }
+    let count_str = if count >= 1_000 {
+        format!("{:.1}k", count as f64 / 1_000.0)
+    } else {
+        count.to_string()
+    };
+    let denom = xray_denominator(XRAY_PILL_META[idx].denom, xr);
+    if denom > 0 {
+        let pct = (count as f64 / denom as f64) * 100.0;
+        if count == denom {
+            format!("{count_str} \u{00b7} 100%")
+        } else if pct >= 99.5 {
+            format!("{count_str} \u{00b7} 99.9%")
+        } else if pct >= 1.0 {
+            format!("{count_str} \u{00b7} {pct:.0}%")
+        } else if pct >= 0.1 {
+            format!("{count_str} \u{00b7} {pct:.1}%")
+        } else {
+            count_str
+        }
+    } else {
+        count_str
+    }
+}
+
+/// Detailed hover tooltip for an X-Ray chip with honest denominator accounting.
+fn format_xray_chip_tooltip(
+    idx: usize,
+    xr: XRaySummary,
+    is_active: bool,
+) -> String {
+    let meta = XRAY_PILL_META[idx];
+    let count = xr.counts[idx];
+    let denom = xray_denominator(meta.denom, xr);
+    let stat_line = if denom > 0 {
+        let pct = (count as f64 / denom as f64) * 100.0;
+        let scope = match meta.denom {
+            XRayDenominator::MetaKnown => "known txs",
+            XRayDenominator::ScriptParsed => "script-inspected txs",
+            XRayDenominator::Total => "mempool txs",
+        };
+        let suffix = if is_active { " \u{00b7} Active" } else { "" };
+        format!(
+            "{} of {} {scope} ({pct:.1}%){suffix}",
+            super::helpers::format_number(count),
+            super::helpers::format_number(denom),
+        )
+    } else {
+        format!("{} txs", super::helpers::format_number(count))
+    };
+    format!("{}\n\n{stat_line}", meta.description)
+}
+
+/// Honest coverage indicator shown in the X-Ray header whenever fewer than 99%
+/// of the mempool has had raw scripts inspected (e.g. shortly after a restart).
+fn format_xray_coverage_note(xr: XRaySummary) -> Option<(String, String)> {
+    if xr.total_txs == 0 {
+        return None;
+    }
+    let pct = (xr.script_parsed_txs as f64 / xr.total_txs as f64) * 100.0;
+    if pct >= 99.0 {
+        return None;
+    }
+    let badge = format!("{pct:.0}% scripts inspected");
+    let tip = format!(
+        "RBF, SegWit, and Legacy cover all {} mempool txs from Core.\n\nScript features (Taproot, P2A, v3, OP_RETURN, Runes, Inscriptions, Multisig) are parsed from live rawtx since restart; uninspected older backlog txs are excluded from script %.\n\n{} of {} txs script-inspected ({pct:.1}%)",
+        super::helpers::format_number(xr.meta_known_txs),
+        super::helpers::format_number(xr.script_parsed_txs),
+        super::helpers::format_number(xr.total_txs),
+    );
+    Some((badge, tip))
+}
+
+/// Unified active spotlight pill label combining optional Fee Band + 1..N X-Ray
+/// pills + exact matched transaction count.
+fn format_active_spotlight_label(
+    band: Option<usize>,
+    xray_mask: u32,
+    match_count: Option<u64>,
+) -> String {
+    let mut parts: Vec<&str> = Vec::new();
+    if let Some(b) = band {
+        if let Some((lbl, _)) = FEE_BAND_META.get(b) {
+            parts.push(lbl);
+        }
+    }
+    for (idx, meta) in XRAY_PILL_META.iter().enumerate() {
+        if (xray_mask & (1u32 << idx)) != 0 {
+            parts.push(meta.label);
+        }
+    }
+    let joined = parts.join(" + ");
+    match match_count {
+        Some(n) => {
+            let word = if n == 1 { "tx" } else { "txs" };
+            format!(
+                "Spotlight: {joined} ({} {word})",
+                super::helpers::format_number(n)
+            )
+        }
+        None => format!("Spotlight: {joined}"),
+    }
+}
 
 /// Compact inline metrics for a Fee Bands legend chip (e.g. `12.4k · 4.2 vMB`).
 /// Returns empty when zero so empty bands stay tidy.
@@ -4234,5 +4606,30 @@ mod tests {
         live.mempool.usage = 285_000_000;
         let m3 = super::format_mempool_ram(Some(&live)).unwrap();
         assert_eq!(m3.color, "#f44336");
+
+        // X-Ray honest coverage note, pill formatting & combined spotlight label
+        let mut xr = crate::stats::heartbeat_sync::XRaySummary {
+            total_txs: 10_000,
+            meta_known_txs: 10_000,
+            script_parsed_txs: 4_200,
+            counts: [0; 11],
+        };
+        xr.counts[0] = 6_500; // RBF: 65% of 10k meta_known
+        xr.counts[7] = 420; // Runes: 10% of 4.2k script_parsed (NOT 4.2% of 10k!)
+        assert_eq!(super::format_xray_chip_metrics(0, xr), "6.5k \u{00b7} 65%");
+        assert_eq!(super::format_xray_chip_metrics(7, xr), "420 \u{00b7} 10%");
+        let (cov_badge, _) = super::format_xray_coverage_note(xr).unwrap();
+        assert_eq!(cov_badge, "42% scripts inspected");
+        xr.script_parsed_txs = 9_950;
+        assert!(super::format_xray_coverage_note(xr).is_none());
+
+        assert_eq!(
+            super::format_active_spotlight_label(
+                Some(1),
+                (1 << 5) | (1 << 4),
+                Some(142),
+            ),
+            "Spotlight: < 1 + P2A + v3 / TRUC (142 txs)"
+        );
     }
 }

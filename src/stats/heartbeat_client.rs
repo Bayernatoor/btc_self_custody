@@ -62,7 +62,7 @@ pub struct PinnedTxView {
     pub value: Option<u64>,
     /// Unix timestamp in seconds when first seen; `0` means already waiting (time unknown).
     pub first_seen: u64,
-    pub flags: u8,
+    pub flags: u32,
     pub op_return_text: Option<String>,
     pub on_canvas: bool,
     pub deep: Option<TxDeepDetails>,
@@ -293,7 +293,7 @@ pub fn format_fee_rate(fee_rate: Option<f64>) -> String {
 /// Priority order: Whale, Round #, Large Inscription, Consolidation, Fan-out, Fee Outlier,
 /// OP_RETURN Msg.
 pub fn primary_notable_label(
-    flags: u8,
+    flags: u32,
 ) -> Option<(&'static str, &'static str)> {
     if TxFlags::contains(flags, TxFlags::WHALE) {
         Some(("Whale", "#ffd700"))
@@ -855,8 +855,11 @@ mod js_bridge {
         #[wasm_bindgen(js_name = hbV2SetPinnedTx, catch)]
         fn js_hb_v2_set_pinned_tx(txid: Option<&str>) -> Result<(), JsValue>;
 
-        #[wasm_bindgen(js_name = hbV2SetSpotlightBand, catch)]
-        fn js_hb_v2_set_spotlight_band(band: i32) -> Result<(), JsValue>;
+        #[wasm_bindgen(js_name = hbV2SetSpotlightFilter, catch)]
+        fn js_hb_v2_set_spotlight_filter(
+            band: i32,
+            xray_mask: u32,
+        ) -> Result<(), JsValue>;
 
         // Pass JS Number (`f64`), not `u64` (BigInt), because JS compares
         // `seg.height === height` with strict equality against Number heights.
@@ -908,8 +911,8 @@ mod js_bridge {
         let _ = js_hb_v2_set_pinned_tx(txid);
     }
 
-    pub fn hb_v2_set_spotlight_band(band: i32) {
-        let _ = js_hb_v2_set_spotlight_band(band);
+    pub fn hb_v2_set_spotlight_filter(band: i32, xray_mask: u32) {
+        let _ = js_hb_v2_set_spotlight_filter(band, xray_mask);
     }
 
     pub fn hb_v2_focus_block_height(height: u64) -> bool {
@@ -953,7 +956,7 @@ mod js_bridge {
         false
     }
     pub fn hb_v2_set_pinned_tx(_txid: Option<&str>) {}
-    pub fn hb_v2_set_spotlight_band(_band: i32) {}
+    pub fn hb_v2_set_spotlight_filter(_band: i32, _xray_mask: u32) {}
     pub fn hb_v2_focus_block_height(_height: u64) -> bool {
         false
     }
@@ -974,7 +977,8 @@ pub use js_bridge::{
     hb_v2_apply_effect, hb_v2_enter_history_mode, hb_v2_exit_history_mode,
     hb_v2_focus_block_height, hb_v2_focus_pending_slot, hb_v2_focus_tx,
     hb_v2_install_snapshot, hb_v2_is_pending_slot_offscreen,
-    hb_v2_set_connection_state, hb_v2_set_pinned_tx, hb_v2_set_spotlight_band,
+    hb_v2_set_connection_state, hb_v2_set_pinned_tx,
+    hb_v2_set_spotlight_filter,
 };
 
 // ---------------------------------------------------------------------------
@@ -1002,17 +1006,17 @@ mod client {
         hb_v2_enter_history_mode, hb_v2_exit_history_mode,
         hb_v2_focus_block_height, hb_v2_focus_pending_slot, hb_v2_focus_tx,
         hb_v2_install_snapshot, hb_v2_set_connection_state,
-        hb_v2_set_pinned_tx, js_bridge, normalize_tx_query,
-        parse_history_mode_info, parse_search_query, pinned_from_compact,
-        pinned_from_confirmed, retry_delay_ms, update_pinned_from_mirror,
-        ArrivalRateTracker, HistoryModeInfo, InitialSearchParam,
-        PendingBlockBanner, PinnedTxStatus, PinnedTxView, RawTxDetailResponse,
-        SearchQuery,
+        hb_v2_set_pinned_tx, hb_v2_set_spotlight_filter, js_bridge,
+        normalize_tx_query, parse_history_mode_info, parse_search_query,
+        pinned_from_compact, pinned_from_confirmed, retry_delay_ms,
+        update_pinned_from_mirror, ArrivalRateTracker, HistoryModeInfo,
+        InitialSearchParam, PendingBlockBanner, PinnedTxStatus, PinnedTxView,
+        RawTxDetailResponse, SearchQuery,
     };
     use crate::stats::heartbeat_sync::{
         ApplyEffect, ApplyOutcome, Coverage, FeeBandSummary, HeartbeatDelta,
         HeartbeatMirror, HeartbeatSnapshot, MirrorTxMatch, QueuePosition,
-        TxFlags, TxLookupStatus,
+        TxFlags, TxLookupStatus, XRaySummary,
     };
 
     /// Reactive signals owned by `HeartbeatPage` and updated by `HeartbeatClient`.
@@ -1031,6 +1035,8 @@ mod client {
         pub set_pending_block: WriteSignal<Option<PendingBlockBanner>>,
         pub set_history_mode: WriteSignal<Option<HistoryModeInfo>>,
         pub set_fee_bands: WriteSignal<FeeBandSummary>,
+        pub set_xray_summary: WriteSignal<XRaySummary>,
+        pub set_spotlight_match_count: WriteSignal<Option<u64>>,
         pub set_arrival_rate: WriteSignal<Option<f64>>,
     }
 
@@ -1082,10 +1088,15 @@ mod client {
         /// on their own signal without ever remounting the pinned TX panel.
         last_queue_refresh_ms: f64,
         last_pinned_queue: Option<QueuePosition>,
-        /// Timestamp (ms) + last emitted value of the O(N) fee-band summary scan
+        /// Timestamp (ms) + last emitted values of the O(N) fee-band & X-Ray scan
         /// (throttled to <= once every 2.0s during steady-state deltas).
         last_bands_refresh_ms: f64,
         last_fee_bands: FeeBandSummary,
+        last_xray_summary: XRaySummary,
+        /// Active canvas spotlight filter (fee band + multi-select X-Ray bitmask).
+        spotlight_band: Option<usize>,
+        spotlight_xray: u32,
+        last_spotlight_match: Option<u64>,
         /// Rolling 60s arrival rate tracker fed by live `MembershipAdd` deltas.
         arrival_tracker: ArrivalRateTracker,
         destroyed: bool,
@@ -1640,9 +1651,20 @@ mod client {
                 };
                 let now_ms = client_now_ms();
                 st.last_queue_refresh_ms = now_ms;
-                let fee_bands = st.mirror.fee_band_summary();
+                let (fee_bands, xray_summary) = st.mirror.mempool_breakdown();
                 st.last_fee_bands = fee_bands;
+                st.last_xray_summary = xray_summary;
                 st.last_bands_refresh_ms = now_ms;
+                let spotlight_match =
+                    if st.spotlight_band.is_some() || st.spotlight_xray != 0 {
+                        Some(st.mirror.count_matching_spotlight(
+                            st.spotlight_band,
+                            st.spotlight_xray,
+                        ))
+                    } else {
+                        None
+                    };
+                st.last_spotlight_match = spotlight_match;
                 st.arrival_tracker.reset(now_ms);
                 // Consume on the first successful snapshot install regardless of
                 // `is_resync` so a transient initial snapshot failure cannot drop
@@ -1659,6 +1681,8 @@ mod client {
                     updated_queue,
                     initial_search,
                     fee_bands,
+                    xray_summary,
+                    spotlight_match,
                 )
             };
 
@@ -1673,10 +1697,18 @@ mod client {
                 updated_queue,
                 initial_search,
                 fee_bands,
+                xray_summary,
+                spotlight_match,
             ) = extracted;
 
             let _ = self.inner.signals.set_coverage_note.try_set(coverage_note);
             let _ = self.inner.signals.set_fee_bands.try_set(fee_bands);
+            let _ = self.inner.signals.set_xray_summary.try_set(xray_summary);
+            let _ = self
+                .inner
+                .signals
+                .set_spotlight_match_count
+                .try_set(spotlight_match);
             let _ = self.inner.signals.set_arrival_rate.try_set(None);
             self.set_pending_block_if_changed(pending_banner);
             self.set_pinned_queue_if_changed(updated_queue);
@@ -1867,6 +1899,8 @@ mod client {
                 updated_pinned: Option<PinnedTxView>,
                 queue_update: Option<Option<QueuePosition>>,
                 fee_bands_update: Option<FeeBandSummary>,
+                xray_update: Option<XRaySummary>,
+                spotlight_match_update: Option<Option<u64>>,
             }
 
             enum Step {
@@ -1978,19 +2012,46 @@ mod client {
                         let bands_elapsed_ok = now_ms
                             < st.last_bands_refresh_ms
                             || (now_ms - st.last_bands_refresh_ms) >= 2_000.0;
-                        let fee_bands_update =
-                            if force_queue_refresh || bands_elapsed_ok {
-                                st.last_bands_refresh_ms = now_ms;
-                                let next = st.mirror.fee_band_summary();
-                                if next != st.last_fee_bands {
-                                    st.last_fee_bands = next;
-                                    Some(next)
-                                } else {
-                                    None
-                                }
+                        let (
+                            fee_bands_update,
+                            xray_update,
+                            spotlight_match_update,
+                        ) = if force_queue_refresh || bands_elapsed_ok {
+                            st.last_bands_refresh_ms = now_ms;
+                            let (next_bands, next_xray) =
+                                st.mirror.mempool_breakdown();
+                            let fb = if next_bands != st.last_fee_bands {
+                                st.last_fee_bands = next_bands;
+                                Some(next_bands)
                             } else {
                                 None
                             };
+                            let xr = if next_xray != st.last_xray_summary {
+                                st.last_xray_summary = next_xray;
+                                Some(next_xray)
+                            } else {
+                                None
+                            };
+                            let next_match = if st.spotlight_band.is_some()
+                                || st.spotlight_xray != 0
+                            {
+                                Some(st.mirror.count_matching_spotlight(
+                                    st.spotlight_band,
+                                    st.spotlight_xray,
+                                ))
+                            } else {
+                                None
+                            };
+                            let sm = if next_match != st.last_spotlight_match {
+                                st.last_spotlight_match = next_match;
+                                Some(next_match)
+                            } else {
+                                None
+                            };
+                            (fb, xr, sm)
+                        } else {
+                            (None, None, None)
+                        };
                         let (updated_pinned, queue_update) =
                             match existing_pinned.as_ref() {
                                 Some(existing) => {
@@ -2051,6 +2112,8 @@ mod client {
                             updated_pinned,
                             queue_update,
                             fee_bands_update,
+                            xray_update,
+                            spotlight_match_update,
                         }))
                     }
                 }
@@ -2072,10 +2135,22 @@ mod client {
                         updated_pinned,
                         queue_update,
                         fee_bands_update,
+                        xray_update,
+                        spotlight_match_update,
                     } = *applied;
                     hb_v2_apply_effect(&effect_json);
                     if let Some(bands) = fee_bands_update {
                         let _ = self.inner.signals.set_fee_bands.try_set(bands);
+                    }
+                    if let Some(xr) = xray_update {
+                        let _ = self.inner.signals.set_xray_summary.try_set(xr);
+                    }
+                    if let Some(sm) = spotlight_match_update {
+                        let _ = self
+                            .inner
+                            .signals
+                            .set_spotlight_match_count
+                            .try_set(sm);
                     }
                     if let Some(q) = queue_update {
                         let _ = self.inner.signals.set_pinned_queue.try_set(q);
@@ -2474,6 +2549,35 @@ mod client {
         /// Focus the canvas camera on the pending-block slot for `hash`.
         pub fn focus_pending_slot(&self, hash: &str) {
             let _ = hb_v2_focus_pending_slot(hash);
+        }
+
+        /// Update the active canvas spotlight filter (optional fee band + multi-select
+        /// X-Ray pill mask) and immediately compute the exact matched transaction count.
+        pub fn set_spotlight(&self, band: Option<usize>, xray_mask: u32) {
+            let match_count = {
+                let mut st = self.inner.state.borrow_mut();
+                if st.destroyed {
+                    return;
+                }
+                st.spotlight_band = band;
+                st.spotlight_xray = xray_mask;
+                let count = if band.is_some() || xray_mask != 0 {
+                    Some(st.mirror.count_matching_spotlight(band, xray_mask))
+                } else {
+                    None
+                };
+                st.last_spotlight_match = count;
+                count
+            };
+            hb_v2_set_spotlight_filter(
+                band.map(|i| i as i32).unwrap_or(-1),
+                xray_mask,
+            );
+            let _ = self
+                .inner
+                .signals
+                .set_spotlight_match_count
+                .try_set(match_count);
         }
 
         /// Recompute and publish the rolling 60-second arrival rate (`tx/s`).

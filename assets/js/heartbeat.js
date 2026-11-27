@@ -2349,10 +2349,15 @@ window.hbV2FocusTx = function(txid) {
 window.hbV2SetPinnedTx = function(txidOrNull) {
     return hbV2SetPinnedTx(txidOrNull);
 };
-window.hbV2SetSpotlightBand = function(band) {
+window.hbV2SetSpotlightFilter = function(band, xrayMask) {
     var _hb = getState();
     if (!_hb) return;
     _hb._spotlightBand = (typeof band === 'number' && band >= 0 && band <= 6) ? band : -1;
+    _hb._spotlightXray = (typeof xrayMask === 'number' && xrayMask > 0) ? (xrayMask >>> 0) : 0;
+};
+window.hbV2SetSpotlightBand = function(band) {
+    var _hb = getState();
+    window.hbV2SetSpotlightFilter(band, _hb ? (_hb._spotlightXray || 0) : 0);
 };
 window.hbV2FocusBlockHeight = function(height) {
     return hbV2FocusBlockHeight(height);

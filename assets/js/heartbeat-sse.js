@@ -586,7 +586,7 @@ export function updateBlipMetadata(blip, tx) {
         blip.firstSeen = tx.first_seen;
     }
     if (typeof tx.flags === 'number') {
-        blip.flags = tx.flags;
+        blip.flags = (blip.flags || 0) | tx.flags;
     }
     blip.color = style ? style.color : feeRateColor(feeRate);
     blip.opacity = isNotable ? 1.0 : (feePending ? 0.65 : 0.75 + feeNorm * 0.2);

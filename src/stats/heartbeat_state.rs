@@ -469,7 +469,7 @@ impl HeartbeatStore {
         fee: u64,
         vsize: u32,
         value: u64,
-        flags: u8,
+        flags: u32,
         op_return_text: Option<String>,
     ) {
         let mut inner = self.write_inner();
@@ -798,6 +798,40 @@ impl HeartbeatStore {
                     && (tx.first_seen == 0
                         || now_secs.saturating_sub(tx.first_seen)
                             >= min_age_secs)
+            })
+            .take(max_count)
+            .map(|(txid, _)| txid.to_string())
+            .collect()
+    }
+
+    /// Return up to `max_count` initialized mempool members that already have
+    /// `fee`/`vsize` metadata but have not yet had their raw scripts parsed
+    /// (`TxFlags::SCRIPT_PARSED == 0`).
+    ///
+    /// Skips txids in `exclude` before applying `max_count` so unresolvable
+    /// entries never starve the rest of the backlog.
+    pub fn unparsed_script_txids(
+        &self,
+        max_count: usize,
+        exclude: &HashSet<String>,
+    ) -> Vec<String> {
+        if max_count == 0 {
+            return Vec::new();
+        }
+        let inner = self.read_inner();
+        if !inner.initialized {
+            return Vec::new();
+        }
+        inner
+            .mirror
+            .members()
+            .filter(|(txid, tx)| {
+                !exclude.contains(*txid)
+                    && tx.fee.is_some()
+                    && tx.vsize.is_some_and(|v| v > 0)
+                    && (tx.flags
+                        & super::heartbeat_sync::TxFlags::SCRIPT_PARSED)
+                        == 0
             })
             .take(max_count)
             .map(|(txid, _)| txid.to_string())

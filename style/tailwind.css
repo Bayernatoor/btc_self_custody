@@ -369,6 +369,22 @@ a[data-tip]:not([data-tip=""]) {
   opacity: 1;
   transform: translateY(0);
 }
+#btc-tooltip .btc-tip-body {
+  color: rgba(255, 255, 255, 0.94);
+}
+#btc-tooltip .btc-tip-note {
+  margin-top: 6px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.68);
+}
+#btc-tooltip .btc-tip-meta {
+  margin-top: 7px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  color: #7dd3fc;
+}
 #btc-tooltip::after {
   content: '';
   position: absolute;

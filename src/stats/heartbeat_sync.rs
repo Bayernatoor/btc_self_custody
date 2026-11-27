@@ -148,7 +148,13 @@ pub struct CanonicalBlock {
     pub miner: Option<String>,
 }
 
-/// Notable-transaction bitmask stored in a single `u8`.
+/// Notable and protocol/X-Ray transaction bitmask stored in a single `u32`.
+///
+/// Bits `0..=6` are notable structural/economic markers (unchanged wire positions).
+/// Bits `7..=17` carry objective protocol & script telemetry for Mempool X-Ray,
+/// with explicit `META_KNOWN` (`getrawmempool` / `getmempoolentry` / `rawtx`) and
+/// `SCRIPT_PARSED` (`rawtx` script/witness scan) honesty markers so UI ratios
+/// never misrepresent cold-boot or unenriched transactions.
 #[derive(
     Clone,
     Copy,
@@ -163,43 +169,84 @@ pub struct CanonicalBlock {
     Deserialize,
 )]
 #[serde(transparent)]
-pub struct TxFlags(pub u8);
+pub struct TxFlags(pub u32);
 
 impl TxFlags {
-    pub const NONE: u8 = 0;
-    pub const WHALE: u8 = 1 << 0;
-    pub const FEE_OUTLIER: u8 = 1 << 1;
-    pub const CONSOLIDATION: u8 = 1 << 2;
-    pub const FAN_OUT: u8 = 1 << 3;
-    pub const LARGE_INSCRIPTION: u8 = 1 << 4;
-    pub const ROUND_NUMBER: u8 = 1 << 5;
-    pub const OP_RETURN_MSG: u8 = 1 << 6;
-    pub const ALL: u8 = Self::WHALE
+    pub const NONE: u32 = 0;
+    // Notable flags (bits 0..=6, preserved identically for JS compatibility)
+    pub const WHALE: u32 = 1 << 0;
+    pub const FEE_OUTLIER: u32 = 1 << 1;
+    pub const CONSOLIDATION: u32 = 1 << 2;
+    pub const FAN_OUT: u32 = 1 << 3;
+    pub const LARGE_INSCRIPTION: u32 = 1 << 4;
+    pub const ROUND_NUMBER: u32 = 1 << 5;
+    pub const OP_RETURN_MSG: u32 = 1 << 6;
+    pub const NOTABLE_MASK: u32 = Self::WHALE
         | Self::FEE_OUTLIER
         | Self::CONSOLIDATION
         | Self::FAN_OUT
         | Self::LARGE_INSCRIPTION
         | Self::ROUND_NUMBER
         | Self::OP_RETURN_MSG;
+    pub const ALL: u32 = Self::NOTABLE_MASK;
 
-    pub const fn new(bits: u8) -> Self {
+    // Protocol & X-Ray flags (bits 7..=17)
+    /// Signals BIP-125 Replace-By-Fee (from `getrawmempool`, `getmempoolentry`, or `rawtx`).
+    pub const RBF: u32 = 1 << 7;
+    /// Uses SegWit witness serialization (`wtxid != txid` or `rawtx` witness flag).
+    pub const SEGWIT: u32 = 1 << 8;
+    /// Set whenever `RBF`/`SEGWIT` were observed, so `!SEGWIT` honestly means Legacy
+    /// rather than an unenriched `sequence A` placeholder.
+    pub const META_KNOWN: u32 = 1 << 9;
+    /// Set when `parse_raw_tx` inspected the raw transaction's version, scripts,
+    /// and witness items (persisted across restarts in `mempool_txs.tx_flags`).
+    pub const SCRIPT_PARSED: u32 = 1 << 10;
+    /// Contains a Taproot P2TR output (`OP_1 <32-byte key>`).
+    pub const TAPROOT: u32 = 1 << 11;
+    /// Contains a Pay-to-Anchor output (`OP_1 PUSH2 0x4e73`, Core 28 ephemeral anchor).
+    pub const P2A: u32 = 1 << 12;
+    /// Version 3 / TRUC transaction (BIP-431).
+    pub const V3_TRUC: u32 = 1 << 13;
+    /// Contains any `OP_RETURN` (`0x6a`) output.
+    pub const OP_RETURN: u32 = 1 << 14;
+    /// Contains a Runes runestone (`OP_RETURN OP_13`, `0x6a 0x5d`).
+    pub const RUNES: u32 = 1 << 15;
+    /// Contains an Ordinals inscription witness envelope (`00 63 03 "ord"`).
+    pub const INSCRIPTION: u32 = 1 << 16;
+    /// Reveals a multisig script (P2WSH/P2SH `OP_CHECKMULTISIG[VERIFY]` spend,
+    /// Tapscript `OP_CHECKSIGADD`, or bare multisig output).
+    pub const MULTISIG: u32 = 1 << 17;
+
+    pub const fn new(bits: u32) -> Self {
         Self(bits)
     }
 
-    pub const fn bits(self) -> u8 {
+    pub const fn bits(self) -> u32 {
         self.0
     }
 
-    pub const fn has(self, mask: u8) -> bool {
+    pub const fn has(self, mask: u32) -> bool {
         (self.0 & mask) == mask
     }
 
-    pub const fn contains(bits: u8, mask: u8) -> bool {
+    pub const fn contains(bits: u32, mask: u32) -> bool {
         (bits & mask) == mask
     }
 
-    pub const fn is_notable(bits: u8) -> bool {
-        (bits & Self::ALL) != 0
+    pub const fn is_notable(bits: u32) -> bool {
+        (bits & Self::NOTABLE_MASK) != 0
+    }
+
+    /// Build the `META_KNOWN` + `RBF` + `SEGWIT` bits from Core mempool RPC metadata.
+    pub const fn from_mempool_meta(is_rbf: bool, is_segwit: bool) -> u32 {
+        let mut bits = Self::META_KNOWN;
+        if is_rbf {
+            bits |= Self::RBF;
+        }
+        if is_segwit {
+            bits |= Self::SEGWIT;
+        }
+        bits
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -211,8 +258,8 @@ impl TxFlags {
         large_inscription: bool,
         round_number: bool,
         op_return_msg: bool,
-    ) -> u8 {
-        let mut bits = 0u8;
+    ) -> u32 {
+        let mut bits = 0u32;
         if whale {
             bits |= Self::WHALE;
         }
@@ -237,7 +284,7 @@ impl TxFlags {
         bits
     }
 
-    pub fn from_notable_type(notable_type: Option<&str>) -> u8 {
+    pub fn from_notable_type(notable_type: Option<&str>) -> u32 {
         match notable_type {
             Some("whale") => Self::WHALE,
             Some("fee_outlier") => Self::FEE_OUTLIER,
@@ -251,13 +298,13 @@ impl TxFlags {
     }
 }
 
-impl From<u8> for TxFlags {
-    fn from(bits: u8) -> Self {
+impl From<u32> for TxFlags {
+    fn from(bits: u32) -> Self {
         Self(bits)
     }
 }
 
-impl From<TxFlags> for u8 {
+impl From<TxFlags> for u32 {
     fn from(flags: TxFlags) -> Self {
         flags.0
     }
@@ -279,7 +326,7 @@ pub struct CompactTx {
     pub fee: Option<u64>,
     pub vsize: Option<u32>,
     pub value: Option<u64>,
-    pub flags: u8,
+    pub flags: u32,
     pub op_return_text: Option<String>,
     pub observed_order: u64,
 }
@@ -435,8 +482,8 @@ impl<'de> Deserialize<'de> for CompactTx {
                 let fee: Option<u64> = seq.next_element()?.flatten();
                 let vsize: Option<u32> = seq.next_element()?.flatten();
                 let value: Option<u64> = seq.next_element()?.flatten();
-                let flags: u8 =
-                    seq.next_element::<Option<u8>>()?.flatten().unwrap_or(0);
+                let flags: u32 =
+                    seq.next_element::<Option<u32>>()?.flatten().unwrap_or(0);
                 let op_return_text: Option<String> =
                     seq.next_element()?.flatten();
                 let observed_order: u64 =
@@ -524,7 +571,7 @@ pub enum DeltaKind {
         vsize: u32,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         value: Option<u64>,
-        flags: u8,
+        flags: u32,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         op_return_text: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -662,7 +709,7 @@ pub struct TxMetadataHydration {
     pub fee: Option<u64>,
     pub vsize: Option<u32>,
     pub value: Option<u64>,
-    pub flags: u8,
+    pub flags: u32,
     pub op_return_text: Option<String>,
 }
 
@@ -708,6 +755,73 @@ pub struct FeeBandStat {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct FeeBandSummary {
     pub bands: [FeeBandStat; FEE_BAND_COUNT],
+}
+
+/// Number of Mempool X-Ray pills (ordered identically across Rust UI & Canvas JS):
+/// `0 = RBF`, `1 = SegWit`, `2 = Legacy`, `3 = Taproot`, `4 = P2A`,
+/// `5 = v3 / TRUC`, `6 = OP_RETURN`, `7 = Runes`, `8 = Inscriptions`,
+/// `9 = Multisig`, `10 = Notables`.
+pub const XRAY_PILL_COUNT: usize = 11;
+
+/// Live Mempool X-Ray counts with explicit inspection denominators so percentages
+/// stay honest even right after a cold server boot.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct XRaySummary {
+    /// Total unconfirmed transactions in the mirrored mempool.
+    pub total_txs: u64,
+    /// Transactions whose `RBF` / `SegWit` / `Legacy` metadata is known (`META_KNOWN`).
+    pub meta_known_txs: u64,
+    /// Transactions whose raw scripts & witness were parsed (`SCRIPT_PARSED`).
+    pub script_parsed_txs: u64,
+    /// Per-pill match counts ordered `0..XRAY_PILL_COUNT`.
+    pub counts: [u64; XRAY_PILL_COUNT],
+}
+
+/// Evaluate whether a transaction with `flags` satisfies ALL selected pills in
+/// `pill_mask` (multi-select AND intersection; empty mask matches everything).
+///
+/// Mirrors JS `txMatchesXRayMask` 1:1.
+pub const fn xray_matches(flags: u32, pill_mask: u32) -> bool {
+    if pill_mask == 0 {
+        return true;
+    }
+    if (pill_mask & (1 << 0)) != 0 && (flags & TxFlags::RBF) == 0 {
+        return false;
+    }
+    if (pill_mask & (1 << 1)) != 0 && (flags & TxFlags::SEGWIT) == 0 {
+        return false;
+    }
+    if (pill_mask & (1 << 2)) != 0
+        && ((flags & TxFlags::META_KNOWN) == 0
+            || (flags & TxFlags::SEGWIT) != 0)
+    {
+        return false;
+    }
+    if (pill_mask & (1 << 3)) != 0 && (flags & TxFlags::TAPROOT) == 0 {
+        return false;
+    }
+    if (pill_mask & (1 << 4)) != 0 && (flags & TxFlags::P2A) == 0 {
+        return false;
+    }
+    if (pill_mask & (1 << 5)) != 0 && (flags & TxFlags::V3_TRUC) == 0 {
+        return false;
+    }
+    if (pill_mask & (1 << 6)) != 0 && (flags & TxFlags::OP_RETURN) == 0 {
+        return false;
+    }
+    if (pill_mask & (1 << 7)) != 0 && (flags & TxFlags::RUNES) == 0 {
+        return false;
+    }
+    if (pill_mask & (1 << 8)) != 0 && (flags & TxFlags::INSCRIPTION) == 0 {
+        return false;
+    }
+    if (pill_mask & (1 << 9)) != 0 && (flags & TxFlags::MULTISIG) == 0 {
+        return false;
+    }
+    if (pill_mask & (1 << 10)) != 0 && (flags & TxFlags::NOTABLE_MASK) == 0 {
+        return false;
+    }
+    true
 }
 
 /// Classify `(fee, vsize)` into one of the 7 fixed canvas fee bands using exact
@@ -1516,6 +1630,90 @@ impl HeartbeatMirror {
             }
         }
         summary
+    }
+
+    /// Aggregate both the 7 fee bands and the 11 Mempool X-Ray counts in a
+    /// single linear pass over the mirrored mempool.
+    pub fn mempool_breakdown(&self) -> (FeeBandSummary, XRaySummary) {
+        let mut bands = FeeBandSummary::default();
+        let mut xray = XRaySummary {
+            total_txs: self.members.len() as u64,
+            ..XRaySummary::default()
+        };
+        for member in self.members.values() {
+            let tx = &member.tx;
+            let idx = fee_band_index(tx.fee, tx.vsize);
+            bands.bands[idx].tx_count += 1;
+            if let Some(v) = tx.vsize {
+                bands.bands[idx].vbytes =
+                    bands.bands[idx].vbytes.saturating_add(u64::from(v));
+            }
+            let f = tx.flags;
+            if (f & TxFlags::META_KNOWN) != 0 {
+                xray.meta_known_txs += 1;
+                if (f & TxFlags::RBF) != 0 {
+                    xray.counts[0] += 1;
+                }
+                if (f & TxFlags::SEGWIT) != 0 {
+                    xray.counts[1] += 1;
+                } else {
+                    xray.counts[2] += 1;
+                }
+            }
+            if (f & TxFlags::SCRIPT_PARSED) != 0 {
+                xray.script_parsed_txs += 1;
+            }
+            if (f & TxFlags::TAPROOT) != 0 {
+                xray.counts[3] += 1;
+            }
+            if (f & TxFlags::P2A) != 0 {
+                xray.counts[4] += 1;
+            }
+            if (f & TxFlags::V3_TRUC) != 0 {
+                xray.counts[5] += 1;
+            }
+            if (f & TxFlags::OP_RETURN) != 0 {
+                xray.counts[6] += 1;
+            }
+            if (f & TxFlags::RUNES) != 0 {
+                xray.counts[7] += 1;
+            }
+            if (f & TxFlags::INSCRIPTION) != 0 {
+                xray.counts[8] += 1;
+            }
+            if (f & TxFlags::MULTISIG) != 0 {
+                xray.counts[9] += 1;
+            }
+            if (f & TxFlags::NOTABLE_MASK) != 0 {
+                xray.counts[10] += 1;
+            }
+        }
+        (bands, xray)
+    }
+
+    /// Count transactions matching an optional Fee Band AND an X-Ray pill mask
+    /// (multi-select AND intersection), used for the live spotlight pill readout.
+    pub fn count_matching_spotlight(
+        &self,
+        band: Option<usize>,
+        xray_mask: u32,
+    ) -> u64 {
+        if band.is_none() && xray_mask == 0 {
+            return self.members.len() as u64;
+        }
+        let mut count = 0u64;
+        for member in self.members.values() {
+            let tx = &member.tx;
+            if let Some(b) = band {
+                if fee_band_index(tx.fee, tx.vsize) != b {
+                    continue;
+                }
+            }
+            if xray_matches(tx.flags, xray_mask) {
+                count += 1;
+            }
+        }
+        count
     }
 
     fn tick(&mut self) -> u64 {
@@ -3631,6 +3829,100 @@ mod tests {
                 tx_count: 2,
                 vbytes: 400
             }
+        );
+    }
+
+    #[test]
+    fn mempool_breakdown_and_xray_matches_respect_honesty_bits_and_and_intersection(
+    ) {
+        let make =
+            |seed: u8, fee: Option<u64>, vsize: Option<u32>, flags: u32| {
+                let mut t = CompactTx::pending(hex_id(seed), 100);
+                t.fee = fee;
+                t.vsize = vsize;
+                t.flags = flags;
+                t
+            };
+        let mut mirror = HeartbeatMirror::default();
+        mirror
+            .install_snapshot(base_snapshot(
+                1,
+                vec![
+                    // 1. Unenriched pending tx (META_KNOWN = 0) -> must NOT count as Legacy!
+                    make(1, None, None, TxFlags::NONE),
+                    // 2. Cold-boot RPC-only Legacy + RBF tx (META_KNOWN = 1, SCRIPT_PARSED = 0)
+                    make(
+                        2,
+                        Some(100),
+                        Some(200),
+                        TxFlags::from_mempool_meta(true, false),
+                    ),
+                    // 3. Full rawtx SegWit + Taproot + Runes + OP_RETURN + RBF
+                    make(
+                        3,
+                        Some(150),
+                        Some(200),
+                        TxFlags::from_mempool_meta(true, true)
+                            | TxFlags::SCRIPT_PARSED
+                            | TxFlags::TAPROOT
+                            | TxFlags::OP_RETURN
+                            | TxFlags::RUNES,
+                    ),
+                    // 4. Full rawtx SegWit + v3/TRUC + P2A + Multisig + Whale
+                    make(
+                        4,
+                        Some(600),
+                        Some(200),
+                        TxFlags::from_mempool_meta(false, true)
+                            | TxFlags::SCRIPT_PARSED
+                            | TxFlags::V3_TRUC
+                            | TxFlags::P2A
+                            | TxFlags::MULTISIG
+                            | TxFlags::WHALE,
+                    ),
+                    // 5. Full rawtx SegWit + Inscription + OP_RETURN
+                    make(
+                        5,
+                        Some(2_000),
+                        Some(200),
+                        TxFlags::from_mempool_meta(false, true)
+                            | TxFlags::SCRIPT_PARSED
+                            | TxFlags::INSCRIPTION
+                            | TxFlags::OP_RETURN,
+                    ),
+                ],
+            ))
+            .expect("install");
+
+        let (bands, xray) = mirror.mempool_breakdown();
+        assert_eq!(bands.bands[0].tx_count, 1);
+        assert_eq!(bands.bands[1].tx_count, 2);
+        assert_eq!(xray.total_txs, 5);
+        assert_eq!(xray.meta_known_txs, 4);
+        assert_eq!(xray.script_parsed_txs, 3);
+        assert_eq!(xray.counts[0], 2); // RBF
+        assert_eq!(xray.counts[1], 3); // SegWit
+        assert_eq!(xray.counts[2], 1); // Legacy (excludes pending tx #1!)
+        assert_eq!(xray.counts[3], 1); // Taproot
+        assert_eq!(xray.counts[4], 1); // P2A
+        assert_eq!(xray.counts[5], 1); // v3/TRUC
+        assert_eq!(xray.counts[6], 2); // OP_RETURN
+        assert_eq!(xray.counts[7], 1); // Runes
+        assert_eq!(xray.counts[8], 1); // Inscriptions
+        assert_eq!(xray.counts[9], 1); // Multisig
+        assert_eq!(xray.counts[10], 1); // Notables
+
+        // Multi-pill AND intersection: OP_RETURN (bit 6) + Inscriptions (bit 8) -> only tx #5.
+        assert_eq!(
+            mirror.count_matching_spotlight(None, (1 << 6) | (1 << 8)),
+            1
+        );
+        // Composable Fee Band (< 1, band 1) + Runes (bit 7) -> only tx #3.
+        assert_eq!(mirror.count_matching_spotlight(Some(1), 1 << 7), 1);
+        // v3/TRUC (bit 5) + P2A (bit 4) -> only tx #4.
+        assert_eq!(
+            mirror.count_matching_spotlight(None, (1 << 5) | (1 << 4)),
+            1
         );
     }
 }

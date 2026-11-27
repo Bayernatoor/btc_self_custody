@@ -86,6 +86,8 @@ pub struct ParsedTx {
     pub max_output_value: u64,
     /// First OP_RETURN output decoded as readable ASCII, if any.
     pub op_return_text: Option<String>,
+    /// Protocol & script X-Ray bitmask (`TxFlags::META_KNOWN | SCRIPT_PARSED | ...`).
+    pub protocol_flags: u32,
 }
 
 /// Individual classification flags computed by [`classify_notable`].
@@ -300,6 +302,7 @@ mod tests {
             has_inscription: false,
             max_output_value: 40_000,
             op_return_text: None,
+            protocol_flags: 0,
         }
     }
 
@@ -807,6 +810,7 @@ mod tests {
             has_inscription: false,
             max_output_value: 8_481_168,
             op_return_text: None,
+            protocol_flags: 0,
         };
         assert_eq!(primary(&tx, 2_000, 3.1, 100_000.0), None);
     }
@@ -823,6 +827,7 @@ mod tests {
             has_inscription: false,
             max_output_value: 15_929,
             op_return_text: None,
+            protocol_flags: 0,
         };
         assert_eq!(primary(&tx, 3_000, 0.5, 100_000.0), Some("fan_out"));
     }
@@ -840,6 +845,7 @@ mod tests {
             has_inscription: false,
             max_output_value: 47_806_688,
             op_return_text: None,
+            protocol_flags: 0,
         };
         assert_eq!(primary(&tx, 5_000, 0.17, 100_000.0), Some("consolidation"));
     }

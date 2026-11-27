@@ -274,3 +274,137 @@ async fn polled_seed_unblocks_stalled_block_ids_and_fees_waiters() {
 
     server.abort();
 }
+
+#[tokio::test]
+async fn rawtx_hex_batch_and_unparsed_script_backfill_round_trip() {
+    use crate::stats::heartbeat_sync::{TxFlags, TxMetadataHydration};
+
+    let tx_ok = "aa".repeat(32);
+    let tx_miss = "bb".repeat(32);
+    let tx_bad_hex = "cc".repeat(32);
+    let tx_ok_srv = tx_ok.clone();
+    let tx_bad_srv = tx_bad_hex.clone();
+
+    let app = Router::new().route(
+        "/",
+        post(move |Json(batch): Json<Vec<Value>>| {
+            let ok_id = tx_ok_srv.clone();
+            let bad_id = tx_bad_srv.clone();
+            async move {
+                let replies: Vec<Value> = batch
+                    .into_iter()
+                    .map(|req| {
+                        let id = req["id"].clone();
+                        let txid = req["params"][0].as_str().unwrap_or("");
+                        if txid == ok_id {
+                            json!({ "id": id, "result": "010203ff", "error": null })
+                        } else if txid == bad_id {
+                            json!({ "id": id, "result": "zz_not_hex", "error": null })
+                        } else {
+                            json!({ "id": id, "result": null, "error": { "code": -5, "message": "not found" } })
+                        }
+                    })
+                    .collect();
+                Json(replies)
+            }
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    let rpc = BitcoinRpc::new(format!("http://{addr}"), "u".into(), "p".into());
+    let batch_res = rpc
+        .get_raw_transactions_hex_batch(&[
+            tx_ok.clone(),
+            tx_miss.clone(),
+            tx_bad_hex.clone(),
+        ])
+        .await
+        .expect("batch rpc succeeded");
+    assert_eq!(batch_res.len(), 3);
+    assert_eq!(
+        batch_res[0],
+        (tx_ok.clone(), Some(vec![0x01, 0x02, 0x03, 0xff]))
+    );
+    assert_eq!(batch_res[1], (tx_miss.clone(), None));
+    assert_eq!(batch_res[2], (tx_bad_hex.clone(), None));
+
+    // Verify `unparsed_script_txids` picks only fee-enriched unparsed txs & skips excluded.
+    let store = HeartbeatStore::new();
+    store.install_checkpoint(
+        &[&tx_ok, &tx_miss, &tx_bad_hex],
+        true,
+        1_700_000_000,
+    );
+    store.hydrate_details(&[
+        TxMetadataHydration {
+            txid: tx_ok.clone(),
+            first_seen: Some(1_700_000_000),
+            fee: Some(200),
+            vsize: Some(140),
+            value: None,
+            flags: TxFlags::META_KNOWN | TxFlags::SEGWIT,
+            op_return_text: None,
+        },
+        TxMetadataHydration {
+            txid: tx_miss.clone(),
+            first_seen: Some(1_700_000_001),
+            fee: Some(300),
+            vsize: Some(140),
+            value: Some(10_000),
+            flags: TxFlags::META_KNOWN | TxFlags::SCRIPT_PARSED,
+            op_return_text: None,
+        },
+        // tx_bad_hex has no fee/vsize yet -> excluded until fee-enriched
+    ]);
+    let empty = std::collections::HashSet::new();
+    assert_eq!(store.unparsed_script_txids(10, &empty), vec![tx_ok.clone()]);
+    let excluded: std::collections::HashSet<String> =
+        [tx_ok.clone()].into_iter().collect();
+    assert!(store.unparsed_script_txids(10, &excluded).is_empty());
+
+    // Verify SQLite `update_mempool_tx_flags_batch` ORs flags and preserves existing values.
+    let mut conn = rusqlite::Connection::open_in_memory().unwrap();
+    db::init_schema(&conn).unwrap();
+    db::insert_mempool_tx(
+        &conn,
+        &db::MempoolTxInsert {
+            txid: &tx_ok,
+            fee: 200,
+            vsize: 140,
+            value: 0,
+            first_seen: 1_700_000_000,
+            tx_flags: TxFlags::META_KNOWN | TxFlags::SEGWIT,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let updated = db::update_mempool_tx_flags_batch(
+        &mut conn,
+        &[(
+            tx_ok.clone(),
+            55_000,
+            TxFlags::SCRIPT_PARSED | TxFlags::TAPROOT | TxFlags::OP_RETURN,
+            Some("hello".to_string()),
+        )],
+    )
+    .unwrap();
+    assert_eq!(updated, 1);
+    let rows = db::query_recent_mempool_txs(&conn, 0, 10).unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].value, 55_000);
+    assert!(TxFlags::contains(
+        rows[0].tx_flags,
+        TxFlags::META_KNOWN
+            | TxFlags::SEGWIT
+            | TxFlags::SCRIPT_PARSED
+            | TxFlags::TAPROOT
+            | TxFlags::OP_RETURN
+    ));
+    assert_eq!(rows[0].op_return_text.as_deref(), Some("hello"));
+
+    server.abort();
+}
