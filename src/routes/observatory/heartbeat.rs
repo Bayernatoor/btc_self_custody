@@ -1909,13 +1909,13 @@ pub fn HeartbeatPage() -> impl IntoView {
                 // - lg+: 1 sleek row (mempool + tx/s | compact control dock | Next block fee)
                 // - <lg: 1 clean single-row control strip + slim mempool/fee strip below
                 <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-1.5 lg:gap-3 px-2.5 sm:px-3.5 py-1.5 border-t border-white/10 bg-[#0a1929]/65">
-                    // Mempool total + prominent live 60s tx/s badge (left on lg+, row 2 left on <lg)
-                    <div class="order-2 lg:order-1 flex items-center justify-between lg:justify-start gap-2 text-xs sm:text-sm text-[#00e676] font-mono tabular-nums">
-                        <span class="whitespace-nowrap inline-flex items-center gap-2">
+                    // Mempool total + prominent live 60s tx/s badge (left on lg+, wraps cleanly on narrow phones)
+                    <div class="order-2 lg:order-1 flex flex-wrap items-center justify-between lg:justify-start gap-x-2 gap-y-1 text-[11px] sm:text-xs lg:text-sm text-[#00e676] font-mono tabular-nums min-w-0">
+                        <span class="whitespace-nowrap inline-flex items-center gap-1.5 sm:gap-2">
                             <span>{mempool_display}</span>
                             {move || format_arrival_rate(arrival_rate.get()).map(|rate_str| view! {
                                 <span
-                                    class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-[#38bdf8]/15 border border-[#38bdf8]/45 text-xs sm:text-sm font-bold text-[#7dd3fc] shadow-sm"
+                                    class="inline-flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 rounded-md bg-[#38bdf8]/15 border border-[#38bdf8]/45 text-[11px] sm:text-xs lg:text-sm font-bold text-[#7dd3fc] shadow-sm"
                                     data-tip="Rolling 60-second live mempool admission rate observed by my node."
                                 >
                                     <span class="w-1.5 h-1.5 rounded-full bg-[#38bdf8] animate-pulse shrink-0"></span>
@@ -2575,29 +2575,29 @@ fn VitalTile(
             data-tip=tip.unwrap_or("")
             tabindex=if tip.is_some() { "0" } else { "-1" }
         >
-            <span class="text-xs text-white/80 font-mono font-semibold uppercase tracking-wider">{label}</span>
+            <span class="text-[11px] xl:text-xs text-white/80 font-mono font-semibold uppercase tracking-wider">{label}</span>
             <div class="flex flex-wrap items-baseline gap-x-1 gap-y-0">
                 <span
-                    class="text-lg sm:text-3xl font-mono font-bold tabular-nums"
+                    class="text-lg sm:text-xl xl:text-3xl font-mono font-bold tabular-nums"
                     style=move || format!("color: {}", color.get())
                 >
                     {value}
                 </span>
                 <span
-                    class="text-xs font-mono font-medium"
+                    class="text-[11px] xl:text-xs font-mono font-medium"
                     style=move || format!("color: {}cc", color.get())
                 >
                     {unit}
                 </span>
             </div>
             <span
-                class="text-xs font-mono font-medium truncate"
+                class="text-[11px] xl:text-xs font-mono font-medium truncate"
                 style=move || format!("color: {}", color.get())
             >
                 {status}
             </span>
             {subtitle.map(|sub| view! {
-                <span class="text-xs text-white/80 font-mono">{sub}</span>
+                <span class="text-[11px] xl:text-xs text-white/80 font-mono">{sub}</span>
             })}
             {meter.map(|m| view! {
                 {move || m.get().map(|tm| {
@@ -2611,7 +2611,7 @@ fn VitalTile(
                                     style=format!("width:{clamped:.1}%;background:{}", tm.color)
                                 ></div>
                             </div>
-                            <span class="block text-xs text-white/80 font-mono tabular-nums truncate" title=cap_title>
+                            <span class="block text-[11px] xl:text-xs text-white/80 font-mono tabular-nums truncate" title=cap_title>
                                 {tm.caption}
                             </span>
                         </div>

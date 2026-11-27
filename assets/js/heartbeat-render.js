@@ -804,7 +804,7 @@ function runBlockReveal(_hb, dt, now, w) {
 // reveal). Armed by placeHistoryTxs (heartbeat-sse.js), runs from drawFrame, aborts
 // on any user takeover (autoFollow drops / drag / pinch / control press).
 var INTRO_HOLD_SECS = 3.5;    // let the raining brick cascade finish settling before zooming in
-var INTRO_ZOOM_SECS = 2.5;    // slow zoom to the head
+var INTRO_ZOOM_SECS = 3.2;    // smooth exponential zoom to the head across wide fit ratios
 var INTRO_TARGET_ZOOM = 1.6;  // first-load resting zoom (5 * 1.6 = 8px exact column pitch)
 function runIntro(_hb, dt, now, w) {
     var it = _hb._intro;
@@ -814,13 +814,21 @@ function runIntro(_hb, dt, now, w) {
     }
     var elapsed = now - it.start;
     if (it.phase === 'hold') {
-        // Keep the whole mempool framed (head at 0.85 at the fit zoom) while bricks
-        // stream in; virtualX advances live, so track it.
+        // Keep the whole mempool framed while bricks stream in; wait until both
+        // INTRO_HOLD_SECS has elapsed and any chunked snapshot placement has
+        // finished on slower mobile devices before starting the zoom glide.
         _hb.viewOffset = _hb.virtualX - (w * HEAD_POSITION_FRAC) / _hb.zoom;
-        if (elapsed >= INTRO_HOLD_SECS) { it.phase = 'zoom'; it.start = now; it.fromZoom = _hb.zoom; }
+        if (elapsed >= INTRO_HOLD_SECS && !_hb._pendingSnapshot) {
+            it.phase = 'zoom';
+            it.start = now;
+            it.fromZoom = _hb.zoom;
+        }
     } else { // zoom
-        var t = smoothstep(elapsed / INTRO_ZOOM_SECS);
-        _hb.zoom = it.fromZoom + (INTRO_TARGET_ZOOM - it.fromZoom) * t;
+        // Use exponential zoom interpolation (`lerpZoomExp`) + `smootherstep` so
+        // wide mobile/desktop ratios (e.g. 0.04x -> 1.6x = 40x) glide smoothly
+        // at constant perceptual speed instead of slamming/whipping into the tip.
+        var t = smootherstep(elapsed / INTRO_ZOOM_SECS);
+        _hb.zoom = lerpZoomExp(it.fromZoom, INTRO_TARGET_ZOOM, t);
         _hb.viewOffset = _hb.virtualX - (w * HEAD_POSITION_FRAC) / _hb.zoom;
         if (elapsed >= INTRO_ZOOM_SECS) {
             _hb.zoom = INTRO_TARGET_ZOOM;
