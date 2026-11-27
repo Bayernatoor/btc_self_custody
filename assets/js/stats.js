@@ -1572,9 +1572,20 @@
             activeEl = null;
         }
 
+        function stickyTopClearance() {
+            var nav = document.querySelector('header, nav');
+            if (!nav) return 72;
+            var r = nav.getBoundingClientRect();
+            return r.bottom > 0 ? Math.max(72, Math.ceil(r.bottom) + 8) : 72;
+        }
+
         function position(el) {
             if (window.innerWidth <= 640) return; // mobile uses fixed CSS positioning
             var rect = el.getBoundingClientRect();
+            if (rect.width === 0 && rect.height === 0) {
+                hide();
+                return;
+            }
             var tipW = tip.offsetWidth;
             var tipH = tip.offsetHeight;
             var targetCx = rect.left + rect.width / 2;
@@ -1582,9 +1593,10 @@
             // Clamp horizontally inside viewport
             if (left < 12) left = 12;
             if (left + tipW > window.innerWidth - 12) left = window.innerWidth - 12 - tipW;
-            // Flip below when opening upward would collide with the sticky navbar
+            // Flip below when opening upward would collide with the sticky navbar / advisory banner
+            var minTop = stickyTopClearance();
             var top = rect.top - tipH - 10;
-            var placeBelow = top < 72 && (rect.bottom + 10 + tipH <= window.innerHeight - 12);
+            var placeBelow = top < minTop && (rect.bottom + 10 + tipH <= window.innerHeight - 12);
             if (placeBelow) {
                 top = rect.bottom + 10;
                 tip.classList.add('tip-below');
@@ -1607,6 +1619,7 @@
         }
 
         document.addEventListener('mouseenter', function(e) {
+            if (activeEl && !activeEl.isConnected) hide();
             var el = findTip(e);
             if (el) show(el);
         }, true);
@@ -1615,6 +1628,14 @@
             var el = findTip(e);
             if (el && el === activeEl) hide();
         }, true);
+
+        document.addEventListener('pointermove', function(e) {
+            if (!activeEl) return;
+            if (!activeEl.isConnected) { hide(); return; }
+            if (e.target && e.target.closest && !e.target.closest('[data-tip]:not([data-tip=""])')) {
+                hide();
+            }
+        }, { passive: true });
 
         document.addEventListener('focusin', function(e) {
             var el = findTip(e);
@@ -1626,11 +1647,16 @@
             if (el && el === activeEl) hide();
         }, true);
 
-        // Mobile: tap to show, tap elsewhere to hide
+        document.addEventListener('keydown', function(e) {
+            if (e && e.key === 'Escape' && activeEl) hide();
+        }, true);
+
+        // Mobile: tap to show on informational elements (skip interactive buttons/links
+        // so tapping a Fee Band spotlight or Copy button doesn't also pop a bottom toast)
         if (isMobile) {
             document.addEventListener('touchstart', function(e) {
                 var el = findTip(e);
-                if (el) {
+                if (el && el.tagName !== 'BUTTON' && el.tagName !== 'A') {
                     if (activeEl === el) { hide(); return; }
                     show(el);
                 } else {
@@ -1655,12 +1681,17 @@
             }, 0);
         }, true);
 
-        // Reposition on scroll
+        // Reposition or hide on any scroll (capture: true catches inner scrollable panels)
         document.addEventListener('scroll', function() {
             if (!activeEl) return;
             if (!activeEl.isConnected) { hide(); return; }
+            var r = activeEl.getBoundingClientRect();
+            if (r.bottom < 0 || r.top > window.innerHeight || (r.width === 0 && r.height === 0)) {
+                hide();
+                return;
+            }
             position(activeEl);
-        }, { passive: true });
+        }, { passive: true, capture: true });
     })();
 
 })();

@@ -850,6 +850,7 @@ export function computeLiveAdvanceRate(_hb, liveSeg) {
     if (!_hb || !liveSeg || liveSeg.type !== 'flatline' || liveSeg.x_end !== null) return 0;
     if (_hb._viewMode === 'history' || _hb._reveal) return 0;
     if (_hb._v2ConnState === 'disconnected' || _hb._v2ConnState === 'syncing') return 0;
+    if (_hb._lastSseEventTs > 0 && ((Date.now() / 1000) - _hb._lastSseEventTs) > 90) return 0;
     var tipGx = Math.floor(_hb.virtualX / 5) * 5;
     var minTipGx = Math.ceil(liveSeg.x_start / 5) * 5;
     var tipSum = 0;
@@ -2479,8 +2480,8 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
                     ctx.shadowBlur = 0;
 
                     // Outline at 4x+ zoom: subtle dashed slate outline for fee-pending bricks,
-                    // crisp dark outline for priced bricks.
-                    if (zoom >= 4 && !blip.notableType) {
+                    // crisp dark outline for priced bricks (suppressed when dimmed by spotlight).
+                    if (!dimmedZoom && zoom >= 4 && !blip.notableType) {
                         if (blip.feePending) {
                             ctx.save();
                             var pendLw = Math.max(1, lw);

@@ -142,24 +142,56 @@ export function isSoundEnabled() {
     return _enabled;
 }
 
-// Browsers suspend AudioContext until a user gesture. Because block audio
-// defaults ON, silently create/resume the context on the visitor's first
-// pointer or keyboard interaction so subsequent blocks play cleanly.
+// Browsers suspend AudioContext until a valid user activation gesture
+// (click / touchend / keydown; iOS Safari rejects pointerdown). Keep
+// listeners active until `ctx.state === 'running'` so a scroll or tap on
+// iOS never burns a `{ once: true }` listener without unlocking audio.
 export function unlockAudioOnGesture() {
     if (_unlockAttached || !_enabled || typeof window === 'undefined' || typeof window.addEventListener !== 'function') {
         return;
     }
     _unlockAttached = true;
-    var onGesture = function () {
-        if (!_enabled) return;
-        var ctx = ensureContext();
-        safeResume(ctx);
+    var events = ['click', 'touchend', 'keydown'];
+    var detach = function () {
+        if (!_unlockAttached) return;
+        _unlockAttached = false;
+        for (var i = 0; i < events.length; i++) {
+            try {
+                window.removeEventListener(events[i], onGesture, { passive: true });
+            } catch (e) {
+                try { window.removeEventListener(events[i], onGesture, false); } catch (e2) {}
+            }
+        }
     };
-    try {
-        window.addEventListener('pointerdown', onGesture, { once: true, passive: true });
-        window.addEventListener('keydown', onGesture, { once: true, passive: true });
-    } catch (e) {
-        window.addEventListener('pointerdown', onGesture, true);
+    var onGesture = function () {
+        if (!_enabled) {
+            detach();
+            return;
+        }
+        var ctx = ensureContext();
+        if (!ctx) {
+            detach();
+            return;
+        }
+        if (ctx.state === 'running') {
+            detach();
+            return;
+        }
+        try {
+            var p = ctx.resume();
+            if (p && typeof p.then === 'function') {
+                p.then(function () {
+                    if (ctx.state === 'running') detach();
+                }).catch(function () {});
+            }
+        } catch (e) {}
+    };
+    for (var i = 0; i < events.length; i++) {
+        try {
+            window.addEventListener(events[i], onGesture, { passive: true });
+        } catch (e) {
+            window.addEventListener(events[i], onGesture, false);
+        }
     }
 }
 
@@ -275,6 +307,10 @@ function safeResume(ctx) {
 // `_lastCueAt`, so a real block arriving within 3.5s is never swallowed.
 export function playBlockCue(blockHash, isConfirmation) {
     if (!_enabled) return;
+    // Never create an AudioContext or queue oscillators on a suspended clock
+    // before the user's first activation gesture; otherwise every missed block
+    // chime would fire in a simultaneous burst the moment the user clicks.
+    if (!isConfirmation && (!_ctx || _ctx.state !== 'running')) return;
     var now = Date.now();
     if (!isConfirmation && now - _lastCueAt < MIN_CUE_GAP_MS) return;
     if (blockHash) {
@@ -290,6 +326,7 @@ export function playBlockCue(blockHash, isConfirmation) {
         var ctx = ensureContext();
         if (!ctx || !_bus || !_dry) return;
         safeResume(ctx);
+        if (!isConfirmation && ctx.state !== 'running') return;
         var t0 = ctx.currentTime + 0.015;
 
         // S1: "lub"

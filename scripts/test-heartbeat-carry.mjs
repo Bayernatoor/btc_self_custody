@@ -1811,6 +1811,12 @@ runScenario('20. Disconnected virtualX freeze, resync gap backfill & quiet recov
     s20._v2ConnState = 'syncing';
     assert(render.computeLiveAdvanceRate(s20, seg20a) === 0, 'rate must be 0 while syncing');
 
+    // Silent stale socket (>90s since last SSE event) also freezes virtualX.
+    s20._v2ConnState = 'live';
+    s20._lastSseEventTs = (Date.now() / 1000) - 120;
+    assert(render.computeLiveAdvanceRate(s20, seg20a) === 0, 'rate must be 0 while SSE silent >90s');
+    s20._lastSseEventTs = Date.now() / 1000;
+
     // Quiet live tip (avgTipH = 0) -> 0.22 * 5.0 = 1.1 px/s.
     s20._v2ConnState = 'live';
     const quietRate = render.computeLiveAdvanceRate(s20, seg20a);
@@ -1856,6 +1862,11 @@ runScenario('20. Disconnected virtualX freeze, resync gap backfill & quiet recov
     assert(
         earlyBlip.gridX < lateBlip.gridX,
         `resync must preserve chronological order (early=${earlyBlip.gridX} < late=${lateBlip.gridX})`
+    );
+    // And trailing empty void must be compacted rather than turning 150 txs into sparse dust.
+    assert(
+        state.getState().virtualX < lastInitGx + 500,
+        `expected resync to compact unused gap, virtualX=${state.getState().virtualX} (lastInitGx=${lastInitGx})`
     );
 
     // 20c. Quiet 20m hidden tab with only 20 arrivals must NOT carve a 1,500px empty desert.

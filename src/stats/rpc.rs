@@ -2231,7 +2231,9 @@ impl BitcoinRpc {
             let mut sum: u64 = 0;
             for tx in txs.iter().skip(1) {
                 let fee_btc = tx["fee"].as_f64()?;
-                if !fee_btc.is_finite() || fee_btc < 0.0 {
+                if !fee_btc.is_finite()
+                    || !(0.0..=21_000_000.0).contains(&fee_btc)
+                {
                     return None;
                 }
                 sum =
@@ -2239,7 +2241,8 @@ impl BitcoinRpc {
             }
             Some(sum)
         });
-        let miner = (!block.miner.is_empty()).then(|| block.miner.clone());
+        let miner = (!block.miner.is_empty() && block.miner != "Unknown")
+            .then(|| block.miner.clone());
         if let Some(txs) = raw["tx"].as_array_mut() {
             for tx in txs {
                 *tx =
@@ -2491,6 +2494,21 @@ impl BitcoinRpc {
     ) -> Result<Value, StatsError> {
         self.call("getrawtransaction", &[json!(txid), json!(true)])
             .await
+    }
+
+    /// Fetch a transaction inside a specific block using getrawtransaction's
+    /// 3rd `blockhash` argument. Works immediately on block connect even when
+    /// `txindex=0` or while `txindex` is still catching up asynchronously.
+    pub async fn get_raw_transaction_in_block(
+        &self,
+        txid: &str,
+        blockhash: &str,
+    ) -> Result<Value, StatsError> {
+        self.call(
+            "getrawtransaction",
+            &[json!(txid), json!(true), json!(blockhash)],
+        )
+        .await
     }
 
     /// Fetch BTC/USD price from mempool.space API.

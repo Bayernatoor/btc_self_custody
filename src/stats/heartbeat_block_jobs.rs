@@ -443,15 +443,27 @@ impl BlockJob {
         }
     }
 
+    async fn wait_retired(&self) {
+        loop {
+            let notified = self.finished.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+            if self.retired.load(Ordering::Acquire) {
+                return;
+            }
+            notified.await;
+        }
+    }
+
     pub(super) async fn accepted_ids(
         &self,
         rpc: &BitcoinRpc,
     ) -> Result<Arc<BlockTxids>, StatsError> {
         let hash = &self.hash;
-        let ids = if let Some(cached) =
+        let (ids, from_polled) = if let Some(cached) =
             self.ids.get().or_else(|| self.polled_ids.get())
         {
-            Arc::clone(cached)
+            (Arc::clone(cached), false)
         } else {
             tokio::select! {
                 res = self.ids.get_or_try_init(|| async {
@@ -460,13 +472,18 @@ impl BlockJob {
                     })
                     .await
                     .map(Arc::new)
-                }) => Arc::clone(res?),
-                polled = self.wait_polled_ids() => {
-                    let _ = self.ids.set(Arc::clone(&polled));
-                    polled
+                }) => (Arc::clone(res?), false),
+                polled = self.wait_polled_ids() => (polled, true),
+                () = self.wait_retired() => {
+                    return Err(StatsError::Rpc("block job retired".into()));
                 }
             }
         };
+        // Cache `polled` into `self.ids` only AFTER `tokio::select!` has dropped
+        // the losing `get_or_try_init` future and released its OnceCell permit.
+        if from_polled {
+            let _ = self.ids.set(Arc::clone(&ids));
+        }
         self.check_height(rpc, ids.height).await?;
         Ok(ids)
     }
@@ -542,7 +559,8 @@ pub(crate) fn observe_block(
                 .heartbeat_blocks
                 .publish_inclusion_if_current(&state, &job, &info);
             // Resolve mining pool from the poller seed if already available, or
-            // from the coinbase tx in parallel with `getblockstats`, bounded to
+            // from the coinbase tx in this exact block (`blockhash` avoids
+            // async txindex lag and works even with `txindex=0`), bounded to
             // 500ms so it never delays block reveal.
             let miner = if let Some(m) = job.polled_miner.get() {
                 Some(m.clone())
@@ -550,14 +568,17 @@ pub(crate) fn observe_block(
                 match info.txids.first() {
                     Some(cb_txid) => tokio::time::timeout(
                         std::time::Duration::from_millis(500),
-                        state.rpc.get_raw_transaction(cb_txid),
+                        state.rpc.get_raw_transaction_in_block(cb_txid, hash),
                     )
                     .await
                     .ok()
                     .and_then(Result::ok)
                     .and_then(|tx| {
-                        tx["vin"][0]["coinbase"].as_str().map(|hex| {
-                            crate::stats::classifier::identify_miner(hex)
+                        tx["vin"][0]["coinbase"].as_str().and_then(|hex| {
+                            let name =
+                                crate::stats::classifier::identify_miner(hex);
+                            (!name.is_empty() && name != "Unknown")
+                                .then_some(name)
                         })
                     }),
                     None => None,
@@ -588,11 +609,15 @@ pub(crate) fn observe_block(
                     );
                     Ok(polled)
                 }
+                () = job.wait_retired() => {
+                    Err(StatsError::Rpc("block job retired".into()))
+                }
             }
         };
         let (ids_res, fees) = tokio::join!(ids, fees);
         let result = async {
             let ((info, miner), total_fees) = (ids_res?, fees?);
+            let miner = miner.or_else(|| job.polled_miner.get().cloned());
             job.check_height(&state.rpc, info.height).await?;
             state.heartbeat_blocks.if_current(&job, || {
                 state.heartbeat_store.apply_block_details(CanonicalBlock {

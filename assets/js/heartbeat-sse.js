@@ -1002,12 +1002,22 @@ function _hbV2InstallSnapshotInner(_hb, payload, isResync) {
                 }
             }
             var startGx;
-            if (newTxs.length > 100) {
-                if (lastBrickGx >= minGx && (headGx - lastBrickGx) > 20) {
-                    startGx = lastBrickGx + 5;
+            var hasEmptyGap = lastBrickGx >= minGx && (headGx - lastBrickGx) > 20;
+            if (hasEmptyGap) {
+                startGx = lastBrickGx + 5;
+                var gapCols = Math.max(1, Math.floor((headGx - startGx) / 5));
+                var desiredCols = Math.min(gapCols, Math.max(targetCols * 2, 20));
+                if (neededSpan > (headGx - startGx)) {
+                    _hb.virtualX = startGx + neededSpan + 10;
+                    headGx = Math.floor(_hb.virtualX / 5) * 5;
                 } else {
-                    startGx = headGx + 5;
+                    // Compact unused trailing void when no bricks exist past lastBrickGx
+                    // so small resyncs (e.g. 80-120 txs over a wide gap) don't turn into dust.
+                    headGx = startGx + desiredCols * 5;
+                    _hb.virtualX = headGx + 10;
                 }
+            } else if (newTxs.length > 100) {
+                startGx = headGx + 5;
                 _hb.virtualX = Math.max(_hb.virtualX, startGx + neededSpan + 10);
                 headGx = Math.floor(_hb.virtualX / 5) * 5;
             } else {
@@ -1022,7 +1032,7 @@ function _hbV2InstallSnapshotInner(_hb, payload, isResync) {
                 var ntx = newTxs[ai];
                 var gx;
                 var nAge = ntx.first_seen > 0 ? (nowSec - ntx.first_seen) : -1;
-                if (newTxs.length <= 100 && nAge >= 0 && nAge <= 300) {
+                if (!hasEmptyGap && newTxs.length <= 100 && nAge >= 0 && nAge <= 300) {
                     var ageCols = Math.round((nAge * FLATLINE_PX_PER_SEC) / 5);
                     var jit = Math.round(txidSkylineOffset(ntx.txid) * 1.5);
                     gx = Math.max(minGx, Math.min(headGx, headGx - (ageCols + jit) * 5));
@@ -2136,7 +2146,7 @@ export function hbV2SetPinnedTx(txidOrNull) {
 
 export function hbV2FocusBlockHeight(height) {
     var _hb = getState();
-    if (!_hb || !_hb.timeline || !height) return false;
+    if (!_hb || !_hb.timeline || height == null || height < 0) return false;
     var target = null;
     for (var i = _hb.timeline.length - 1; i >= 0; i--) {
         var seg = _hb.timeline[i];

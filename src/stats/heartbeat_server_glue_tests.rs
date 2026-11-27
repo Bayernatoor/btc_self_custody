@@ -240,6 +240,10 @@ async fn polled_seed_unblocks_stalled_block_ids_and_fees_waiters() {
     let ids = ids_res.expect("accepted_ids resolved via polled seed");
     assert_eq!(ids.height, 977_709);
     assert_eq!(ids.txids, vec![cb_txid, spend_txid]);
+    assert!(
+        job.ids.get().is_some(),
+        "polled ids must be cached in OnceCell after select! drops get_or_try_init"
+    );
     assert_eq!(fees_val, 42_500);
     assert_eq!(
         job.polled_miner.get().map(String::as_str),
@@ -250,6 +254,23 @@ async fn polled_seed_unblocks_stalled_block_ids_and_fees_waiters() {
         "expected sub-second wakeup, took {:?}",
         started.elapsed()
     );
+
+    // Retiring a stalled job unblocks `accepted_ids` immediately instead of hanging a permit.
+    let stalled_hash = "66".repeat(32);
+    let stalled_job = jobs.entry(&stalled_hash).unwrap();
+    let jobs_retire = Arc::clone(&jobs);
+    let retire_hash = stalled_hash.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(25)).await;
+        jobs_retire.disconnect(&retire_hash);
+    });
+    let retire_res = tokio::time::timeout(
+        Duration::from_secs(1),
+        stalled_job.accepted_ids(&rpc),
+    )
+    .await
+    .expect("retired job must abort stalled RPC immediately");
+    assert!(retire_res.is_err());
 
     server.abort();
 }

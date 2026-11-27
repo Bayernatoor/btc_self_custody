@@ -36,7 +36,9 @@ use crate::stats::heartbeat_client::{
     parse_initial_search_param, HeartbeatClient, HeartbeatClientSignals,
     InitialSearchParam,
 };
-use crate::stats::heartbeat_sync::{FeeBandStat, FeeBandSummary};
+use crate::stats::heartbeat_sync::{
+    FeeBandStat, FeeBandSummary, QueuePosition,
+};
 use crate::stats::types::HofCategory;
 
 // ---------------------------------------------------------------------------
@@ -163,6 +165,9 @@ pub fn HeartbeatPage() -> impl IntoView {
     #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
     let (coverage_note, set_coverage_note) = signal(Option::<String>::None);
     let (pinned_tx, set_pinned_tx) = signal(Option::<PinnedTxView>::None);
+    #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
+    let (pinned_queue, set_pinned_queue) =
+        signal(Option::<QueuePosition>::None);
     #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
     let (pending_block, set_pending_block) =
         signal(Option::<PendingBlockBanner>::None);
@@ -377,6 +382,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                     set_coverage_note,
                     set_pinned_tx,
                     pinned_tx,
+                    set_pinned_queue,
                     set_search_feedback,
                     set_sse_height,
                     sse_height,
@@ -1118,7 +1124,9 @@ pub fn HeartbeatPage() -> impl IntoView {
                                                         let _ = win.navigator().clipboard().write_text(&url);
                                                         set_copied_history_link.set(true);
                                                         leptos::prelude::set_timeout(
-                                                            move || set_copied_history_link.set(false),
+                                                            move || {
+                                                                let _ = set_copied_history_link.try_set(false);
+                                                            },
                                                             std::time::Duration::from_millis(1500),
                                                         );
                                                     }
@@ -1227,7 +1235,6 @@ pub fn HeartbeatPage() -> impl IntoView {
                                 let status_for_header = tx.status.clone();
                                 let status_for_footer = tx.status.clone();
                                 let is_unconfirmed = matches!(tx.status, PinnedTxStatus::Unconfirmed);
-                                let queue_position = tx.queue_position;
                                 let deep = tx.deep.clone();
                                 let deep_loading = tx.deep_loading;
 
@@ -1396,7 +1403,9 @@ pub fn HeartbeatPage() -> impl IntoView {
                                                                     let _ = clipboard.write_text(&txid_copy);
                                                                     set_copied_txid.set(true);
                                                                     leptos::prelude::set_timeout(
-                                                                        move || set_copied_txid.set(false),
+                                                                        move || {
+                                                                            let _ = set_copied_txid.try_set(false);
+                                                                        },
                                                                         std::time::Duration::from_millis(1500),
                                                                     );
                                                                 }
@@ -1408,20 +1417,25 @@ pub fn HeartbeatPage() -> impl IntoView {
                                                 </div>
                                             </div>
 
-                                            // Queue position hero readout while unconfirmed
+                                            // Queue position hero readout while unconfirmed.
+                                            // Reads `pinned_queue` inside its own reactive scope so 2.5s
+                                            // queue refreshes update only these text nodes without remounting
+                                            // the panel, resetting I/O scroll, or detaching active tooltips.
                                             {is_unconfirmed.then(|| {
-                                                let (primary, detail, q_color) = match queue_position {
-                                                    Some(q) => format_queue_position(q),
-                                                    None => (
-                                                        "Awaiting fee details".to_string(),
-                                                        String::new(),
-                                                        "#e2e8f0",
-                                                    ),
-                                                };
+                                                let q_view = Signal::derive(move || {
+                                                    match pinned_queue.get() {
+                                                        Some(q) => format_queue_position(q),
+                                                        None => (
+                                                            "Awaiting fee details".to_string(),
+                                                            String::new(),
+                                                            "#e2e8f0",
+                                                        ),
+                                                    }
+                                                });
                                                 view! {
                                                     <div
                                                         class="rounded-lg bg-white/[0.05] border border-white/15 border-l-2 px-3 py-2"
-                                                        style=format!("border-left-color: {q_color}")
+                                                        style=move || format!("border-left-color: {}", q_view.get().2)
                                                         data-tip="Estimated from solo fee rate (sat/vB) across observed mempool transactions.\nCPFP packages and miner policy can move a transaction ahead or behind."
                                                     >
                                                         <div class="flex items-baseline justify-between gap-2">
@@ -1430,16 +1444,22 @@ pub fn HeartbeatPage() -> impl IntoView {
                                                             </span>
                                                             <span
                                                                 class="text-sm lg:text-[15px] font-bold tabular-nums"
-                                                                style=format!("color: {q_color}")
+                                                                style=move || format!("color: {}", q_view.get().2)
                                                             >
-                                                                {primary}
+                                                                {move || q_view.get().0}
                                                             </span>
                                                         </div>
-                                                        {(!detail.is_empty()).then(|| view! {
-                                                            <div class="text-[11px] text-white/90 tabular-nums mt-0.5">
-                                                                {detail}
-                                                            </div>
-                                                        })}
+                                                        <div
+                                                            class=move || {
+                                                                if q_view.get().1.is_empty() {
+                                                                    "hidden"
+                                                                } else {
+                                                                    "text-[11px] text-white/90 tabular-nums mt-0.5"
+                                                                }
+                                                            }
+                                                        >
+                                                            {move || q_view.get().1}
+                                                        </div>
                                                     </div>
                                                 }
                                             })}
@@ -1503,7 +1523,6 @@ pub fn HeartbeatPage() -> impl IntoView {
                                                 view! {
                                                     <div>
                                                         {has_io_items.then(|| {
-                                                            let open = io_expanded.get();
                                                             view! {
                                                                 <div class="rounded-lg bg-white/[0.04] border border-white/15 overflow-hidden">
                                                                     <button
@@ -1514,11 +1533,18 @@ pub fn HeartbeatPage() -> impl IntoView {
                                                                     >
                                                                         <span>{io_toggle_label}</span>
                                                                         <span class="text-[10px] text-white/80">
-                                                                            {if open { "\u{25BE}" } else { "\u{25B8}" }}
+                                                                            {move || if io_expanded.get() { "\u{25BE}" } else { "\u{25B8}" }}
                                                                         </span>
                                                                     </button>
-                                                                    {open.then(|| view! {
-                                                                        <div class="px-2.5 pb-2.5 pt-1 border-t border-white/10 max-h-52 overflow-y-auto space-y-2.5 text-[10px] lg:text-[11px]">
+                                                                    <div
+                                                                        class=move || {
+                                                                            if io_expanded.get() {
+                                                                                "px-2.5 pb-2.5 pt-1 border-t border-white/10 max-h-52 overflow-y-auto space-y-2.5 text-[10px] lg:text-[11px]"
+                                                                            } else {
+                                                                                "hidden"
+                                                                            }
+                                                                        }
+                                                                    >
                                                                             {(!in_items.is_empty()).then(|| view! {
                                                                                 <div class="space-y-1">
                                                                                     <div class="text-[10px] text-white/85 font-semibold uppercase tracking-wider">
@@ -1553,7 +1579,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                                                                                                                         set_copied_io.set(Some(k.clone()));
                                                                                                                         set_timeout(
                                                                                                                             move || {
-                                                                                                                                set_copied_io.update(|cur| {
+                                                                                                                                let _ = set_copied_io.try_update(|cur| {
                                                                                                                                     if cur.as_deref() == Some(k.as_str()) {
                                                                                                                                         *cur = None;
                                                                                                                                     }
@@ -1636,7 +1662,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                                                                                                                         set_copied_io.set(Some(k.clone()));
                                                                                                                         set_timeout(
                                                                                                                             move || {
-                                                                                                                                set_copied_io.update(|cur| {
+                                                                                                                                let _ = set_copied_io.try_update(|cur| {
                                                                                                                                     if cur.as_deref() == Some(k.as_str()) {
                                                                                                                                         *cur = None;
                                                                                                                                     }
@@ -1685,8 +1711,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                                                                                     })}
                                                                                 </div>
                                                                             })}
-                                                                        </div>
-                                                                    })}
+                                                                    </div>
                                                                 </div>
                                                             }
                                                         })}
@@ -1767,7 +1792,9 @@ pub fn HeartbeatPage() -> impl IntoView {
                                                                 let _ = win.navigator().clipboard().write_text(&url);
                                                                 set_copied_tx_link.set(true);
                                                                 leptos::prelude::set_timeout(
-                                                                    move || set_copied_tx_link.set(false),
+                                                                    move || {
+                                                                        let _ = set_copied_tx_link.try_set(false);
+                                                                    },
                                                                     std::time::Duration::from_millis(1500),
                                                                 );
                                                             }
@@ -1816,6 +1843,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                     // in the control dock; always in SSR HTML with `hidden` toggled
                     // so click-to-dismiss hydrates cleanly without blocking first visit).
                     <div
+                        id="heartbeat-hint-overlay"
                         class=move || {
                             if show_hint.get() {
                                 "absolute inset-0 z-20 flex items-center justify-center bg-[#0d2137]/90 cursor-pointer"

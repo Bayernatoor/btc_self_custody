@@ -34,7 +34,7 @@ pub struct TxIoEntry {
     pub label: String,
     #[serde(default)]
     pub value: Option<u64>,
-    /// Full copyable address or `txid:vout` outpoint when applicable.
+    /// Full copyable address or parent `txid` when applicable.
     #[serde(default)]
     pub copy: Option<String>,
 }
@@ -67,8 +67,6 @@ pub struct PinnedTxView {
     pub on_canvas: bool,
     pub deep: Option<TxDeepDetails>,
     pub deep_loading: bool,
-    /// Estimated solo-fee-rate queue depth while `status == Unconfirmed`.
-    pub queue_position: Option<QueuePosition>,
 }
 
 impl PinnedTxView {
@@ -201,6 +199,7 @@ pub struct RawTxDetailResponse {
 pub struct ArrivalRateTracker {
     samples_ms: std::collections::VecDeque<f64>,
     started_at_ms: Option<f64>,
+    last_now_ms: Option<f64>,
 }
 
 impl ArrivalRateTracker {
@@ -210,9 +209,22 @@ impl ArrivalRateTracker {
     pub fn reset(&mut self, now_ms: f64) {
         self.samples_ms.clear();
         self.started_at_ms = Some(now_ms);
+        self.last_now_ms = Some(now_ms);
+    }
+
+    fn guard_monotonic(&mut self, now_ms: f64) {
+        if !now_ms.is_finite() {
+            return;
+        }
+        if self.last_now_ms.is_some_and(|prev| now_ms < prev) {
+            self.reset(now_ms);
+        } else {
+            self.last_now_ms = Some(now_ms);
+        }
     }
 
     pub fn record(&mut self, now_ms: f64) {
+        self.guard_monotonic(now_ms);
         if self.started_at_ms.is_none() {
             self.started_at_ms = Some(now_ms);
         }
@@ -232,6 +244,7 @@ impl ArrivalRateTracker {
     }
 
     pub fn rate_tx_per_sec(&mut self, now_ms: f64) -> Option<f64> {
+        self.guard_monotonic(now_ms);
         let started = self.started_at_ms?;
         self.prune(now_ms);
         let elapsed_ms = (now_ms - started).max(0.0);
@@ -315,7 +328,6 @@ pub fn pinned_from_compact(tx: &CompactTx, on_canvas: bool) -> PinnedTxView {
         on_canvas,
         deep: None,
         deep_loading: false,
-        queue_position: None,
     }
 }
 
@@ -340,7 +352,6 @@ pub fn pinned_from_confirmed(
         on_canvas: false,
         deep: None,
         deep_loading: false,
-        queue_position: None,
     }
 }
 
@@ -362,6 +373,25 @@ pub fn apply_block_disconnected_to_pinned(
     }
 }
 
+/// Compute the live solo-fee-rate queue position for a pinned transaction
+/// from its known `(fee, vsize)` against the mirrored mempool.
+///
+/// Works uniformly whether fee/vsize came from the mirror, a `TxDetails` delta,
+/// or `/api/stats/tx/{txid}` deep details, and returns `None` once confirmed,
+/// removed, or while fee/vsize remain unknown.
+pub fn compute_pinned_queue_position(
+    pinned: &PinnedTxView,
+    mirror: &HeartbeatMirror,
+) -> Option<QueuePosition> {
+    if !matches!(pinned.status, PinnedTxStatus::Unconfirmed) {
+        return None;
+    }
+    let (Some(fee), Some(vsize)) = (pinned.fee, pinned.vsize) else {
+        return None;
+    };
+    mirror.queue_position_for_rate(fee, vsize, Some(&pinned.txid))
+}
+
 /// Reconcile an open pinned transaction view in place against the latest mirror state.
 ///
 /// Preserves asynchronously fetched `deep` details and previously known fee/vsize/value
@@ -370,19 +400,7 @@ pub fn update_pinned_from_mirror(
     pinned: &mut PinnedTxView,
     mirror: &HeartbeatMirror,
 ) {
-    update_pinned_from_mirror_ex(pinned, mirror, true);
-}
-
-/// Variant of [`update_pinned_from_mirror`] that lets hot delta paths throttle
-/// the O(N) mempool queue scan while still immediately updating metadata,
-/// status transitions, and clearing `queue_position` on confirmation/removal.
-pub fn update_pinned_from_mirror_ex(
-    pinned: &mut PinnedTxView,
-    mirror: &HeartbeatMirror,
-    refresh_queue: bool,
-) {
     if let Some(tx) = mirror.get_tx(&pinned.txid) {
-        let rate_changed = pinned.fee != tx.fee || pinned.vsize != tx.vsize;
         pinned.status = PinnedTxStatus::Unconfirmed;
         if tx.fee.is_some() {
             pinned.fee = tx.fee;
@@ -405,14 +423,6 @@ pub fn update_pinned_from_mirror_ex(
                 pinned.op_return_text = tx.op_return_text.clone();
             }
         }
-        if pinned.fee.is_none() || pinned.vsize.is_none_or(|v| v == 0) {
-            pinned.queue_position = None;
-        } else if refresh_queue
-            || rate_changed
-            || pinned.queue_position.is_none()
-        {
-            pinned.queue_position = mirror.queue_position(&pinned.txid);
-        }
         return;
     }
 
@@ -423,14 +433,12 @@ pub fn update_pinned_from_mirror_ex(
             block_height,
         };
         pinned.on_canvas = false;
-        pinned.queue_position = None;
         return;
     }
 
     if matches!(pinned.status, PinnedTxStatus::Unconfirmed) {
         pinned.status = PinnedTxStatus::Removed;
         pinned.on_canvas = false;
-        pinned.queue_position = None;
     }
 }
 
@@ -989,22 +997,22 @@ mod client {
     use super::{
         ambiguous_hex_not_found_message, apply_block_disconnected_to_pinned,
         apply_deep_details, build_canvas_effect_json,
-        build_canvas_snapshot_json, connection_state_for_mirror,
-        format_u64_commas, hb_v2_apply_effect, hb_v2_enter_history_mode,
-        hb_v2_exit_history_mode, hb_v2_focus_block_height,
-        hb_v2_focus_pending_slot, hb_v2_focus_tx, hb_v2_install_snapshot,
-        hb_v2_set_connection_state, hb_v2_set_pinned_tx, js_bridge,
-        normalize_tx_query, parse_history_mode_info, parse_search_query,
-        pinned_from_compact, pinned_from_confirmed, retry_delay_ms,
-        update_pinned_from_mirror, update_pinned_from_mirror_ex,
+        build_canvas_snapshot_json, compute_pinned_queue_position,
+        connection_state_for_mirror, format_u64_commas, hb_v2_apply_effect,
+        hb_v2_enter_history_mode, hb_v2_exit_history_mode,
+        hb_v2_focus_block_height, hb_v2_focus_pending_slot, hb_v2_focus_tx,
+        hb_v2_install_snapshot, hb_v2_set_connection_state,
+        hb_v2_set_pinned_tx, js_bridge, normalize_tx_query,
+        parse_history_mode_info, parse_search_query, pinned_from_compact,
+        pinned_from_confirmed, retry_delay_ms, update_pinned_from_mirror,
         ArrivalRateTracker, HistoryModeInfo, InitialSearchParam,
         PendingBlockBanner, PinnedTxStatus, PinnedTxView, RawTxDetailResponse,
         SearchQuery,
     };
     use crate::stats::heartbeat_sync::{
         ApplyEffect, ApplyOutcome, Coverage, FeeBandSummary, HeartbeatDelta,
-        HeartbeatMirror, HeartbeatSnapshot, MirrorTxMatch, TxFlags,
-        TxLookupStatus,
+        HeartbeatMirror, HeartbeatSnapshot, MirrorTxMatch, QueuePosition,
+        TxFlags, TxLookupStatus,
     };
 
     /// Reactive signals owned by `HeartbeatPage` and updated by `HeartbeatClient`.
@@ -1015,6 +1023,7 @@ mod client {
         pub set_coverage_note: WriteSignal<Option<String>>,
         pub set_pinned_tx: WriteSignal<Option<PinnedTxView>>,
         pub pinned_tx: ReadSignal<Option<PinnedTxView>>,
+        pub set_pinned_queue: WriteSignal<Option<QueuePosition>>,
         pub set_search_feedback: WriteSignal<Option<(bool, String)>>,
         pub set_sse_height: WriteSignal<u64>,
         pub sse_height: ReadSignal<u64>,
@@ -1029,6 +1038,22 @@ mod client {
 
     fn client_now_unix_secs() -> u64 {
         (js_sys::Date::now() / 1000.0).max(0.0) as u64
+    }
+
+    /// Monotonic client clock in milliseconds (`performance.now()` with wall-clock fallback)
+    /// for throttle intervals and rolling arrival-rate windows so NTP/VM steps cannot stall them.
+    fn client_now_ms() -> f64 {
+        let perf_now = web_sys::window().and_then(|w| {
+            let perf =
+                js_sys::Reflect::get(&w, &JsValue::from_str("performance"))
+                    .ok()?;
+            let now_fn = js_sys::Reflect::get(&perf, &JsValue::from_str("now"))
+                .ok()?
+                .dyn_into::<js_sys::Function>()
+                .ok()?;
+            now_fn.call0(&perf).ok()?.as_f64().filter(|v| v.is_finite())
+        });
+        perf_now.unwrap_or_else(js_sys::Date::now)
     }
 
     #[derive(Default)]
@@ -1052,9 +1077,11 @@ mod client {
         clear_pinned_closure: Option<Closure<dyn FnMut()>>,
         history_mode_change_closure: Option<Closure<dyn FnMut(JsValue)>>,
         resync_canvas_closure: Option<Closure<dyn FnMut()>>,
-        /// Timestamp (ms) of the last O(N) pinned-tx queue scan so high-rate
-        /// mempool bursts throttle queue updates to <= once every 2.5s.
+        /// Timestamp (ms) + last emitted value of the O(N) pinned-tx queue scan
+        /// so high-rate mempool bursts throttle queue updates to <= once every 2.5s
+        /// on their own signal without ever remounting the pinned TX panel.
         last_queue_refresh_ms: f64,
+        last_pinned_queue: Option<QueuePosition>,
         /// Timestamp (ms) + last emitted value of the O(N) fee-band summary scan
         /// (throttled to <= once every 2.0s during steady-state deltas).
         last_bands_refresh_ms: f64,
@@ -1301,6 +1328,21 @@ mod client {
             };
             if changed {
                 let _ = self.inner.signals.set_history_mode.try_set(next);
+            }
+        }
+
+        fn set_pinned_queue_if_changed(&self, next: Option<QueuePosition>) {
+            let changed = {
+                let mut st = self.inner.state.borrow_mut();
+                if st.last_pinned_queue != next {
+                    st.last_pinned_queue = next;
+                    true
+                } else {
+                    false
+                }
+            };
+            if changed {
+                let _ = self.inner.signals.set_pinned_queue.try_set(next);
             }
         }
 
@@ -1584,13 +1626,20 @@ mod client {
                             received_at_client,
                         }
                     });
-                let updated_pinned =
-                    existing_pinned.as_ref().and_then(|existing| {
+                let (updated_pinned, updated_queue) = match existing_pinned
+                    .as_ref()
+                {
+                    Some(existing) => {
                         let mut pv = existing.clone();
                         update_pinned_from_mirror(&mut pv, &st.mirror);
-                        (&pv != existing).then_some(pv)
-                    });
-                let now_ms = js_sys::Date::now();
+                        let q = compute_pinned_queue_position(&pv, &st.mirror);
+                        let changed = (&pv != existing).then_some(pv);
+                        (changed, q)
+                    }
+                    None => (None, None),
+                };
+                let now_ms = client_now_ms();
+                st.last_queue_refresh_ms = now_ms;
                 let fee_bands = st.mirror.fee_band_summary();
                 st.last_fee_bands = fee_bands;
                 st.last_bands_refresh_ms = now_ms;
@@ -1607,6 +1656,7 @@ mod client {
                     newest_block,
                     pending_banner,
                     updated_pinned,
+                    updated_queue,
                     initial_search,
                     fee_bands,
                 )
@@ -1620,6 +1670,7 @@ mod client {
                 newest_block,
                 pending_banner,
                 updated_pinned,
+                updated_queue,
                 initial_search,
                 fee_bands,
             ) = extracted;
@@ -1628,6 +1679,7 @@ mod client {
             let _ = self.inner.signals.set_fee_bands.try_set(fee_bands);
             let _ = self.inner.signals.set_arrival_rate.try_set(None);
             self.set_pending_block_if_changed(pending_banner);
+            self.set_pinned_queue_if_changed(updated_queue);
 
             if let Some(pv) = updated_pinned {
                 let _ = self.inner.signals.set_pinned_tx.try_set(Some(pv));
@@ -1690,6 +1742,9 @@ mod client {
                         st.retry_count = 0;
                         st.connected = true;
                         st.resume_attempted = false;
+                        // Reset the rolling arrival-rate window on every SSE open/resume
+                        // so buffered replay deltas never produce an artificial tx/s spike.
+                        st.arrival_tracker.reset(client_now_ms());
                         let cs = connection_state_for_mirror(
                             true,
                             false,
@@ -1701,6 +1756,11 @@ mod client {
                         (cs, note)
                     };
                     open_client.set_conn_state(cs);
+                    let _ = open_client
+                        .inner
+                        .signals
+                        .set_arrival_rate
+                        .try_set(None);
                     let _ = open_client
                         .inner
                         .signals
@@ -1805,6 +1865,7 @@ mod client {
                 pending_update: Option<Option<PendingBlockBanner>>,
                 coverage_update: Option<(&'static str, Option<String>)>,
                 updated_pinned: Option<PinnedTxView>,
+                queue_update: Option<Option<QueuePosition>>,
                 fee_bands_update: Option<FeeBandSummary>,
             }
 
@@ -1910,12 +1971,13 @@ mod client {
                             ApplyEffect::BlockInclusion { .. }
                                 | ApplyEffect::BlockDisconnected { .. }
                         );
-                        let now_ms = js_sys::Date::now();
+                        let now_ms = client_now_ms();
                         if matches!(eff, ApplyEffect::MembershipAdd { .. }) {
                             st.arrival_tracker.record(now_ms);
                         }
-                        let bands_elapsed_ok =
-                            (now_ms - st.last_bands_refresh_ms) >= 2_000.0;
+                        let bands_elapsed_ok = now_ms
+                            < st.last_bands_refresh_ms
+                            || (now_ms - st.last_bands_refresh_ms) >= 2_000.0;
                         let fee_bands_update =
                             if force_queue_refresh || bands_elapsed_ok {
                                 st.last_bands_refresh_ms = now_ms;
@@ -1929,34 +1991,57 @@ mod client {
                             } else {
                                 None
                             };
-                        let updated_pinned =
-                            existing_pinned.as_ref().and_then(|existing| {
-                                let mut pv = existing.clone();
-                                if let Some(dhash) = disconnected_hash {
-                                    apply_block_disconnected_to_pinned(
-                                        &mut pv, dhash,
+                        let (updated_pinned, queue_update) =
+                            match existing_pinned.as_ref() {
+                                Some(existing) => {
+                                    let mut pv = existing.clone();
+                                    if let Some(dhash) = disconnected_hash {
+                                        apply_block_disconnected_to_pinned(
+                                            &mut pv, dhash,
+                                        );
+                                    }
+                                    update_pinned_from_mirror(
+                                        &mut pv, &st.mirror,
                                     );
-                                }
-                                let elapsed_ok = (now_ms
-                                    - st.last_queue_refresh_ms)
-                                    >= 2_500.0;
-                                let refresh_queue =
-                                    force_queue_refresh || elapsed_ok;
-                                update_pinned_from_mirror_ex(
-                                    &mut pv,
-                                    &st.mirror,
-                                    refresh_queue,
-                                );
-                                if refresh_queue
-                                    && matches!(
+                                    let rate_or_status_changed = pv.fee
+                                        != existing.fee
+                                        || pv.vsize != existing.vsize
+                                        || pv.status != existing.status;
+                                    let elapsed_ok = now_ms
+                                        < st.last_queue_refresh_ms
+                                        || (now_ms - st.last_queue_refresh_ms)
+                                            >= 2_500.0;
+                                    let should_refresh_queue = !matches!(
                                         pv.status,
                                         PinnedTxStatus::Unconfirmed
                                     )
-                                {
-                                    st.last_queue_refresh_ms = now_ms;
+                                        || force_queue_refresh
+                                        || rate_or_status_changed
+                                        || elapsed_ok;
+                                    let qu = if should_refresh_queue {
+                                        if matches!(
+                                            pv.status,
+                                            PinnedTxStatus::Unconfirmed
+                                        ) {
+                                            st.last_queue_refresh_ms = now_ms;
+                                        }
+                                        let next_q =
+                                            compute_pinned_queue_position(
+                                                &pv, &st.mirror,
+                                            );
+                                        if next_q != st.last_pinned_queue {
+                                            st.last_pinned_queue = next_q;
+                                            Some(next_q)
+                                        } else {
+                                            None
+                                        }
+                                    } else {
+                                        None
+                                    };
+                                    ((&pv != existing).then_some(pv), qu)
                                 }
-                                (&pv != existing).then_some(pv)
-                            });
+                                None => (None, None),
+                            };
                         Step::Apply(Box::new(AppliedStep {
                             effect_json,
                             block_update,
@@ -1964,6 +2049,7 @@ mod client {
                             pending_update,
                             coverage_update,
                             updated_pinned,
+                            queue_update,
                             fee_bands_update,
                         }))
                     }
@@ -1984,11 +2070,15 @@ mod client {
                         pending_update,
                         coverage_update,
                         updated_pinned,
+                        queue_update,
                         fee_bands_update,
                     } = *applied;
                     hb_v2_apply_effect(&effect_json);
                     if let Some(bands) = fee_bands_update {
                         let _ = self.inner.signals.set_fee_bands.try_set(bands);
+                    }
+                    if let Some(q) = queue_update {
+                        let _ = self.inner.signals.set_pinned_queue.try_set(q);
                     }
                     if let Some(pb) = pending_update {
                         self.set_pending_block_if_changed(pb);
@@ -2390,13 +2480,17 @@ mod client {
         /// Called on the page's existing 1s UI timer so quiet periods smoothly
         /// decay toward `0.0 tx/s` without allocating a second timer.
         pub fn refresh_arrival_rate(&self) {
-            let now_ms = js_sys::Date::now();
+            let now_ms = client_now_ms();
             let rate = {
                 let mut st = self.inner.state.borrow_mut();
                 if st.destroyed {
                     return;
                 }
-                st.arrival_tracker.rate_tx_per_sec(now_ms)
+                if !st.connected {
+                    None
+                } else {
+                    st.arrival_tracker.rate_tx_per_sec(now_ms)
+                }
             };
             let _ = self.inner.signals.set_arrival_rate.try_set(rate);
         }
@@ -2414,14 +2508,15 @@ mod client {
                         hb_v2_set_pinned_tx(Some(&tx.txid));
                     }
                     let mut pv = pinned_from_compact(&tx, on_canvas);
-                    {
+                    let queue = {
                         let mut st = self.inner.state.borrow_mut();
-                        pv.queue_position = st.mirror.queue_position(&tx.txid);
-                        st.last_queue_refresh_ms = js_sys::Date::now();
-                    }
+                        st.last_queue_refresh_ms = client_now_ms();
+                        compute_pinned_queue_position(&pv, &st.mirror)
+                    };
                     pv.deep_loading = true;
                     let txid = tx.txid.clone();
                     let _ = self.inner.signals.set_pinned_tx.try_set(Some(pv));
+                    self.set_pinned_queue_if_changed(queue);
                     let msg = if on_canvas {
                         "Found in mempool".to_string()
                     } else {
@@ -2447,6 +2542,7 @@ mod client {
                     );
                     pv.deep_loading = true;
                     let _ = self.inner.signals.set_pinned_tx.try_set(Some(pv));
+                    self.set_pinned_queue_if_changed(None);
                     let _ =
                         self.inner.signals.set_search_feedback.try_set(Some((
                             false,
@@ -2645,14 +2741,15 @@ mod client {
                 TxLookupStatus::Unconfirmed(tx) => {
                     hb_v2_set_pinned_tx(Some(&tx.txid));
                     let mut pv = pinned_from_compact(&tx, true);
-                    {
+                    let queue = {
                         let mut st = self.inner.state.borrow_mut();
-                        pv.queue_position = st.mirror.queue_position(&tx.txid);
-                        st.last_queue_refresh_ms = js_sys::Date::now();
-                    }
+                        st.last_queue_refresh_ms = client_now_ms();
+                        compute_pinned_queue_position(&pv, &st.mirror)
+                    };
                     pv.deep_loading = true;
                     let id = tx.txid.clone();
                     let _ = self.inner.signals.set_pinned_tx.try_set(Some(pv));
+                    self.set_pinned_queue_if_changed(queue);
                     self.fetch_deep_tx_details(&id, mount_gen, lookup_gen);
                 }
                 TxLookupStatus::Confirmed {
@@ -2668,6 +2765,7 @@ mod client {
                     );
                     pv.deep_loading = true;
                     let _ = self.inner.signals.set_pinned_tx.try_set(Some(pv));
+                    self.set_pinned_queue_if_changed(None);
                     self.fetch_deep_tx_details(&txid, mount_gen, lookup_gen);
                 }
                 TxLookupStatus::Absent { .. } => {
@@ -2684,6 +2782,7 @@ mod client {
         pub fn clear_pinned_tx(&self) {
             let _ = self.begin_lookup_generation();
             let _ = self.inner.signals.set_pinned_tx.try_set(None);
+            self.set_pinned_queue_if_changed(None);
             hb_v2_set_pinned_tx(None);
         }
 
@@ -2737,20 +2836,15 @@ mod client {
                                     };
                                     let mut pv =
                                         pinned_from_compact(&tx, on_canvas);
-                                    if let (Some(f), Some(vs)) =
-                                        (tx.fee, tx.vsize)
-                                    {
+                                    let queue = {
                                         let mut st =
                                             ok_client.inner.state.borrow_mut();
-                                        pv.queue_position =
-                                            st.mirror.queue_position_for_rate(
-                                                f,
-                                                vs,
-                                                Some(&tx.txid),
-                                            );
                                         st.last_queue_refresh_ms =
-                                            js_sys::Date::now();
-                                    }
+                                            client_now_ms();
+                                        compute_pinned_queue_position(
+                                            &pv, &st.mirror,
+                                        )
+                                    };
                                     pv.deep_loading = true;
                                     let id = tx.txid.clone();
                                     let _ = ok_client
@@ -2758,6 +2852,8 @@ mod client {
                                         .signals
                                         .set_pinned_tx
                                         .try_set(Some(pv));
+                                    ok_client
+                                        .set_pinned_queue_if_changed(queue);
                                     if focus_camera {
                                         let _ = ok_client
                                             .inner
@@ -2947,30 +3043,19 @@ mod client {
                                 on_canvas,
                                 deep: None,
                                 deep_loading: false,
-                                queue_position: None,
                             };
                             apply_deep_details(&mut pv, &raw);
-                            if matches!(pv.status, PinnedTxStatus::Unconfirmed)
-                            {
-                                if let (Some(f), Some(vs)) = (pv.fee, pv.vsize)
-                                {
-                                    let mut st =
-                                        ok_client.inner.state.borrow_mut();
-                                    pv.queue_position =
-                                        st.mirror.queue_position_for_rate(
-                                            f,
-                                            vs,
-                                            Some(&txid_owned),
-                                        );
-                                    st.last_queue_refresh_ms =
-                                        js_sys::Date::now();
-                                }
-                            }
+                            let queue = {
+                                let mut st = ok_client.inner.state.borrow_mut();
+                                st.last_queue_refresh_ms = client_now_ms();
+                                compute_pinned_queue_position(&pv, &st.mirror)
+                            };
                             let _ = ok_client
                                 .inner
                                 .signals
                                 .set_pinned_tx
                                 .try_set(Some(pv));
+                            ok_client.set_pinned_queue_if_changed(queue);
                             if focus_camera {
                                 let _ = ok_client
                                     .inner
@@ -3091,6 +3176,7 @@ mod client {
                         if let Ok(raw) =
                             serde_json::from_str::<RawTxDetailResponse>(&body)
                         {
+                            let mut refreshed_pv: Option<PinnedTxView> = None;
                             let _ = ok_client
                                 .inner
                                 .signals
@@ -3099,9 +3185,23 @@ mod client {
                                     if let Some(p) = opt.as_mut() {
                                         if p.txid == txid_ok {
                                             apply_deep_details(p, &raw);
+                                            refreshed_pv = Some(p.clone());
                                         }
                                     }
                                 });
+                            // If deep details hydrated a previously fee-pending tx,
+                            // compute its queue position immediately instead of waiting.
+                            if let Some(pv) = refreshed_pv {
+                                let queue = {
+                                    let mut st =
+                                        ok_client.inner.state.borrow_mut();
+                                    st.last_queue_refresh_ms = client_now_ms();
+                                    compute_pinned_queue_position(
+                                        &pv, &st.mirror,
+                                    )
+                                };
+                                ok_client.set_pinned_queue_if_changed(queue);
+                            }
                             return;
                         }
                     }
@@ -3383,7 +3483,7 @@ mod tests {
         });
         assert_eq!(pinned.status, PinnedTxStatus::Unconfirmed);
         assert_eq!(pinned.fee, None);
-        assert_eq!(pinned.queue_position, None);
+        assert_eq!(compute_pinned_queue_position(&pinned, &mirror), None);
 
         // 2. TxDetails enriches fee/vsize/value/flags/op_return while preserving deep details.
         mirror.apply_delta(delta(
@@ -3407,7 +3507,7 @@ mod tests {
         assert_eq!(pinned.op_return_text.as_deref(), Some("gm bitcoin"));
         assert!(pinned.deep.is_some());
         assert_eq!(
-            pinned.queue_position,
+            compute_pinned_queue_position(&pinned, &mirror),
             Some(crate::stats::heartbeat_sync::QueuePosition {
                 txs_ahead: 0,
                 vbytes_ahead: 0,
@@ -3442,7 +3542,7 @@ mod tests {
             }
         );
         assert!(!pinned.on_canvas);
-        assert_eq!(pinned.queue_position, None);
+        assert_eq!(compute_pinned_queue_position(&pinned, &mirror), None);
         assert_eq!(pinned.fee, Some(1_500));
         assert_eq!(pinned.vsize, Some(224));
         assert_eq!(pinned.value, Some(12_500_000));

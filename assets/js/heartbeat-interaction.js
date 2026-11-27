@@ -403,6 +403,13 @@ export function setupInputHandlers(canvas) {
         if (!_hb || !e || e.defaultPrevented || e.isComposing || e.metaKey || e.ctrlKey || e.altKey) return;
         var k = e.key;
         if (k === 'Escape') {
+            var hintEl = typeof document !== 'undefined'
+                ? document.getElementById('heartbeat-hint-overlay')
+                : null;
+            if (hintEl && !hintEl.classList.contains('hidden')) {
+                hintEl.click();
+                return;
+            }
             var lmClose = typeof document !== 'undefined'
                 ? document.getElementById('heartbeat-landmarks-close')
                 : null;
